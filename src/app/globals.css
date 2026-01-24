@@ -1,0 +1,22 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --sidebar-bg: #0f172a;
+  --sidebar-text: #e2e8f0;
+  --sidebar-hover: #1e293b;
+  --sidebar-active: #0c8ee6;
+  --main-bg: #f8fafc;
+}
+
+body {
+  @apply bg-slate-50 text-slate-900 antialiased;
+}
+
+/* AG Grid overrides for contract-finding theme */
+.ag-theme-alpine {
+  --ag-header-background-color: #f1f5f9;
+  --ag-odd-row-background-color: #ffffff;
+  --ag-border-color: #e2e8f0;
+}
