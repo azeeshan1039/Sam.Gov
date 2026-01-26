@@ -134,7 +134,7 @@ export default function NegotiationsPage() {
             <Handshake className="h-12 w-12 text-muted-foreground mb-4" />
             <h3 className="text-lg font-medium mb-2">No Active Negotiations</h3>
             <p className="text-muted-foreground text-center mb-4">
-              You haven't started any vendor negotiations yet.<br />
+              You have not started any vendor negotiations yet.<br />
               Browse opportunities and start negotiating with vendors.
             </p>
             <Button onClick={() => router.push('/sam-gov')}>
