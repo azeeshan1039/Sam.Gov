@@ -24,8 +24,10 @@ export async function GET(request: Request, { params }: { params: { id: string }
         const fileInputs=[];
 
         if (targetOpportunity.resourceLinks && targetOpportunity.resourceLinks.length > 0) {
-            for (const url of targetOpportunity.resourceLinks) {
+            for (const resource of targetOpportunity.resourceLinks) {
                 try {
+                    // Handle both string URLs and object format {name, link}
+                    const url = typeof resource === 'string' ? resource : resource.link;
                     const response = await fetch(url);
 
                     if (!response.ok) {
@@ -33,10 +35,11 @@ export async function GET(request: Request, { params }: { params: { id: string }
                         continue; // Skip to the next URL on download failure
                     }
 
-                    // Get the filename from the URL or Content-Disposition header
-                    // A simple approach: extract from URL path
+                    // Get the filename from the resource or URL path
                     const urlParts = url.split('/');
-                    const filename = urlParts[urlParts.length - 1] || `attachment_${Date.now()}`;
+                    const filename = typeof resource === 'object' && resource.name 
+                        ? resource.name 
+                        : (urlParts[urlParts.length - 1] || `attachment_${Date.now()}`);
 
                     // Get the file content as a Blob or Buffer
                     // Using blob() is often suitable for uploading
@@ -53,7 +56,8 @@ export async function GET(request: Request, { params }: { params: { id: string }
                     console.log(`Successfully uploaded file ${filename} with ID: ${file.id}`);
 
                 } catch (error) {
-                    console.error(`Error processing attachment from ${url}:`, error);
+                    const errorUrl = typeof resource === 'string' ? resource : resource.link;
+                    console.error(`Error processing attachment from ${errorUrl}:`, error);
                     // Continue processing other links even if one fails
                 }
             }

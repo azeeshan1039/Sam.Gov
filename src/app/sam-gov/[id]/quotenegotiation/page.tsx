@@ -178,6 +178,7 @@ export default function BidSummaryPage() {
     if (!opportunityId) return
     fetchOpportunityDetails();
     checkExistingSession();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [opportunityId]);
 
   // Check if there's an existing negotiation session for this opportunity
@@ -260,6 +261,7 @@ export default function BidSummaryPage() {
         return () => clearInterval(interval);
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [negotiationSession, showInitialReview, initialMessages]);
 
   const fetchOpportunityDetails = async () => {
@@ -1414,13 +1416,13 @@ Procurement Team`
                 <CardHeader>
                   <CardTitle>Negotiation in Progress</CardTitle>
                   <CardDescription>
-                    Managing negotiations with {negotiationSession.suppliers.length} suppliers
+                    Managing negotiations with {negotiationSession?.suppliers?.length ?? 0} suppliers
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <Tabs defaultValue="0" className="w-full">
                     <TabsList className="grid grid-cols-3 lg:grid-cols-5 mb-6">
-                      {negotiationSession.suppliers.map((supplier, idx) => {
+                      {negotiationSession?.suppliers?.map((supplier, idx) => {
                         const actionState = getSupplierActionState(supplier);
                         const hasPendingDraft = supplierDrafts.get(supplier.id)?.isPending;
 
@@ -1450,7 +1452,7 @@ Procurement Team`
                       })}
                     </TabsList>
 
-                    {negotiationSession.suppliers.map((supplier, idx) => {
+                    {negotiationSession?.suppliers?.map((supplier, idx) => {
                       const actionState = getSupplierActionState(supplier);
                       const hasPendingDraft = supplierDrafts.get(supplier.id)?.isPending;
 
@@ -1639,7 +1641,7 @@ Procurement Team`
                   </Tabs>
 
                   {/* Review Button */}
-                  {negotiationSession.suppliers.some(s => s.status === 'completed' || s.messages.length > 0) && (
+                  {negotiationSession?.suppliers?.some(s => s.status === 'completed' || s.messages.length > 0) && (
                     <div className="mt-6 flex justify-end">
                       <Button onClick={openReviewSection} disabled={loadingRecommendations || loadingCompliance}>
                         {loadingRecommendations || loadingCompliance ? (
@@ -1689,7 +1691,7 @@ Procurement Team`
                           </tr>
                         </thead>
                         <tbody>
-                          {negotiationSession.suppliers.map((supplier) => {
+                          {negotiationSession?.suppliers?.map((supplier) => {
                             const score = recommendations?.vendor_scores?.find(s => s.vendor_id === supplier.id);
                             const compliance = complianceResults.get(supplier.id);
                             const isRecommended = recommendations?.best_vendor === supplier.company_name;

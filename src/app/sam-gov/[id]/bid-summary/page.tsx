@@ -32,7 +32,7 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import type { OngoingBid } from "@/app/page";
+import type { OngoingBid } from "@/types/sam-gov";
 
 type ChatMessage = { role: "agent" | "user"; content: string };
 
@@ -173,6 +173,7 @@ export default function BidSummaryPage() {
     if (summary) {
       setTotalContext({ summary, chatHistory: chatMessages });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [summary]);
 
   useEffect(() => {

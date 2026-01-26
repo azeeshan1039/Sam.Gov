@@ -138,3 +138,16 @@ export interface EnhancedRfqWithAi {
   metadata?: any; // Optional field for additional AI-specific metadata
 }
 
+/**
+ * Represents an ongoing bid tracked in the application.
+ */
+export interface OngoingBid {
+  id: string;
+  title: string;
+  agency: string;
+  status: string;
+  deadline: string;
+  source: string;
+  linkToOpportunity: string;
+}
+

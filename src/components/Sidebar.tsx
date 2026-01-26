@@ -7,8 +7,6 @@ const navItems = [
   { href: "/", label: "Dashboard" },
   { href: "/sam-gov", label: "Sam.Gov" },
   { href: "/negotiations", label: "Negotiations" },
-  { href: "/septa", label: "Septa" },
-  { href: "/recommendations", label: "Recommendations" },
 ];
 
 export default function Sidebar() {
