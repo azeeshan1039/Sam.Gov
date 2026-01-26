@@ -2,16 +2,98 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --sidebar-bg: #0f172a;
-  --sidebar-text: #e2e8f0;
-  --sidebar-hover: #1e293b;
-  --sidebar-active: #0c8ee6;
-  --main-bg: #f8fafc;
+body {
+  font-family: Arial, Helvetica, sans-serif;
 }
 
-body {
-  @apply bg-slate-50 text-slate-900 antialiased;
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 56.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 47.4% 11.2%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 47.4% 11.2%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --primary: 235, 64%, 30%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 220 14.3% 95.9%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --accent: 180 100% 25%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --ring: 222.2 84% 4.9%;
+    --radius: 0.5rem;
+
+    /* Chart Colors */
+    --chart-1: 220 80% 60%;
+    --chart-2: 160 70% 50%;
+    --chart-3: 40 90% 60%;
+    --chart-4: 0 75% 65%;
+    --chart-5: 280 70% 60%;
+
+    /* Sidebar specific colors */
+    --sidebar-background: 0 100% 85%;
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-primary: 235, 64%, 30%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 139 4% 79%;
+    --sidebar-accent-foreground: 222.2 47.4% 11.2%;
+    --sidebar-border: 210 100% 80%;
+    --sidebar-ring: 222.2 84% 4.9%;
+  }
+
+  .dark {
+    --background: 224 71% 4%;
+    --foreground: 213 31% 91%;
+    --muted: 223 47% 11%;
+    --muted-foreground: 215.4 16.3% 56.9%;
+    --accent: 180 100% 25%;
+    --accent-foreground: 0 0% 100%;
+    --popover: 224 71% 4%;
+    --popover-foreground: 215 20.2% 65.1%;
+    --card: 224 71% 4%;
+    --card-foreground: 213 31% 91%;
+    --border: 216 34% 17%;
+    --input: 216 34% 17%;
+    --primary: 235, 64%, 30%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --ring: 217.2 32.6% 17.5%;
+
+    /* Dark Chart Colors */
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 40%;
+    --chart-3: 40 80% 50%;
+    --chart-4: 0 65% 55%;
+    --chart-5: 280 60% 50%;
+
+    /* Dark Sidebar specific colors */
+    --sidebar-background: 224 71% 4%;
+    --sidebar-foreground: 213 31% 91%;
+    --sidebar-primary: 235, 64%, 30%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 223 47% 11%;
+    --sidebar-accent-foreground: 213 31% 91%;
+    --sidebar-border: 216 34% 17%;
+    --sidebar-ring: 217.2 32.6% 17.5%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
 }
 
 /* AG Grid overrides for contract-finding theme */

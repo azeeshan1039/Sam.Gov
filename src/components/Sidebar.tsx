@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 const navItems = [
   { href: "/", label: "Dashboard" },
   { href: "/sam-gov", label: "Sam.Gov" },
+  { href: "/negotiations", label: "Negotiations" },
   { href: "/septa", label: "Septa" },
   { href: "/recommendations", label: "Recommendations" },
 ];
@@ -28,11 +29,10 @@ export default function Sidebar() {
             <Link
               key={item.href}
               href={item.href}
-              className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
-                isActive
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${isActive
                   ? "bg-primary-600 text-white"
                   : "text-slate-300 hover:bg-slate-800 hover:text-white"
-              }`}
+                }`}
             >
               <span className="w-2 h-2 rounded-full bg-current opacity-70" />
               {item.label}
