@@ -7,8 +7,7 @@ import { usePathname } from "next/navigation";
 const navItems = [
   { href: "/", label: "Dashboard" },
   { href: "/sam-gov", label: "Sam.Gov" },
-  { href: "/septa", label: "Septa" },
-  { href: "/recommendations", label: "Recommendations" },
+  { href: "/negotiations", label: "Negotiations" },
 ];
 
 export default function Sidebar() {
@@ -35,7 +34,7 @@ export default function Sidebar() {
                 isActive
                   ? "bg-primary-600 text-white"
                   : "text-slate-300 hover:bg-slate-800 hover:text-white"
-              }`}
+                }`}
             >
               <span className="w-2 h-2 rounded-full bg-current opacity-70" />
               {item.label}
