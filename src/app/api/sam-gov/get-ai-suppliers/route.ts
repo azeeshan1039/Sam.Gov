@@ -1,14 +1,12 @@
 // app/api/sam-gov/get-ai-suppliers/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-
-const PYTHON_SERVER_URL = process.env.PYTHON_SERVER_URL || 'https://backendgovai.onrender.com';
+import { BACKEND_URL } from '@/lib/backend-config';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     
-    // Send to Python server
-    const response = await fetch(`${PYTHON_SERVER_URL}/api/sam-gov/get-ai-suppliers`, {
+    const response = await fetch(`${BACKEND_URL}/api/sam-gov/get-ai-suppliers`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

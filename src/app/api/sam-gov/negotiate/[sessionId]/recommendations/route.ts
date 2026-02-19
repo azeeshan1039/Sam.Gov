@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-const BACKEND_URL = process.env.BACKEND_URL || 'https://backendgovai.onrender.com';
+import { BACKEND_URL } from '@/lib/backend-config';
 
 export async function GET(
   request: NextRequest,

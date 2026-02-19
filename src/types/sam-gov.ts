@@ -41,6 +41,10 @@ export interface SamGovOpportunity {
    */
   closingDate: string; // ISO date string
   /**
+   * The date the opportunity was posted or last modified.
+   */
+  postedDate?: string; // ISO date string
+  /**
    * The type of opportunity (e.g., Solicitation, Sources Sought).
    */
   type: string;
@@ -56,6 +60,18 @@ export interface SamGovOpportunity {
    * Full description of the opportunity. This might be a URL or plain text.
    */
   description: string;
+  /**
+   * Set-aside type (e.g., SBA, 8(a), HUBZone, SDVOSB).
+   */
+  setAside?: string;
+  /**
+   * Product Service Code (PSC/FSC).
+   */
+  classificationCode?: string;
+  /**
+   * Full parent path from the API (e.g., "DEPT OF DEFENSE.DEPT OF THE ARMY").
+   */
+  organizationHierarchy?: string;
   /**
    * Attachments - can be array of URLs or objects with name/link
    */
