@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-
-const BACKEND_URL = process.env.BACKEND_URL || 'https://backendgovai.onrender.com';
+import { BACKEND_URL } from '@/lib/backend-config';
 
 /**
  * Proxy API route to forward requests to the Python backend

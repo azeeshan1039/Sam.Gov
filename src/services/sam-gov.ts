@@ -91,7 +91,6 @@ export async function getSamGovOpportunities(
 
   console.log("File cache is stale, empty, or non-existent. Attempting to fetch fresh SAM.gov opportunities from API.");
   const apiKey = process.env.SAM_GOV_API_KEY ?? process.env.NEXT_PUBLIC_SAM_GOV_API_KEY;
-  console.log(apiKey)
   if (!apiKey) {
     console.warn('SAM_GOV_API_KEY or NEXT_PUBLIC_SAM_GOV_API_KEY is not set. Using existing cache or returning empty.');
     return applyFilters(samGovCacheFromFile?.data || [], searchCriteria);
@@ -100,7 +99,7 @@ export async function getSamGovOpportunities(
   const baseUrl = 'https://api.sam.gov/opportunities/v2/search';
   const defaultParams: Record<string, any> = {
     api_key: apiKey,
-    ptype: 'o,k,p',
+    ptype: 'o,k',
     postedFrom: getOneYearBackDate(),
     postedTo: getCurrentDate(),
     limit: '1000'
@@ -157,8 +156,6 @@ export async function getSamGovOpportunities(
       }
 
       allFetchedOpportunitiesData.push(...data.opportunitiesData);
-      console.log(allFetchedOpportunitiesData);
-
 
       if (data.opportunitiesData.length < limit) {
         hasMore = false;
@@ -176,12 +173,10 @@ export async function getSamGovOpportunities(
     }
     pagesFetched++;
   }
-  console.log(allFetchedOpportunitiesData);
 
   if (allFetchedOpportunitiesData.length > 0) {
     console.log(`Fetched a total of ${allFetchedOpportunitiesData.length} opportunities from API over ${pagesFetched} page(s).`);
     const mappedOpportunities: SamGovOpportunity[] = allFetchedOpportunitiesData.map((apiOpp: any) => {
-      console.log('Raw SAM.gov API opportunity:', apiOpp); // Log the raw API response object
       let ncodeString = '';
       if (Array.isArray(apiOpp.naicsCode)) {
         ncodeString = apiOpp.naicsCode.join(',');
@@ -198,11 +193,23 @@ export async function getSamGovOpportunities(
       const pop = apiOpp.placeOfPerformance;
       let locationObject: SamGovOpportunity['location'] = null;
       if (pop) {
+        const countryFromPop = pop.country?.name
+          ? { name: pop.country.name, code: pop.country.code }
+          : undefined;
+        const countryFallback = !countryFromPop && officeAddr?.countryCode === 'USA'
+          ? { name: 'UNITED STATES', code: 'USA' }
+          : undefined;
+
         locationObject = {
-          city: pop.city ? { name: pop.city.name, code: pop.city.code } : undefined,
-          state: pop.state ? { name: pop.state.name, code: pop.state.code } : undefined,
-          country: pop.country ? { name: pop.country.name, code: pop.country.code } : undefined,
+          city: pop.city?.name ? { name: pop.city.name, code: pop.city.code } : undefined,
+          state: pop.state?.name ? { name: pop.state.name, code: pop.state.code } : undefined,
+          country: countryFromPop || countryFallback,
           zip: pop.zipCode || undefined,
+        };
+      } else if (officeAddr?.countryCode) {
+        const countryName = officeAddr.countryCode === 'USA' ? 'UNITED STATES' : officeAddr.countryCode;
+        locationObject = {
+          country: { name: countryName, code: officeAddr.countryCode },
         };
       }
 
@@ -234,7 +241,11 @@ export async function getSamGovOpportunities(
         office: office,
         location: locationObject,
         closingDate: apiOpp.responseDeadLine,
+        postedDate: apiOpp.postedDate || apiOpp.modifiedDate || undefined,
         type: apiOpp.type || 'N/A',
+        setAside: apiOpp.typeOfSetAsideDescription || apiOpp.typeOfSetAside || undefined,
+        classificationCode: apiOpp.classificationCode || undefined,
+        organizationHierarchy: apiOpp.fullParentPathName || undefined,
         link: apiOpp.uiLink || '#',
         officeAddress: officeAddressString,
         description: descriptionText,
