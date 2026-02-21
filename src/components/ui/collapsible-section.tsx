@@ -38,16 +38,11 @@ export function CollapsibleSection({
                     )}
                 />
             </button>
-            <div
-                className={cn(
-                    "overflow-hidden transition-all duration-300 ease-in-out",
-                    isOpen ? "max-h-[2000px] opacity-100" : "max-h-0 opacity-0"
-                )}
-            >
-                <div className="p-4 pt-0 border-t">
+            {isOpen && (
+                <div className="p-4 pt-0 border-t animate-in fade-in-0 slide-in-from-top-1 duration-200">
                     {children}
                 </div>
-            </div>
+            )}
         </div>
     )
 }

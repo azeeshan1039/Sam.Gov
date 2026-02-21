@@ -109,10 +109,10 @@ function renderValue(value: any, depth: number = 0): React.ReactNode {
 
     // Complex array items
     return (
-      <div className="space-y-3">
+      <div className="space-y-4">
         {value.map((item, i) => (
-          <div key={i} className="bg-muted/30 rounded-lg p-3 border-l-2 border-primary/30">
-            <div className="text-xs text-muted-foreground mb-2">Item {i + 1}</div>
+          <div key={i} className="bg-muted/30 rounded-lg p-4 border border-border">
+            <div className="text-xs font-medium text-muted-foreground mb-3 pb-2 border-b border-border/50">Item {i + 1}</div>
             {renderValue(item, depth + 1)}
           </div>
         ))}
@@ -127,10 +127,10 @@ function renderValue(value: any, depth: number = 0): React.ReactNode {
     }
 
     return (
-      <div className={`space-y-3 ${depth > 0 ? "" : ""}`}>
+      <div className="space-y-3">
         {entries.map(([k, v]) => (
-          <div key={k} className="border-l-2 border-muted pl-3">
-            <div className="text-sm font-medium text-muted-foreground mb-1">
+          <div key={k} className="border-l-2 border-primary/20 pl-3 py-1">
+            <div className="text-sm font-semibold text-muted-foreground mb-1">
               {formatKey(k)}
             </div>
             <div className="ml-1">{renderValue(v, depth + 1)}</div>
@@ -512,8 +512,8 @@ export default function BidSummaryPage() {
         ))}
       </div>
 
-      {/* Chat Interface - Always visible */}
-      <Card className="border-2 border-primary/20 sticky bottom-4">
+      {/* Chat Interface */}
+      <Card className="border-2 border-primary/20">
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-xl">
             <MessageCircle className="text-primary h-5 w-5" />
