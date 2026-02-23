@@ -26,6 +26,7 @@ interface Supplier {
   email?: string;
   notes?: string;
   is_manual?: boolean;
+  email_sent?: boolean;
   status: string;
   negotiation_round: number;
   messages: Message[];
@@ -219,26 +220,24 @@ export default function BidSummaryPage() {
   const autoCheckPendingSuppliers = async (session: NegotiationSession) => {
     if (!session?.suppliers) return;
 
-    // Find suppliers that are pending and have buyer messages (initial message sent)
+    // Find suppliers that are pending, have buyer messages, and did NOT have a real email sent.
+    // Suppliers with email_sent=true wait for real email replies via the inbox poller.
     const pendingWithMessages = session.suppliers.filter(
-      s => s.status === 'pending' && s.messages?.some(m => m.sender === 'buyer')
+      s => s.status === 'pending' && !s.email_sent && s.messages?.some(m => m.sender === 'buyer')
     );
 
-    // Auto-trigger response check for each pending supplier (with delay to not overwhelm)
     for (const supplier of pendingWithMessages) {
       try {
         await fetch(
           `/api/sam-gov/negotiate/${session.id}/get-supplier-response/${supplier.id}`,
           { method: 'POST' }
         );
-        // Small delay between requests
         await new Promise(resolve => setTimeout(resolve, 500));
       } catch (err) {
         console.error(`Failed to auto-check response for supplier ${supplier.id}:`, err);
       }
     }
 
-    // Refresh session data after checking
     if (pendingWithMessages.length > 0) {
       const refreshResponse = await fetch(`/api/sam-gov/negotiate/${session.id}`);
       if (refreshResponse.ok) {
@@ -493,6 +492,14 @@ Procurement Team`
 
       if (!response.ok) {
         throw new Error('Failed to send initial message');
+      }
+
+      const data = await response.json();
+
+      if (!data.email_sent) {
+        const errorDetail = data.email_error || 'Unknown error';
+        setError(`Email failed to send: ${errorDetail}. Please check your SendGrid configuration and try again.`);
+        return;
       }
 
       // Mark message as sent
@@ -1560,7 +1567,9 @@ Procurement Team`
                                 {actionState.type === 'awaiting_response' && (
                                   <>
                                     <span className="text-sm text-muted-foreground">
-                                      Waiting for supplier response...
+                                      {supplier.email_sent
+                                        ? 'Waiting for vendor to reply by email... (inbox checked every 60s)'
+                                        : 'Waiting for supplier response...'}
                                     </span>
                                     <Button
                                       onClick={() => getSupplierResponse(supplier.id)}
