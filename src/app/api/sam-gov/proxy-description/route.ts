@@ -58,27 +58,14 @@ export async function GET(request: Request) {
         try {
             const json = JSON.parse(text);
             // SAM.gov description API returns HTML in "description" field
+            // Return raw HTML so frontend can render structure (paragraphs, lists, etc.)
             if (json.description) {
-                // Strip HTML tags for plain text
-                const cleaned = json.description
-                    .replace(/<[^>]+>/g, ' ')
-                    .replace(/&nbsp;/g, ' ')
-                    .replace(/&amp;/g, '&')
-                    .replace(/&lt;/g, '<')
-                    .replace(/&gt;/g, '>')
-                    .replace(/\s+/g, ' ')
-                    .trim();
-                return NextResponse.json({ content: cleaned });
+                return NextResponse.json({ content: json.description, isHtml: true });
             }
-            return NextResponse.json({ content: JSON.stringify(json) });
+            return NextResponse.json({ content: JSON.stringify(json), isHtml: false });
         } catch {
-            // Not JSON, treat as HTML/text
-            const plainText = text
-                .replace(/<[^>]+>/g, ' ')
-                .replace(/&nbsp;/g, ' ')
-                .replace(/\s+/g, ' ')
-                .trim();
-            return NextResponse.json({ content: plainText });
+            // Not JSON, treat as raw HTML/text
+            return NextResponse.json({ content: text, isHtml: true });
         }
     } catch (error: any) {
         console.error('Error proxying description:', error);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import type { SamGovOpportunity } from "@/types/sam-gov";
@@ -154,6 +154,7 @@ export default function BidSummaryPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isClient, setIsClient] = useState(false);
+  const fetchInProgress = useRef(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
 
@@ -178,12 +179,16 @@ export default function BidSummaryPage() {
 
   useEffect(() => {
     if (!isClient || !id) return;
+    if (fetchInProgress.current) return;
+    fetchInProgress.current = true;
+
     let savedData = localStorage.getItem(`summary-${id}`)
     if (savedData !== null) {
       const x = JSON.parse(savedData)
       if (x) {
         setSummary(x)
         setLoading(false)
+        fetchInProgress.current = false;
         return;
       }
     }
@@ -266,6 +271,7 @@ export default function BidSummaryPage() {
         setError(err.message || "Unexpected error");
       } finally {
         setLoading(false);
+        fetchInProgress.current = false;
       }
     };
 

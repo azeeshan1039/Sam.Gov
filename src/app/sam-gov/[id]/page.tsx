@@ -13,6 +13,37 @@ import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
 import { FileText } from 'lucide-react';
+import DOMPurify from 'dompurify';
+
+// Detect if content looks like HTML (has tags)
+function looksLikeHtml(text: string): boolean {
+  return /<[a-z][\s\S]*>/i.test(text);
+}
+
+function DescriptionBlock({ content, isHtml }: { content: string; isHtml?: boolean }) {
+  if (!content) return <p className="text-muted-foreground">No description available.</p>;
+
+  const shouldRenderHtml = isHtml ?? looksLikeHtml(content);
+
+  if (shouldRenderHtml) {
+    const sanitized = DOMPurify.sanitize(content, {
+      ALLOWED_TAGS: ['p', 'br', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'strong', 'em', 'u', 'a', 'span', 'div'],
+      ALLOWED_ATTR: ['href', 'target', 'rel'],
+    });
+    return (
+      <div
+        className="text-foreground text-sm leading-relaxed break-words [&_p]:mb-3 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:pl-6 [&_li]:mb-1 [&_h1]:text-lg [&_h2]:text-base [&_h3]:text-sm [&_h1]:font-bold [&_h2]:font-bold [&_h3]:font-semibold [&_a]:text-primary [&_a]:underline"
+        dangerouslySetInnerHTML={{ __html: sanitized }}
+      />
+    );
+  }
+
+  return (
+    <p className="text-foreground text-sm leading-relaxed whitespace-pre-wrap break-words">
+      {content}
+    </p>
+  );
+}
 
 // Helper function to extract filename from URL
 const getFileName = (url: string): string => {
@@ -61,6 +92,7 @@ export default function SamGovOpportunityPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [detailedDescription, setDetailedDescription] = useState<string | null>(null);
+  const [descriptionIsHtml, setDescriptionIsHtml] = useState(false);
   const [descriptionLoading, setDescriptionLoading] = useState<boolean>(false);
 
 
@@ -71,6 +103,7 @@ export default function SamGovOpportunityPage() {
       setLoading(true);
       setError(null);
       setDetailedDescription(null);
+      setDescriptionIsHtml(false);
 
       try {
         // Fetch all opportunities from the API route
@@ -94,9 +127,11 @@ export default function SamGovOpportunityPage() {
               if (!descResponse.ok) {
                 const errData = await descResponse.json();
                 setDetailedDescription(`Failed to load description: ${errData.error || descResponse.status}`);
+                setDescriptionIsHtml(false);
               } else {
                 const data = await descResponse.json();
                 setDetailedDescription(data.content || 'No description available.');
+                setDescriptionIsHtml(data.isHtml ?? true);
               }
             } catch (descError: any) {
               console.error('Failed to fetch detailed description:', descError);
@@ -106,6 +141,7 @@ export default function SamGovOpportunityPage() {
             }
           } else {
             setDetailedDescription(initialDesc || 'No description available.');
+            setDescriptionIsHtml(false);
           }
 
 
@@ -241,11 +277,13 @@ export default function SamGovOpportunityPage() {
             <div className="md:col-span-2 pt-4 border-t mt-4">
               <Label className="text-xl font-semibold text-primary mb-2 block">Description</Label>
               {descriptionLoading ? (
-                <Skeleton className="h-20 w-full" />
+                <div className="space-y-2">
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-5/6" />
+                  <Skeleton className="h-4 w-4/6" />
+                </div>
               ) : (
-                <p className="text-foreground prose prose-sm max-w-none break-words whitespace-pre-wrap">
-                  {detailedDescription || 'No description available.'}
-                </p>
+                <DescriptionBlock content={detailedDescription || 'No description available.'} isHtml={descriptionIsHtml} />
               )}
             </div>
 
