@@ -1,5 +1,16 @@
 import { NextResponse } from 'next/server';
+import { Agent } from 'undici';
 import { BACKEND_URL } from '@/lib/backend-config';
+
+export const maxDuration = 600; // 10 minutes — document processing can be slow
+
+// Custom undici agent with extended timeouts to prevent HeadersTimeoutError
+// on long-running backend requests
+const longTimeoutAgent = new Agent({
+    headersTimeout: 600_000,  // 10 minutes
+    bodyTimeout: 600_000,     // 10 minutes
+    connectTimeout: 10_000,
+});
 
 /**
  * Proxy API route to forward requests to the Python backend
@@ -17,6 +28,8 @@ export async function POST(request: Request) {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify(body),
+            // @ts-ignore — undici dispatcher not in standard fetch types
+            dispatcher: longTimeoutAgent,
         });
 
         if (!response.ok) {
