@@ -8,7 +8,7 @@ import { fetchAnalyzedContractSummary } from "@/ai/flows/summarize-contract-oppo
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Loading from "@/app/loading";
-import { parseDescriptionWithGemini } from "@/ai/flows/summarize-contract-opportunity";
+import DOMPurify from "dompurify";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { CollapsibleSection } from "@/components/ui/collapsible-section";
 import {
@@ -143,6 +143,35 @@ function renderValue(value: any, depth: number = 0): React.ReactNode {
   return <span>{String(value)}</span>;
 }
 
+function looksLikeHtml(text: string): boolean {
+  return /<[a-z][\s\S]*>/i.test(text);
+}
+
+function DescriptionBlock({ content, isHtml }: { content: string; isHtml?: boolean }) {
+  if (!content) return <p className="text-muted-foreground italic">No description available.</p>;
+
+  const shouldRenderHtml = isHtml ?? looksLikeHtml(content);
+
+  if (shouldRenderHtml) {
+    const sanitized = DOMPurify.sanitize(content, {
+      ALLOWED_TAGS: ['p', 'br', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'strong', 'em', 'u', 'a', 'span', 'div'],
+      ALLOWED_ATTR: ['href', 'target', 'rel'],
+    });
+    return (
+      <div
+        className="text-foreground text-sm leading-relaxed break-words [&_p]:mb-3 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:pl-6 [&_li]:mb-1 [&_h1]:text-lg [&_h2]:text-base [&_h3]:text-sm [&_h1]:font-bold [&_h2]:font-bold [&_h3]:font-semibold [&_a]:text-primary [&_a]:underline"
+        dangerouslySetInnerHTML={{ __html: sanitized }}
+      />
+    );
+  }
+
+  return (
+    <p className="text-foreground text-sm leading-relaxed whitespace-pre-wrap break-words">
+      {content}
+    </p>
+  );
+}
+
 // Keys that should NOT be shown as collapsible sections
 const metaKeys = ["title", "id", "agency", "originalOpportunityLink", "originalClosingDate"];
 
@@ -151,6 +180,7 @@ export default function BidSummaryPage() {
   const router = useRouter();
   const id = params.id as string;
   const [summary, setSummary] = useState<any>(null);
+  const [descriptionHtml, setDescriptionHtml] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isClient, setIsClient] = useState(false);
@@ -205,38 +235,19 @@ export default function BidSummaryPage() {
         if (!opportunity) throw new Error("Opportunity not found.");
 
         if (opportunity.resourceLinks.length == 0) {
-          const api_key = process.env.NEXT_PUBLIC_SAM_GOV_API_KEY;
-          const res = await fetch(
-            `${opportunity.description}&api_key=${api_key}`
-          );
+          const proxyUrl = `/api/sam-gov/proxy-description?url=${encodeURIComponent(opportunity.description)}`;
+          const descRes = await fetch(proxyUrl);
+          if (!descRes.ok) throw new Error("Failed to fetch description.");
+          const { content } = await descRes.json();
 
-          const desc = await res.json();
-          const descsummary = await parseDescriptionWithGemini(desc);
-          if (descsummary) {
-            setSummary({
-              ...descsummary,
-              title: opportunity.title,
-              id: opportunity.id,
-              agency: opportunity.department || "N/A",
-              originalOpportunityLink: opportunity.link,
-              originalClosingDate: opportunity.closingDate,
-            });
-            const finalSummary = {
-              ...descsummary,
-              title: opportunity.title,
-              id: opportunity.id,
-              agency: opportunity.department || "N/A",
-              originalOpportunityLink: opportunity.link,
-              originalClosingDate: opportunity.closingDate,
-            }
-            sessionStorage.setItem(id, JSON.stringify(finalSummary))
-            let savedData = localStorage.getItem(`summary-${id}`)
-            if (!savedData) {
-              localStorage.setItem(`summary-${id}`, JSON.stringify(finalSummary))
-            }
-          } else {
-            throw new Error("Failed to generate AI Summary.")
-          }
+          setDescriptionHtml(content || "No description available.");
+          setSummary({
+            title: opportunity.title,
+            id: opportunity.id,
+            agency: opportunity.department || "N/A",
+            originalOpportunityLink: opportunity.link,
+            originalClosingDate: opportunity.closingDate,
+          });
         } else {
           const aiSummary = await fetchAnalyzedContractSummary(
             opportunity.resourceLinks as string[]
@@ -502,21 +513,35 @@ export default function BidSummaryPage() {
         </CardContent>
       </Card>
 
-      {/* Collapsible Content Sections */}
-      <div className="space-y-4">
-        {contentSections.map(([key, value]) => (
-          <CollapsibleSection
-            key={key}
-            title={formatKey(key)}
-            icon={sectionIcons[key] || <ClipboardList className="h-5 w-5 text-primary" />}
-            defaultOpen={false}
-          >
-            <div className="pt-2">
-              {renderValue(value)}
-            </div>
-          </CollapsibleSection>
-        ))}
-      </div>
+      {/* Content: structured sections or raw description */}
+      {descriptionHtml ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5 text-primary" />
+              Description
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <DescriptionBlock content={descriptionHtml} isHtml={true} />
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-4">
+          {contentSections.map(([key, value]) => (
+            <CollapsibleSection
+              key={key}
+              title={formatKey(key)}
+              icon={sectionIcons[key] || <ClipboardList className="h-5 w-5 text-primary" />}
+              defaultOpen={false}
+            >
+              <div className="pt-2">
+                {renderValue(value)}
+              </div>
+            </CollapsibleSection>
+          ))}
+        </div>
+      )}
 
       {/* Chat Interface */}
       <Card className="border-2 border-primary/20">
