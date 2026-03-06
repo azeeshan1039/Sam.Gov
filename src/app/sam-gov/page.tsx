@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
 import Link from "next/link";
-import { Sparkles, ChevronDown, ChevronUp } from "lucide-react";
+import { Sparkles, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
 import type { SamGovOpportunity } from "@/types/sam-gov";
 
 const DEFAULT_NOTICE_TYPES = ["Solicitation", "Combined Synopsis/Solicitation"];
@@ -309,8 +309,25 @@ export default function SamGovPage() {
     fetchData();
   }, []);
 
-  const fetchAiSuggestions = useCallback(async () => {
+  // Load cached AI suggestions from localStorage on mount
+  useEffect(() => {
+    try {
+      const cached = localStorage.getItem("ai-suggestions-cache");
+      if (cached) {
+        const data = JSON.parse(cached);
+        setAiSuggestions(data.suggestions || []);
+        setAiProfile(data.profile || null);
+        setAiStats(data.stats || null);
+        setAiFetched(true);
+      }
+    } catch {
+      localStorage.removeItem("ai-suggestions-cache");
+    }
+  }, []);
+
+  const fetchAiSuggestions = useCallback(async (forceRefresh = false) => {
     if (aiLoading || allOpportunities.length === 0) return;
+    if (!forceRefresh && aiFetched) return;
     setAiLoading(true);
     setAiError(null);
     try {
@@ -324,20 +341,24 @@ export default function SamGovPage() {
         throw new Error(errData.error || `Request failed (${res.status})`);
       }
       const data = await res.json();
-      setAiSuggestions(data.suggestions || []);
-      setAiProfile(data.profile || null);
-      setAiStats({
+      const suggestions = data.suggestions || [];
+      const profile = data.profile || null;
+      const stats = {
         total_analyzed: data.total_analyzed || 0,
         total_suggestions: data.total_suggestions || 0,
         threshold: data.threshold || 70,
-      });
+      };
+      setAiSuggestions(suggestions);
+      setAiProfile(profile);
+      setAiStats(stats);
       setAiFetched(true);
+      localStorage.setItem("ai-suggestions-cache", JSON.stringify({ suggestions, profile, stats }));
     } catch (e) {
       setAiError(e instanceof Error ? e.message : "Failed to get AI suggestions");
     } finally {
       setAiLoading(false);
     }
-  }, [aiLoading, allOpportunities]);
+  }, [aiLoading, aiFetched, allOpportunities]);
 
   useEffect(() => {
     if (activeTab === "suggestions" && !aiFetched && !aiLoading && !aiError && allOpportunities.length > 0) {
@@ -694,6 +715,18 @@ export default function SamGovPage() {
           {/* Results */}
           {!aiLoading && !aiError && aiFetched && (
             <>
+              <div className="flex justify-end mb-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fetchAiSuggestions(true)}
+                  disabled={aiLoading}
+                  className="gap-2"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  Refresh Suggestions
+                </Button>
+              </div>
               {aiSuggestions.length === 0 ? (
                 <div className="rounded-lg border border-slate-200 bg-white py-12 text-center">
                   <Sparkles className="mx-auto h-10 w-10 text-slate-300 mb-3" />
