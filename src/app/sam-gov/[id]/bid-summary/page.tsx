@@ -4,7 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import type { SamGovOpportunity } from "@/types/sam-gov";
-import { fetchAnalyzedContractSummary } from "@/ai/flows/summarize-contract-opportunity";
+import {
+  fetchAnalyzedContractSummaryAsync,
+  type AnalysisProgress,
+} from "@/ai/flows/summarize-contract-opportunity";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Loading from "@/app/loading";
@@ -185,6 +188,7 @@ export default function BidSummaryPage() {
   const [error, setError] = useState<string | null>(null);
   const [isClient, setIsClient] = useState(false);
   const fetchInProgress = useRef(false);
+  const [analysisProgress, setAnalysisProgress] = useState<AnalysisProgress | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
 
@@ -249,9 +253,17 @@ export default function BidSummaryPage() {
             originalClosingDate: opportunity.closingDate,
           });
         } else {
-          const aiSummary = await fetchAnalyzedContractSummary(
-            opportunity.resourceLinks as string[]
+          setAnalysisProgress({
+            status: 'pending',
+            progress: 'Starting analysis...',
+            totalDocuments: opportunity.resourceLinks.length,
+            processedDocuments: 0,
+          });
+          const aiSummary = await fetchAnalyzedContractSummaryAsync(
+            opportunity.resourceLinks as string[],
+            (progress) => setAnalysisProgress(progress),
           );
+          setAnalysisProgress(null);
           if (aiSummary) {
             setSummary({
               ...aiSummary,
@@ -417,7 +429,57 @@ export default function BidSummaryPage() {
     }
   };
 
-  if (loading) return <Loading />;
+  if (loading) {
+    if (analysisProgress) {
+      const pct = analysisProgress.totalDocuments > 0
+        ? Math.round((analysisProgress.processedDocuments / analysisProgress.totalDocuments) * 100)
+        : 0;
+
+      const statusLabel: Record<string, string> = {
+        pending: 'Starting...',
+        downloading: 'Downloading documents...',
+        analyzing: 'Analyzing documents with AI...',
+        summarizing: 'Generating final summary...',
+        completed: 'Done!',
+        failed: 'Analysis failed.',
+      };
+
+      return (
+        <main className="flex flex-col items-center justify-center min-h-[60vh] p-6 space-y-6">
+          <div className="w-full max-w-md space-y-4">
+            <div className="flex items-center gap-3">
+              <FileText className="h-6 w-6 text-primary animate-pulse" />
+              <h2 className="text-xl font-semibold">Analyzing Solicitation</h2>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {statusLabel[analysisProgress.status] || analysisProgress.progress}
+            </p>
+            <div className="w-full bg-muted rounded-full h-3 overflow-hidden">
+              <div
+                className="bg-primary h-full rounded-full transition-all duration-500 ease-out"
+                style={{
+                  width: analysisProgress.status === 'summarizing'
+                    ? '90%'
+                    : analysisProgress.status === 'downloading'
+                      ? '15%'
+                      : `${Math.max(pct, 5)}%`,
+                }}
+              />
+            </div>
+            {analysisProgress.status === 'analyzing' && analysisProgress.totalDocuments > 0 && (
+              <p className="text-xs text-muted-foreground text-center">
+                {analysisProgress.processedDocuments} of {analysisProgress.totalDocuments} documents processed
+              </p>
+            )}
+            <p className="text-xs text-muted-foreground text-center">
+              This may take a minute or two. You can leave this page and come back.
+            </p>
+          </div>
+        </main>
+      );
+    }
+    return <Loading />;
+  }
 
   if (error) {
     return (
