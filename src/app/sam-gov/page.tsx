@@ -753,7 +753,7 @@ export default function SamGovPage() {
             <div className="rounded-lg border border-slate-200 bg-white py-12 text-center">
               <Sparkles className="mx-auto h-10 w-10 text-indigo-300 mb-3" />
               <p className="text-slate-600 text-sm font-medium">Ready to analyze opportunities</p>
-              <Button className="mt-3" onClick={fetchAiSuggestions}>
+              <Button className="mt-3" onClick={() => fetchAiSuggestions()}>
                 <Sparkles className="h-4 w-4 mr-2" />
                 Get AI Suggestions
               </Button>
