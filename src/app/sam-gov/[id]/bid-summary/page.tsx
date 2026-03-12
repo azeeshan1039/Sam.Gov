@@ -6,6 +6,7 @@ import Link from "next/link";
 import type { SamGovOpportunity } from "@/types/sam-gov";
 import {
   fetchAnalyzedContractSummaryAsync,
+  pollExistingJob,
   type AnalysisProgress,
 } from "@/ai/flows/summarize-contract-opportunity";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -216,6 +217,7 @@ export default function BidSummaryPage() {
     if (fetchInProgress.current) return;
     fetchInProgress.current = true;
 
+    // 1. Check for completed summary in localStorage
     let savedData = localStorage.getItem(`summary-${id}`)
     if (savedData !== null) {
       const x = JSON.parse(savedData)
@@ -226,6 +228,51 @@ export default function BidSummaryPage() {
         return;
       }
     }
+
+    // Helper: save completed summary and clean up job entry
+    const handleAnalysisComplete = (aiSummary: any, opportunity: SamGovOpportunity) => {
+      const finalSummary = {
+        ...aiSummary,
+        title: opportunity.title,
+        id: opportunity.id,
+        agency: opportunity.department || "N/A",
+        originalOpportunityLink: opportunity.link,
+        originalClosingDate: opportunity.closingDate,
+      };
+      setSummary(finalSummary);
+      localStorage.removeItem(`analysis-job-${id}`);
+      if (!localStorage.getItem(`summary-${id}`)) {
+        localStorage.setItem(`summary-${id}`, JSON.stringify(finalSummary));
+      }
+    };
+
+    // Helper: start a fresh analysis job
+    const startNewAnalysis = async (opportunity: SamGovOpportunity) => {
+      setAnalysisProgress({
+        status: 'pending',
+        progress: 'Starting analysis...',
+        totalDocuments: opportunity.resourceLinks.length,
+        processedDocuments: 0,
+      });
+      const { result: aiSummary } = await fetchAnalyzedContractSummaryAsync(
+        opportunity.resourceLinks as string[],
+        (progress) => setAnalysisProgress(progress),
+        (jobId) => {
+          localStorage.setItem(`analysis-job-${id}`, JSON.stringify({
+            jobId,
+            startedAt: Date.now(),
+          }));
+        },
+      );
+      setAnalysisProgress(null);
+      if (aiSummary) {
+        handleAnalysisComplete(aiSummary, opportunity);
+      } else {
+        localStorage.removeItem(`analysis-job-${id}`);
+        throw new Error("Failed to generate AI summary.");
+      }
+    };
+
     const fetchData = async () => {
       setLoading(true);
       try {
@@ -253,41 +300,45 @@ export default function BidSummaryPage() {
             originalClosingDate: opportunity.closingDate,
           });
         } else {
-          setAnalysisProgress({
-            status: 'pending',
-            progress: 'Starting analysis...',
-            totalDocuments: opportunity.resourceLinks.length,
-            processedDocuments: 0,
-          });
-          const aiSummary = await fetchAnalyzedContractSummaryAsync(
-            opportunity.resourceLinks as string[],
-            (progress) => setAnalysisProgress(progress),
-          );
-          setAnalysisProgress(null);
-          if (aiSummary) {
-            setSummary({
-              ...aiSummary,
-              title: opportunity.title,
-              id: opportunity.id,
-              agency: opportunity.department || "N/A",
-              originalOpportunityLink: opportunity.link,
-              originalClosingDate: opportunity.closingDate,
-            });
-            const finalSummary = {
-              ...aiSummary,
-              title: opportunity.title,
-              id: opportunity.id,
-              agency: opportunity.department || "N/A",
-              originalOpportunityLink: opportunity.link,
-              originalClosingDate: opportunity.closingDate,
+          // 2. Check for an in-progress job we can resume
+          const savedJob = localStorage.getItem(`analysis-job-${id}`);
+          if (savedJob) {
+            try {
+              const { jobId, startedAt } = JSON.parse(savedJob);
+              const ageMs = Date.now() - (startedAt || 0);
+              if (jobId && ageMs < 15 * 60 * 1000) {
+                // Job is less than 15 minutes old — try to resume polling
+                setAnalysisProgress({
+                  status: 'analyzing',
+                  progress: 'Reconnecting to analysis job...',
+                  totalDocuments: opportunity.resourceLinks.length,
+                  processedDocuments: 0,
+                });
+                const pollResult = await pollExistingJob(
+                  jobId,
+                  (progress) => setAnalysisProgress(progress),
+                );
+                setAnalysisProgress(null);
+                if (pollResult.notFound) {
+                  // Job was lost (server restarted) — start fresh
+                  localStorage.removeItem(`analysis-job-${id}`);
+                  await startNewAnalysis(opportunity);
+                } else if (pollResult.result) {
+                  handleAnalysisComplete(pollResult.result, opportunity);
+                } else {
+                  localStorage.removeItem(`analysis-job-${id}`);
+                  throw new Error("Analysis job failed on resume.");
+                }
+                return;
+              }
+            } catch {
+              // Corrupt localStorage entry — ignore and start fresh
             }
-            let savedData = localStorage.getItem(`summary-${id}`)
-            if (!savedData) {
-              localStorage.setItem(`summary-${id}`, JSON.stringify(finalSummary))
-            }
-          } else {
-            throw new Error("Failed to generate AI summary.");
+            localStorage.removeItem(`analysis-job-${id}`);
           }
+
+          // 3. No existing job — start new analysis
+          await startNewAnalysis(opportunity);
         }
       } catch (err: any) {
         console.error(err);
