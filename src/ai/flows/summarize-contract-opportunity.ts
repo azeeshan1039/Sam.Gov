@@ -17,32 +17,56 @@ const MAX_POLL_ATTEMPTS = 200; // ~13 minutes max
  * Poll loop shared by both start-new and resume flows.
  * Returns 'completed' result, null on failure/timeout, or 'not_found' if job disappeared.
  */
+const MAX_CONSECUTIVE_ERRORS = 10;
+
 async function _pollJob(
   jobId: string,
   onProgress?: (progress: AnalysisProgress) => void,
 ): Promise<any | null | 'not_found'> {
   let consecutive404s = 0;
+  let consecutiveErrors = 0;
+
   for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
     await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
 
-    const statusRes = await fetch(
-      `/api/backend/analyze-solicitations/status?job_id=${encodeURIComponent(jobId)}`
-    );
+    let statusRes: Response;
+    try {
+      statusRes = await fetch(
+        `/api/backend/analyze-solicitations/status?job_id=${encodeURIComponent(jobId)}`
+      );
+    } catch (networkErr) {
+      consecutiveErrors++;
+      console.error(`Poll network error (${consecutiveErrors}/${MAX_CONSECUTIVE_ERRORS}):`, networkErr);
+      if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+        console.error('Too many consecutive network errors — giving up');
+        return null;
+      }
+      continue;
+    }
 
     if (statusRes.status === 404) {
       consecutive404s++;
+      consecutiveErrors++;
       if (consecutive404s >= 3) {
         console.error('Job not found after 3 attempts — server may have restarted');
         return 'not_found';
       }
       continue;
     }
-    consecutive404s = 0;
 
     if (!statusRes.ok) {
-      console.error('Status poll failed:', statusRes.status);
+      consecutiveErrors++;
+      console.error(`Status poll failed (${consecutiveErrors}/${MAX_CONSECUTIVE_ERRORS}):`, statusRes.status);
+      if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+        console.error('Too many consecutive poll errors — giving up');
+        return null;
+      }
       continue;
     }
+
+    // Successful response — reset all error counters
+    consecutive404s = 0;
+    consecutiveErrors = 0;
 
     const data = await statusRes.json();
 
