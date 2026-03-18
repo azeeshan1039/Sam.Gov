@@ -412,7 +412,8 @@ export default function BidSummaryPage() {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to start negotiation');
+        const errBody = await response.json().catch(() => null);
+        throw new Error(errBody?.error || `Server error (${response.status}). Please try again.`);
       }
 
       const data = await response.json();
@@ -456,8 +457,8 @@ Procurement Team`
         setShowInitialReview(true);
         setCurrentInitialIndex(0);
       }
-    } catch (err) {
-      setError('Failed to start negotiation process');
+    } catch (err: any) {
+      setError(err?.message || 'Failed to start negotiation process. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -542,6 +543,14 @@ Procurement Team`
     try {
       setGettingResponse(supplierId);
 
+      // Trigger an immediate inbox poll so any new emails are ingested before we check
+      const supplier = negotiationSession?.suppliers.find(s => s.id === supplierId);
+      if (supplier?.email_sent) {
+        try {
+          await fetch('/api/sam-gov/negotiate/poll-inbox', { method: 'POST' });
+        } catch (_) { /* best-effort */ }
+      }
+
       const response = await fetch(
         `/api/sam-gov/negotiate/${negotiationSession?.id}/respond/${supplierId}`,
         { method: 'POST' }
@@ -549,6 +558,15 @@ Procurement Team`
 
       if (!response.ok) {
         throw new Error('Failed to get supplier response');
+      }
+
+      const data = await response.json();
+
+      if (data.waiting_for_email) {
+        setError(null);
+        // Refresh session to pick up any newly ingested messages
+        await fetchNegotiationStatus();
+        return;
       }
 
       // Update the negotiation status to show the new supplier message
@@ -1566,11 +1584,14 @@ Procurement Team`
 
                                 {actionState.type === 'awaiting_response' && (
                                   <>
-                                    <span className="text-sm text-muted-foreground">
-                                      {supplier.email_sent
-                                        ? 'Waiting for vendor to reply by email... (inbox checked every 60s)'
-                                        : 'Waiting for supplier response...'}
-                                    </span>
+                                    <div className="flex items-center gap-2 flex-1">
+                                      <Mail className="h-4 w-4 text-muted-foreground animate-pulse" />
+                                      <span className="text-sm text-muted-foreground">
+                                        {supplier.email_sent
+                                          ? 'Waiting for vendor to reply by email...'
+                                          : 'Waiting for supplier response...'}
+                                      </span>
+                                    </div>
                                     <Button
                                       onClick={() => getSupplierResponse(supplier.id)}
                                       variant="outline"
@@ -1580,7 +1601,7 @@ Procurement Team`
                                       {gettingResponse === supplier.id ? (
                                         <>
                                           <Icons.spinner className="mr-2 h-4 w-4 animate-spin" />
-                                          Checking...
+                                          Checking Inbox...
                                         </>
                                       ) : (
                                         'Check for Response'

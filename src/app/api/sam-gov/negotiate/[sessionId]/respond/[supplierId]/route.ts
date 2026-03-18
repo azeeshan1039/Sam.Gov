@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { BACKEND_URL } from '@/lib/backend-config';
 
-
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ sessionId: string; supplierId: string }> }
@@ -14,10 +13,15 @@ export async function POST(
     );
 
     if (!response.ok) {
-      throw new Error('Failed to respond to supplier');
+      const errorText = await response.text().catch(() => '');
+      return NextResponse.json(
+        { error: errorText || 'Failed to respond to supplier' },
+        { status: response.status }
+      );
     }
 
-    return NextResponse.json({ success: true });
+    const data = await response.json();
+    return NextResponse.json(data);
   } catch (error) {
     console.error('Error responding to supplier:', error);
     return NextResponse.json(

@@ -10,14 +10,10 @@ export type AnalysisResult = {
   jobId: string | null;
 };
 
-const POLL_INTERVAL_MS = 4000;
-const MAX_POLL_ATTEMPTS = 200; // ~13 minutes max
-
-/**
- * Poll loop shared by both start-new and resume flows.
- * Returns 'completed' result, null on failure/timeout, or 'not_found' if job disappeared.
- */
-const MAX_CONSECUTIVE_ERRORS = 10;
+const BASE_POLL_INTERVAL_MS = 4000;
+const MAX_BACKOFF_MS = 15000;
+const MAX_POLL_ATTEMPTS = 250; // ~17 minutes max with backoff
+const MAX_CONSECUTIVE_ERRORS = 25;
 
 async function _pollJob(
   jobId: string,
@@ -25,9 +21,10 @@ async function _pollJob(
 ): Promise<any | null | 'not_found'> {
   let consecutive404s = 0;
   let consecutiveErrors = 0;
+  let currentInterval = BASE_POLL_INTERVAL_MS;
 
   for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
-    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+    await new Promise((resolve) => setTimeout(resolve, currentInterval));
 
     let statusRes: Response;
     try {
@@ -36,6 +33,7 @@ async function _pollJob(
       );
     } catch (networkErr) {
       consecutiveErrors++;
+      currentInterval = Math.min(currentInterval * 1.5, MAX_BACKOFF_MS);
       console.error(`Poll network error (${consecutiveErrors}/${MAX_CONSECUTIVE_ERRORS}):`, networkErr);
       if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
         console.error('Too many consecutive network errors — giving up');
@@ -47,8 +45,9 @@ async function _pollJob(
     if (statusRes.status === 404) {
       consecutive404s++;
       consecutiveErrors++;
-      if (consecutive404s >= 3) {
-        console.error('Job not found after 3 attempts — server may have restarted');
+      currentInterval = Math.min(currentInterval * 1.5, MAX_BACKOFF_MS);
+      if (consecutive404s >= 5) {
+        console.error('Job not found after 5 attempts — server may have restarted');
         return 'not_found';
       }
       continue;
@@ -56,6 +55,7 @@ async function _pollJob(
 
     if (!statusRes.ok) {
       consecutiveErrors++;
+      currentInterval = Math.min(currentInterval * 1.5, MAX_BACKOFF_MS);
       console.error(`Status poll failed (${consecutiveErrors}/${MAX_CONSECUTIVE_ERRORS}):`, statusRes.status);
       if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
         console.error('Too many consecutive poll errors — giving up');
@@ -64,9 +64,10 @@ async function _pollJob(
       continue;
     }
 
-    // Successful response — reset all error counters
+    // Successful response — reset error counters and interval
     consecutive404s = 0;
     consecutiveErrors = 0;
+    currentInterval = BASE_POLL_INTERVAL_MS;
 
     const data = await statusRes.json();
 
