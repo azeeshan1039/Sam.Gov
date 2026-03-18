@@ -17,7 +17,7 @@ import { Separator } from '@/components/ui/separator';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { format } from 'date-fns';
-import { Plus, Trash2, Building2, Mail, StickyNote, Trophy, ShieldCheck, FileDown, Send, AlertTriangle, CheckCircle2, Star } from 'lucide-react';
+import { Plus, Trash2, Building2, Mail, StickyNote, Trophy, ShieldCheck, FileDown, Send, AlertTriangle, CheckCircle2, Star, Sparkles } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 
 interface Supplier {
@@ -175,10 +175,16 @@ export default function BidSummaryPage() {
   const [submittingBid, setSubmittingBid] = useState(false);
   const [bidSubmitted, setBidSubmitted] = useState(false);
 
+  // AI target price estimation states
+  const [loadingEstimate, setLoadingEstimate] = useState(false);
+  const [estimatedByAi, setEstimatedByAi] = useState(false);
+  const [aiPriceReasoning, setAiPriceReasoning] = useState('');
+
   useEffect(() => {
     if (!opportunityId) return
     fetchOpportunityDetails();
     checkExistingSession();
+    fetchAiTargetEstimate();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [opportunityId]);
 
@@ -289,6 +295,35 @@ export default function BidSummaryPage() {
       setError('Failed to load opportunity details');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchAiTargetEstimate = async () => {
+    const savedData = localStorage.getItem(`summary-${opportunityId}`);
+    if (!savedData) return;
+
+    try {
+      setLoadingEstimate(true);
+      const parsedData = JSON.parse(savedData);
+
+      const response = await fetch('/api/sam-gov/estimate-target-price', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ opportunity: parsedData }),
+      });
+
+      if (!response.ok) throw new Error('Estimate failed');
+
+      const data = await response.json();
+      if (data.estimated_price && !targetPrice) {
+        setTargetPrice(String(data.estimated_price));
+        setEstimatedByAi(true);
+        if (data.reasoning) setAiPriceReasoning(data.reasoning);
+      }
+    } catch (err) {
+      console.error('Failed to fetch AI target price estimate:', err);
+    } finally {
+      setLoadingEstimate(false);
     }
   };
 
@@ -1037,15 +1072,38 @@ Procurement Team`
                           This will not be revealed to suppliers
                         </span>
                       </Label>
-                      <Input
-                        id="targetPrice"
-                        type="number"
-                        placeholder="Enter your maximum budget"
-                        value={targetPrice}
-                        onChange={(e) => setTargetPrice(e.target.value)}
-                        step="0.01"
-                        min="0"
-                      />
+                      <div className="relative">
+                        <Input
+                          id="targetPrice"
+                          type="number"
+                          placeholder={loadingEstimate ? 'AI is estimating a target...' : 'Enter your maximum budget'}
+                          value={targetPrice}
+                          onChange={(e) => {
+                            setTargetPrice(e.target.value);
+                            setEstimatedByAi(false);
+                          }}
+                          step="0.01"
+                          min="0"
+                          disabled={loadingEstimate}
+                          className={loadingEstimate ? 'pr-10' : estimatedByAi ? 'pr-28' : ''}
+                        />
+                        {loadingEstimate && (
+                          <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                            <Icons.spinner className="h-4 w-4 animate-spin text-muted-foreground" />
+                          </div>
+                        )}
+                        {estimatedByAi && !loadingEstimate && (
+                          <Badge variant="secondary" className="absolute right-2 top-1/2 -translate-y-1/2 text-xs gap-1">
+                            <Sparkles className="h-3 w-3" />
+                            AI Estimated
+                          </Badge>
+                        )}
+                      </div>
+                      {estimatedByAi && aiPriceReasoning && (
+                        <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
+                          {aiPriceReasoning}
+                        </p>
+                      )}
                     </div>
 
                     <div>
