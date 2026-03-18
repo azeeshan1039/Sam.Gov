@@ -543,11 +543,18 @@ Procurement Team`
     try {
       setGettingResponse(supplierId);
 
-      // Trigger an immediate inbox poll so any new emails are ingested before we check
+      // Trigger a scoped inbox poll for this specific supplier before checking
       const supplier = negotiationSession?.suppliers.find(s => s.id === supplierId);
-      if (supplier?.email_sent) {
+      if (supplier?.email_sent && negotiationSession) {
         try {
-          await fetch('/api/sam-gov/negotiate/poll-inbox', { method: 'POST' });
+          await fetch('/api/sam-gov/negotiate/poll-inbox', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              session_id: negotiationSession.id,
+              supplier_id: supplierId,
+            }),
+          });
         } catch (_) { /* best-effort */ }
       }
 

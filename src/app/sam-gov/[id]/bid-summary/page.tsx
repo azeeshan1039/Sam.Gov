@@ -177,7 +177,7 @@ function DescriptionBlock({ content, isHtml }: { content: string; isHtml?: boole
 }
 
 // Keys that should NOT be shown as collapsible sections
-const metaKeys = ["title", "id", "agency", "originalOpportunityLink", "originalClosingDate"];
+const metaKeys = ["title", "id", "agency", "originalOpportunityLink", "originalClosingDate", "description"];
 
 export default function BidSummaryPage() {
   const params = useParams();
@@ -223,15 +223,33 @@ export default function BidSummaryPage() {
       const x = JSON.parse(savedData)
       if (x) {
         setSummary(x)
+        if (x.description) {
+          setDescriptionHtml(x.description);
+        }
         setLoading(false)
         fetchInProgress.current = false;
         return;
       }
     }
 
+    // Fetch the listing description via proxy and return it as HTML string
+    const fetchDescription = async (opportunity: SamGovOpportunity): Promise<string | null> => {
+      if (!opportunity.description) return null;
+      try {
+        const proxyUrl = `/api/sam-gov/proxy-description?url=${encodeURIComponent(opportunity.description)}`;
+        const descRes = await fetch(proxyUrl);
+        if (!descRes.ok) return null;
+        const { content } = await descRes.json();
+        return content || null;
+      } catch {
+        return null;
+      }
+    };
+
     // Helper: save completed summary and clean up job entry
-    const handleAnalysisComplete = (aiSummary: any, opportunity: SamGovOpportunity) => {
-      const finalSummary = {
+    const handleAnalysisComplete = async (aiSummary: any, opportunity: SamGovOpportunity) => {
+      const descHtml = await fetchDescription(opportunity);
+      const finalSummary: Record<string, any> = {
         ...aiSummary,
         title: opportunity.title,
         id: opportunity.id,
@@ -239,6 +257,10 @@ export default function BidSummaryPage() {
         originalOpportunityLink: opportunity.link,
         originalClosingDate: opportunity.closingDate,
       };
+      if (descHtml) {
+        finalSummary.description = descHtml;
+        setDescriptionHtml(descHtml);
+      }
       setSummary(finalSummary);
       localStorage.removeItem(`analysis-job-${id}`);
       if (!localStorage.getItem(`summary-${id}`)) {
@@ -286,19 +308,20 @@ export default function BidSummaryPage() {
         if (!opportunity) throw new Error("Opportunity not found.");
 
         if (opportunity.resourceLinks.length == 0) {
-          const proxyUrl = `/api/sam-gov/proxy-description?url=${encodeURIComponent(opportunity.description)}`;
-          const descRes = await fetch(proxyUrl);
-          if (!descRes.ok) throw new Error("Failed to fetch description.");
-          const { content } = await descRes.json();
+          const descHtml = await fetchDescription(opportunity);
+          const content = descHtml || "No description available.";
 
-          setDescriptionHtml(content || "No description available.");
-          setSummary({
+          setDescriptionHtml(content);
+          const noDocSummary = {
             title: opportunity.title,
             id: opportunity.id,
             agency: opportunity.department || "N/A",
             originalOpportunityLink: opportunity.link,
             originalClosingDate: opportunity.closingDate,
-          });
+            description: content,
+          };
+          setSummary(noDocSummary);
+          localStorage.setItem(`summary-${id}`, JSON.stringify(noDocSummary));
         } else {
           // 2. Check for an in-progress job we can resume
           const savedJob = localStorage.getItem(`analysis-job-${id}`);
@@ -626,8 +649,8 @@ export default function BidSummaryPage() {
         </CardContent>
       </Card>
 
-      {/* Content: structured sections or raw description */}
-      {descriptionHtml ? (
+      {/* Description section (always shown when available) */}
+      {descriptionHtml && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -639,7 +662,10 @@ export default function BidSummaryPage() {
             <DescriptionBlock content={descriptionHtml} isHtml={true} />
           </CardContent>
         </Card>
-      ) : (
+      )}
+
+      {/* AI analysis sections */}
+      {contentSections.length > 0 && (
         <div className="space-y-4">
           {contentSections.map(([key, value]) => (
             <CollapsibleSection

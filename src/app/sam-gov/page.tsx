@@ -12,11 +12,11 @@ import Link from "next/link";
 import { Sparkles, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
 import type { SamGovOpportunity } from "@/types/sam-gov";
 
-const DEFAULT_NOTICE_TYPES = ["Solicitation", "Combined Synopsis/Solicitation"];
-const DEFAULT_DATE_RANGE: DateRangeKey = "past_day";
+const DEFAULT_NOTICE_TYPES: string[] = [];
+const DEFAULT_DATE_RANGE: DateRangeKey = "any";
 const DEFAULT_RESPONSE_DATE: DateRangeKey = "any";
-const DEFAULT_COUNTRY = "UNITED STATES";
-const DEFAULT_ACTIVE_ONLY = true;
+const DEFAULT_COUNTRY = "all";
+const DEFAULT_ACTIVE_ONLY = false;
 const DEFAULT_SEARCH_MODE: SearchMode = "all_words";
 
 type DateRangeKey = "past_day" | "past_week" | "past_month" | "any";
