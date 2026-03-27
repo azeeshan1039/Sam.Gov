@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import Sidebar from "@/components/Sidebar";
 import BackendKeepAlive from "@/components/BackendKeepAlive";
+import RootShell from "@/components/RootShell";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -20,12 +20,7 @@ export default function RootLayout({
     <html lang="en">
       <body className={inter.className}>
         <BackendKeepAlive />
-        <div className="flex h-screen overflow-hidden">
-          <Sidebar />
-          <main id="main-scroll" className="flex-1 overflow-auto bg-slate-50">
-            {children}
-          </main>
-        </div>
+        <RootShell>{children}</RootShell>
       </body>
     </html>
   );

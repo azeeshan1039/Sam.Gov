@@ -9,8 +9,10 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Sparkles, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
 import type { SamGovOpportunity } from "@/types/sam-gov";
+import { getStoredUser } from "@/lib/auth";
 
 const DEFAULT_NOTICE_TYPES: string[] = [];
 const DEFAULT_DATE_RANGE: DateRangeKey = "any";
@@ -261,6 +263,8 @@ function SuggestionsLoadingSkeleton() {
 }
 
 export default function SamGovPage() {
+  const router = useRouter();
+  const [authChecked, setAuthChecked] = useState(false);
   const [allOpportunities, setAllOpportunities] = useState<SamGovOpportunity[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -287,6 +291,15 @@ export default function SamGovPage() {
   const [aiError, setAiError] = useState<string | null>(null);
   const [aiStats, setAiStats] = useState<{ total_analyzed: number; total_suggestions: number; threshold: number } | null>(null);
   const [aiFetched, setAiFetched] = useState(false);
+
+  useEffect(() => {
+    const user = getStoredUser();
+    if (!user) {
+      router.replace("/register");
+      return;
+    }
+    setAuthChecked(true);
+  }, [router]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -449,6 +462,10 @@ export default function SamGovPage() {
     setSelectedCountry(DEFAULT_COUNTRY);
     setActiveOnly(DEFAULT_ACTIVE_ONLY);
   };
+
+  if (!authChecked) {
+    return <div className="p-6 lg:p-8">Loading...</div>;
+  }
 
   return (
     <div className="p-6 lg:p-8">

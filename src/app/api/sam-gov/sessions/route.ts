@@ -1,9 +1,16 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { BACKEND_URL } from '@/lib/backend-config';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const response = await fetch(`${BACKEND_URL}/api/sam-gov/sessions`, {
+    const companyId = request.nextUrl.searchParams.get('company_id');
+    const requesterUserId = request.nextUrl.searchParams.get('requester_user_id');
+    const query = new URLSearchParams();
+    if (companyId) query.set('company_id', companyId);
+    if (requesterUserId) query.set('requester_user_id', requesterUserId);
+    const suffix = query.toString() ? `?${query.toString()}` : '';
+
+    const response = await fetch(`${BACKEND_URL}/api/sam-gov/sessions${suffix}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',

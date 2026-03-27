@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Handshake, Clock, CheckCircle2, AlertCircle, ArrowRight, Building2 } from 'lucide-react';
 import { format } from 'date-fns';
+import { AlertCircle, ArrowRight, Building2, CheckCircle2, Clock, Handshake } from 'lucide-react';
+import { getStoredUser, type AuthUser } from '@/lib/auth';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 interface NegotiationSession {
   id: number;
@@ -28,29 +29,39 @@ interface NegotiationSession {
 
 export default function NegotiationsPage() {
   const router = useRouter();
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [sessions, setSessions] = useState<NegotiationSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    const currentUser = getStoredUser();
+    if (!currentUser) {
+      router.replace('/register');
+      return;
+    }
+    setUser(currentUser);
+  }, [router]);
+
+  useEffect(() => {
+    if (!user) return;
+
     const fetchSessions = async () => {
       try {
-        // Fetch from backend API
-        const response = await fetch('/api/sam-gov/sessions', {
+        const response = await fetch(
+          `/api/sam-gov/sessions?company_id=${user.company_id}&requester_user_id=${user.id}`,
+          {
           cache: 'no-store',
-        });
+          }
+        );
 
         if (response.ok) {
           const data = await response.json();
-          console.log('Negotiations page - fetched sessions:', data.sessions?.length, data.sessions);
           if (data.sessions && data.sessions.length > 0) {
             setSessions(data.sessions);
           }
-        } else {
-          console.error('Failed to fetch sessions from backend');
         }
       } catch (err) {
-        console.error('Error fetching negotiations:', err);
         setError('Could not load negotiations from server');
       } finally {
         setLoading(false);
@@ -58,7 +69,7 @@ export default function NegotiationsPage() {
     };
 
     fetchSessions();
-  }, []);
+  }, [user]);
 
   const getStatusBadge = (status: string) => {
     switch (status.toLowerCase()) {
@@ -82,7 +93,7 @@ export default function NegotiationsPage() {
     router.push(`/sam-gov/${session.opportunity_id}/quotenegotiation`);
   };
 
-  if (loading) {
+  if (!user || loading) {
     return (
       <div className="p-6 lg:p-8 space-y-6">
         <div className="flex items-center justify-between">
@@ -131,15 +142,14 @@ export default function NegotiationsPage() {
       {sessions.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
-            <Handshake className="h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-medium mb-2">No Active Negotiations</h3>
-            <p className="text-muted-foreground text-center mb-4">
-              You have not started any vendor negotiations yet.<br />
+            <Handshake className="mb-4 h-12 w-12 text-muted-foreground" />
+            <h3 className="mb-2 text-lg font-medium">No Active Negotiations</h3>
+            <p className="mb-4 text-center text-muted-foreground">
+              You have not started any vendor negotiations yet.
+              <br />
               Browse opportunities and start negotiating with vendors.
             </p>
-            <Button onClick={() => router.push('/sam-gov')}>
-              Browse SAM.gov Opportunities
-            </Button>
+            <Button onClick={() => router.push('/sam-gov')}>Browse SAM.gov Opportunities</Button>
           </CardContent>
         </Card>
       ) : (
@@ -147,7 +157,7 @@ export default function NegotiationsPage() {
           <CardHeader>
             <CardTitle>Negotiation Sessions</CardTitle>
             <CardDescription>
-              Click on a session to view details and continue negotiating
+              Click on a session to view details and continue negotiating.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -168,18 +178,12 @@ export default function NegotiationsPage() {
                     className="cursor-pointer hover:bg-muted/50"
                     onClick={() => navigateToNegotiation(session)}
                   >
-                    <TableCell className="font-medium max-w-md truncate">
+                    <TableCell className="max-w-md truncate font-medium">
                       {session.opportunity_title}
                     </TableCell>
-                    <TableCell>
-                      {getStatusBadge(session.status)}
-                    </TableCell>
-                    <TableCell>
-                      {session.suppliers?.length || 0} vendor(s)
-                    </TableCell>
-                    <TableCell>
-                      {format(new Date(session.created_at), 'MMM d, yyyy')}
-                    </TableCell>
+                    <TableCell>{getStatusBadge(session.status)}</TableCell>
+                    <TableCell>{session.suppliers?.length || 0} vendor(s)</TableCell>
+                    <TableCell>{format(new Date(session.created_at), 'MMM d, yyyy')}</TableCell>
                     <TableCell className="text-right">
                       <Button variant="ghost" size="sm">
                         View <ArrowRight className="ml-1 h-4 w-4" />
@@ -195,4 +199,3 @@ export default function NegotiationsPage() {
     </div>
   );
 }
-
