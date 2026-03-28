@@ -1,9 +1,10 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { BACKEND_URL } from '@/lib/backend-config';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
     try {
-        const response = await fetch(`${BACKEND_URL}/api/sam-gov/dashboard-stats`, {
+        const suffix = request.nextUrl.search || '';
+        const response = await fetch(`${BACKEND_URL}/api/sam-gov/dashboard-stats${suffix}`, {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json',

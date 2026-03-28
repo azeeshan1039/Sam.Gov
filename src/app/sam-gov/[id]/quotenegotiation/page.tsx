@@ -19,6 +19,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { format } from 'date-fns';
 import { Plus, Trash2, Building2, Mail, StickyNote, Trophy, ShieldCheck, FileDown, Send, AlertTriangle, CheckCircle2, Star, Sparkles } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
+import { getStoredUser } from '@/lib/auth';
 
 interface Supplier {
   id: number;
@@ -180,6 +181,28 @@ export default function BidSummaryPage() {
   const [estimatedByAi, setEstimatedByAi] = useState(false);
   const [aiPriceReasoning, setAiPriceReasoning] = useState('');
 
+  const getRequesterQuery = () => {
+    const currentUser = getStoredUser();
+    if (!currentUser) return '';
+
+    const query = new URLSearchParams({
+      company_id: String(currentUser.company_id),
+      requester_user_id: String(currentUser.id),
+    });
+
+    return `?${query.toString()}`;
+  };
+
+  const getRequesterPayload = () => {
+    const currentUser = getStoredUser();
+    if (!currentUser) return {};
+
+    return {
+      company_id: currentUser.company_id,
+      requester_user_id: currentUser.id,
+    };
+  };
+
   useEffect(() => {
     if (!opportunityId) return
     fetchOpportunityDetails();
@@ -191,7 +214,7 @@ export default function BidSummaryPage() {
   // Check if there's an existing negotiation session for this opportunity
   const checkExistingSession = async () => {
     try {
-      const response = await fetch('/api/sam-gov/sessions', {
+      const response = await fetch(`/api/sam-gov/sessions${getRequesterQuery()}`, {
         cache: 'no-store',
       });
       if (response.ok) {
@@ -205,7 +228,7 @@ export default function BidSummaryPage() {
 
         if (existingSession) {
           // Fetch the full session details
-          const sessionResponse = await fetch(`/api/sam-gov/negotiate/${existingSession.id}`, {
+          const sessionResponse = await fetch(`/api/sam-gov/negotiate/${existingSession.id}${getRequesterQuery()}`, {
             cache: 'no-store',
           });
           if (sessionResponse.ok) {
@@ -236,7 +259,11 @@ export default function BidSummaryPage() {
       try {
         await fetch(
           `/api/sam-gov/negotiate/${session.id}/get-supplier-response/${supplier.id}`,
-          { method: 'POST' }
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(getRequesterPayload()),
+          }
         );
         await new Promise(resolve => setTimeout(resolve, 500));
       } catch (err) {
@@ -245,7 +272,7 @@ export default function BidSummaryPage() {
     }
 
     if (pendingWithMessages.length > 0) {
-      const refreshResponse = await fetch(`/api/sam-gov/negotiate/${session.id}`);
+      const refreshResponse = await fetch(`/api/sam-gov/negotiate/${session.id}${getRequesterQuery()}`);
       if (refreshResponse.ok) {
         const refreshedData = await refreshResponse.json();
         setNegotiationSession(refreshedData);
@@ -434,10 +461,14 @@ export default function BidSummaryPage() {
     setError(null);
 
     try {
+      const currentUser = getStoredUser();
       const response = await fetch('/api/sam-gov/negotiate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          ...getRequesterPayload(),
+          company_id: currentUser?.company_id ?? null,
+          created_by_user_id: currentUser?.id ?? null,
           opportunity: parsedData,
           targetPrice: parseFloat(targetPrice),
           additionalRequirements,
@@ -503,7 +534,7 @@ Procurement Team`
     if (!negotiationSession) return;
 
     try {
-      const response = await fetch(`/api/sam-gov/negotiate/${negotiationSession.id}`);
+      const response = await fetch(`/api/sam-gov/negotiate/${negotiationSession.id}${getRequesterQuery()}`);
       const data = await response.json();
       setNegotiationSession(data);
     } catch (err) {
@@ -522,7 +553,7 @@ Procurement Team`
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content })
+          body: JSON.stringify({ content, ...getRequesterPayload() })
         }
       );
 
@@ -588,6 +619,7 @@ Procurement Team`
             body: JSON.stringify({
               session_id: negotiationSession.id,
               supplier_id: supplierId,
+              ...getRequesterPayload(),
             }),
           });
         } catch (_) { /* best-effort */ }
@@ -595,7 +627,11 @@ Procurement Team`
 
       const response = await fetch(
         `/api/sam-gov/negotiate/${negotiationSession?.id}/respond/${supplierId}`,
-        { method: 'POST' }
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(getRequesterPayload()),
+        }
       );
 
       if (!response.ok) {
@@ -629,7 +665,11 @@ Procurement Team`
 
       const draftResponse = await fetch(
         `/api/sam-gov/negotiate/${negotiationSession?.id}/draft/${supplierId}`,
-        { method: 'POST' }
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(getRequesterPayload()),
+        }
       );
 
       if (!draftResponse.ok) {
@@ -681,7 +721,7 @@ Procurement Team`
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content: draft.editedDraft })
+          body: JSON.stringify({ content: draft.editedDraft, ...getRequesterPayload() })
         }
       );
 
@@ -712,6 +752,8 @@ Procurement Team`
     try {
       await fetch(`/api/sam-gov/negotiate/${negotiationSession?.id}/accept/${supplierId}`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(getRequesterPayload()),
       });
       fetchNegotiationStatus();
     } catch (err) {
@@ -725,7 +767,7 @@ Procurement Team`
 
     setLoadingRecommendations(true);
     try {
-      const response = await fetch(`/api/sam-gov/negotiate/${negotiationSession.id}/recommendations`);
+      const response = await fetch(`/api/sam-gov/negotiate/${negotiationSession.id}/recommendations${getRequesterQuery()}`);
       if (response.ok) {
         const data = await response.json();
         setRecommendations(data.recommendations);
@@ -897,7 +939,7 @@ Procurement Team`
           await fetch(`/api/sam-gov/negotiate/${negotiationSession.id}/status`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: 'bid_submitted' })
+            body: JSON.stringify({ status: 'bid_submitted', ...getRequesterPayload() })
           });
         } catch (statusErr) {
           console.error('Failed to update session status:', statusErr);

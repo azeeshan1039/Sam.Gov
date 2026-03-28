@@ -7,8 +7,9 @@ export async function GET(
 ) {
   try {
     const { sessionId } = await params;
+    const suffix = request.nextUrl.search || '';
     
-    const response = await fetch(`${BACKEND_URL}/api/negotiate/${sessionId}/recommendations`, {
+    const response = await fetch(`${BACKEND_URL}/api/negotiate/${sessionId}/recommendations${suffix}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',

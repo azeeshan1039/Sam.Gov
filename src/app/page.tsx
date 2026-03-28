@@ -3,7 +3,9 @@
 import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Handshake, ArrowRight, TrendingUp, TrendingDown, Loader2 } from "lucide-react";
+import { getStoredUser } from "@/lib/auth";
 
 const DashboardChart = dynamic(() => import("@/components/DashboardChart"), {
   ssr: false,
@@ -31,15 +33,35 @@ interface DashboardStats {
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
+  const [authChecked, setAuthChecked] = useState(false);
+  const [userId, setUserId] = useState<number | null>(null);
+  const [companyId, setCompanyId] = useState<number | null>(null);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const user = getStoredUser();
+    if (!user) {
+      router.replace("/register");
+      return;
+    }
+    setUserId(user.id);
+    setCompanyId(user.company_id);
+    setAuthChecked(true);
+  }, [router]);
+
+  useEffect(() => {
+    if (!authChecked || userId === null || companyId === null) return;
+
     const fetchStats = async () => {
       try {
-        const res = await fetch("/api/sam-gov/dashboard-stats", {
+        const res = await fetch(
+          `/api/sam-gov/dashboard-stats?company_id=${companyId}&requester_user_id=${userId}`,
+          {
           cache: 'no-store',
-        });
+          }
+        );
         if (res.ok) {
           const data = await res.json();
           setStats(data.stats);
@@ -51,7 +73,7 @@ export default function DashboardPage() {
       }
     };
     fetchStats();
-  }, []);
+  }, [authChecked, companyId, userId]);
 
   const formatCurrency = (value: number) => {
     if (value >= 1000000) {
@@ -98,6 +120,10 @@ export default function DashboardPage() {
     },
   ];
 
+
+  if (!authChecked) {
+    return <div className="p-6 lg:p-8">Loading...</div>;
+  }
 
   return (
     <div className="p-6 lg:p-8">

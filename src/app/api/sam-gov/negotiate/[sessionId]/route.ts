@@ -7,7 +7,8 @@ export async function GET(
 ) {
   try {
     const { sessionId } = await params
-    const response = await fetch(`${BACKEND_URL}/api/negotiate/${sessionId}`, {
+    const suffix = request.nextUrl.search || '';
+    const response = await fetch(`${BACKEND_URL}/api/negotiate/${sessionId}${suffix}`, {
       cache: 'no-store',
     });
 

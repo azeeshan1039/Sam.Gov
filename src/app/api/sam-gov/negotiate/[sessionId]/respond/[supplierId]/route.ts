@@ -7,9 +7,16 @@ export async function POST(
 ) {
   try {
     const { sessionId, supplierId } = await params;
+    const body = await request.json().catch(() => ({}));
     const response = await fetch(
       `${BACKEND_URL}/api/negotiate/${sessionId}/respond/${supplierId}`,
-      { method: 'POST' }
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      }
     );
 
     if (!response.ok) {
