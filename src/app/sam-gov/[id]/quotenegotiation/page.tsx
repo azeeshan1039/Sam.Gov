@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -128,6 +128,26 @@ interface ComplianceResult {
   warnings: { type: string; message: string }[];
 }
 
+/** True when UI shows "waiting for vendor email" — same logic as getSupplierActionState awaiting_response + email_sent. */
+function isAwaitingVendorEmailReply(
+  supplier: Supplier,
+  drafts: Map<number, SupplierDraft>
+): boolean {
+  if (!supplier.email_sent || supplier.status === 'completed') return false;
+  if (drafts.get(supplier.id)?.isPending) return false;
+  const buyerMessages = supplier.messages.filter((m) => m.sender === 'buyer').length;
+  const supplierMessages = supplier.messages.filter((m) => m.sender === 'supplier').length;
+  if (buyerMessages === 0) return false;
+  if (buyerMessages > supplierMessages) return true;
+  if (buyerMessages === supplierMessages && buyerMessages > 0) {
+    const last = supplier.messages[supplier.messages.length - 1];
+    return last?.sender === 'buyer';
+  }
+  return false;
+}
+
+const EMAIL_INBOX_POLL_THROTTLE_MS = 10_000;
+
 export default function BidSummaryPage() {
   const params = useParams();
   const router = useRouter();
@@ -150,6 +170,12 @@ export default function BidSummaryPage() {
 
   // State for draft editing during negotiation - IMPROVED
   const [supplierDrafts, setSupplierDrafts] = useState<Map<number, SupplierDraft>>(new Map());
+  const negotiationSessionRef = useRef<NegotiationSession | null>(null);
+  const supplierDraftsRef = useRef(supplierDrafts);
+  const lastInboxPollRef = useRef(0);
+
+  negotiationSessionRef.current = negotiationSession;
+  supplierDraftsRef.current = supplierDrafts;
   const [draftModalOpen, setDraftModalOpen] = useState(false);
   const [currentSupplierId, setCurrentSupplierId] = useState<number | null>(null);
   const [sendingResponse, setSendingResponse] = useState(false);
@@ -281,20 +307,56 @@ export default function BidSummaryPage() {
   };
 
   useEffect(() => {
-    // Only auto-fetch if:
-    // 1. We have a negotiation session
-    // 2. We're not in initial review mode
-    // 3. All initial messages have been sent
-    if (negotiationSession && !showInitialReview) {
-      const needsInitialMessages = initialMessages.length > 0 && initialMessages.some(m => !m.sent);
+    if (!negotiationSession?.id || showInitialReview) return;
 
-      if (!needsInitialMessages) {
-        const interval = setInterval(fetchNegotiationStatus, 5000);
-        return () => clearInterval(interval);
+    const needsInitialMessages =
+      initialMessages.length > 0 && initialMessages.some((m) => !m.sent);
+    if (needsInitialMessages) return;
+
+    const tick = async () => {
+      const session = negotiationSessionRef.current;
+      if (!session) return;
+
+      const drafts = supplierDraftsRef.current;
+      const awaitingEmail = session.suppliers.some((s) =>
+        isAwaitingVendorEmailReply(s, drafts)
+      );
+
+      if (awaitingEmail) {
+        const now = Date.now();
+        if (now - lastInboxPollRef.current >= EMAIL_INBOX_POLL_THROTTLE_MS) {
+          lastInboxPollRef.current = now;
+          try {
+            await fetch('/api/sam-gov/negotiate/poll-inbox', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(getRequesterPayload()),
+            });
+          } catch (err) {
+            console.error('Auto poll-inbox failed:', err);
+          }
+        }
       }
-    }
+
+      try {
+        const response = await fetch(
+          `/api/sam-gov/negotiate/${session.id}${getRequesterQuery()}`,
+          { cache: 'no-store' }
+        );
+        if (response.ok) {
+          const data = await response.json();
+          setNegotiationSession(data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch negotiation status:', err);
+      }
+    };
+
+    void tick();
+    const interval = setInterval(() => void tick(), 5000);
+    return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [negotiationSession, showInitialReview, initialMessages]);
+  }, [negotiationSession?.id, showInitialReview, initialMessages]);
 
   const fetchOpportunityDetails = async () => {
     try {
@@ -534,7 +596,10 @@ Procurement Team`
     if (!negotiationSession) return;
 
     try {
-      const response = await fetch(`/api/sam-gov/negotiate/${negotiationSession.id}${getRequesterQuery()}`);
+      const response = await fetch(
+        `/api/sam-gov/negotiate/${negotiationSession.id}${getRequesterQuery()}`,
+        { cache: 'no-store' }
+      );
       const data = await response.json();
       setNegotiationSession(data);
     } catch (err) {
