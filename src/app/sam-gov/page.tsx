@@ -55,6 +55,28 @@ function getDateThreshold(range: DateRangeKey): Date | null {
   return now;
 }
 
+/** Plain YYYY-MM-DD from SAM is parsed as UTC by Date(), which shifts the calendar day in US timezones; compare using local civil dates instead. */
+function deadlineToLocalStartOfDay(value: string | undefined | null): Date | null {
+  if (value == null || typeof value !== "string") return null;
+  const s = value.trim();
+  if (!s) return null;
+  const ymdOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (ymdOnly) {
+    const y = Number(ymdOnly[1]);
+    const m = Number(ymdOnly[2]) - 1;
+    const d = Number(ymdOnly[3]);
+    const local = new Date(y, m, d);
+    if (Number.isNaN(local.getTime())) return null;
+    local.setHours(0, 0, 0, 0);
+    return local;
+  }
+  const parsed = new Date(s);
+  if (Number.isNaN(parsed.getTime())) return null;
+  const local = new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+  local.setHours(0, 0, 0, 0);
+  return local;
+}
+
 function matchesSearchQuery(opp: SamGovOpportunity, query: string, mode: SearchMode): boolean {
   if (!query.trim()) return true;
   const searchable = [opp.title, opp.department, opp.ncode, opp.description, opp.officeAddress]
@@ -422,7 +444,7 @@ export default function SamGovPage() {
       if (!matchesSearchQuery(opp, searchQuery, searchMode)) return false;
       if (selectedOrg !== "all" && opp.department !== selectedOrg) return false;
 
-      const closingDate = opp.closingDate ? new Date(opp.closingDate) : null;
+      const closingDate = deadlineToLocalStartOfDay(opp.closingDate);
       if (responseThreshold && (!closingDate || closingDate < responseThreshold)) return false;
 
       const postedDate = opp.postedDate ? new Date(opp.postedDate) : null;
