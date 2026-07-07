@@ -34,24 +34,74 @@ import {
   FileSearch,
   Handshake,
   ArrowLeft,
+  Truck,
+  Scale,
+  Gavel,
+  Wrench,
+  Paperclip,
+  AlertTriangle,
+  RefreshCw,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import type { OngoingBid } from "@/types/sam-gov";
 
 type ChatMessage = { role: "agent" | "user"; content: string };
 
-// Map section keys to icons
-const sectionIcons: Record<string, React.ReactNode> = {
-  read_and_interpret_the_solicitations: <FileSearch className="h-5 w-5 text-primary" />,
-  extract_all_key_contract_data: <ClipboardList className="h-5 w-5 text-primary" />,
-  identify_and_understand_the_product_service: <Package className="h-5 w-5 text-primary" />,
-  source_the_product_or_service: <ShoppingCart className="h-5 w-5 text-primary" />,
-  find_suitable_and_compliant_suppliers: <Users className="h-5 w-5 text-primary" />,
-  price_comparison_and_cost_optimization: <DollarSign className="h-5 w-5 text-primary" />,
-  final_recommendations_and_next_steps: <CheckCircle className="h-5 w-5 text-primary" />,
-  title: <FileText className="h-5 w-5 text-primary" />,
-  agency: <Building2 className="h-5 w-5 text-primary" />,
-  id: <List className="h-5 w-5 text-primary" />,
+// Map of backend schema keys -> { friendly title, icon, display order }.
+// The backend's analyze pipeline returns a flat object with these 10 top-level keys
+// (see EXTRACTION_PROMPT in backendGOVAI/app.py). Anything else falls through to the
+// default icon and a humanized title.
+const sectionMeta: Record<string, { title: string; icon: React.ReactNode; order: number }> = {
+  solicitation_metadata: {
+    title: "Solicitation Metadata",
+    icon: <FileSearch className="h-5 w-5 text-primary" />,
+    order: 1,
+  },
+  product_line_items: {
+    title: "Products & Specifications",
+    icon: <Package className="h-5 w-5 text-primary" />,
+    order: 2,
+  },
+  technical_requirements: {
+    title: "Technical Requirements",
+    icon: <Wrench className="h-5 w-5 text-primary" />,
+    order: 3,
+  },
+  pricing_clin_information: {
+    title: "Pricing & CLIN Information",
+    icon: <DollarSign className="h-5 w-5 text-primary" />,
+    order: 4,
+  },
+  delivery_information: {
+    title: "Delivery Information",
+    icon: <Truck className="h-5 w-5 text-primary" />,
+    order: 5,
+  },
+  submission_requirements: {
+    title: "Submission Requirements",
+    icon: <ClipboardList className="h-5 w-5 text-primary" />,
+    order: 6,
+  },
+  evaluation_criteria: {
+    title: "Evaluation Criteria",
+    icon: <Scale className="h-5 w-5 text-primary" />,
+    order: 7,
+  },
+  compliance_regulatory: {
+    title: "Compliance & Regulatory",
+    icon: <Gavel className="h-5 w-5 text-primary" />,
+    order: 8,
+  },
+  amendments_attachments: {
+    title: "Amendments & Attachments",
+    icon: <Paperclip className="h-5 w-5 text-primary" />,
+    order: 9,
+  },
+  disqualification_risk_factors: {
+    title: "Disqualification Risk Factors",
+    icon: <AlertTriangle className="h-5 w-5 text-primary" />,
+    order: 10,
+  },
 };
 
 function formatKey(key: string): string {
@@ -147,6 +197,120 @@ function renderValue(value: any, depth: number = 0): React.ReactNode {
   return <span>{String(value)}</span>;
 }
 
+// Dedicated renderer for the product_line_items array. Renders one card per
+// product with model number, brand, qty, description, and a bulleted list of
+// every specification — preserving the bullets the AI extracted verbatim.
+function renderProductLineItems(items: any): React.ReactNode {
+  if (!Array.isArray(items) || items.length === 0) {
+    return <span className="text-muted-foreground italic">No products extracted.</span>;
+  }
+
+  return (
+    <div className="space-y-4">
+      {items.map((item: any, idx: number) => {
+        const partNo = item?.nsn_or_part_number || item?.line_item_number || `Item ${idx + 1}`;
+        const specs: any = item?.specifications;
+        const salient: any = item?.salient_characteristics;
+        return (
+          <div
+            key={idx}
+            className="rounded-lg border border-border bg-card p-4 space-y-3"
+          >
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <span className="text-xs font-medium text-muted-foreground">
+                Product {idx + 1}
+              </span>
+              <span className="font-mono text-sm font-semibold text-primary">
+                {String(partNo)}
+              </span>
+              {item?.brand && (
+                <span className="text-sm text-muted-foreground">
+                  · {String(item.brand)}
+                </span>
+              )}
+              {item?.quantity != null && (
+                <span className="ml-auto rounded-md bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+                  Qty: {String(item.quantity)}
+                  {item?.unit_of_measure ? ` ${String(item.unit_of_measure)}` : ""}
+                </span>
+              )}
+            </div>
+
+            {item?.description && (
+              <div className="text-sm leading-relaxed whitespace-pre-wrap">
+                {String(item.description)}
+              </div>
+            )}
+
+            {Array.isArray(specs) && specs.length > 0 && (
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">
+                  Specifications / Salient Characteristics
+                </div>
+                <ul className="list-disc list-inside space-y-1 ml-1">
+                  {specs.map((s: any, i: number) => (
+                    <li key={i} className="text-sm leading-relaxed">
+                      {String(s)}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {/* Backwards compat: in case the model returned a single string */}
+            {typeof specs === "string" && specs.trim() && (
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">
+                  Specifications
+                </div>
+                <div className="text-sm leading-relaxed whitespace-pre-wrap">{specs}</div>
+              </div>
+            )}
+
+            {Array.isArray(salient) && salient.length > 0 && (
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">
+                  Additional Salient Characteristics
+                </div>
+                <ul className="list-disc list-inside space-y-1 ml-1">
+                  {salient.map((s: any, i: number) => (
+                    <li key={i} className="text-sm leading-relaxed">
+                      {String(s)}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground pt-1">
+              {item?.line_item_number && (
+                <div>
+                  <span className="font-medium">Line Item:</span>{" "}
+                  <span className="font-mono">{String(item.line_item_number)}</span>
+                </div>
+              )}
+              {item?.unit_price && (
+                <div>
+                  <span className="font-medium">Unit Price:</span> {String(item.unit_price)}
+                </div>
+              )}
+              {item?.extended_amount && (
+                <div>
+                  <span className="font-medium">Extended:</span> {String(item.extended_amount)}
+                </div>
+              )}
+              {item?.delivery_schedule && (
+                <div>
+                  <span className="font-medium">Delivery:</span> {String(item.delivery_schedule)}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function looksLikeHtml(text: string): boolean {
   return /<[a-z][\s\S]*>/i.test(text);
 }
@@ -177,7 +341,17 @@ function DescriptionBlock({ content, isHtml }: { content: string; isHtml?: boole
 }
 
 // Keys that should NOT be shown as collapsible sections
-const metaKeys = ["title", "id", "agency", "originalOpportunityLink", "originalClosingDate", "description"];
+const metaKeys = [
+  "title",
+  "id",
+  "agency",
+  "originalOpportunityLink",
+  "originalClosingDate",
+  "description",
+  "analysisJobId",
+  "comprehensive_texts",
+  "processing_stats",
+];
 
 export default function BidSummaryPage() {
   const params = useParams();
@@ -249,6 +423,20 @@ export default function BidSummaryPage() {
     // Helper: save completed summary and clean up job entry
     const handleAnalysisComplete = async (aiSummary: any, opportunity: SamGovOpportunity) => {
       const descHtml = await fetchDescription(opportunity);
+      // Preserve the jobId on the summary so the chatbot can later ask the
+      // backend to load the full per-document comprehensive_texts.
+      let preservedJobId: string | undefined;
+      try {
+        const raw = localStorage.getItem(`analysis-job-${id}`);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed.jobId === "string") {
+            preservedJobId = parsed.jobId;
+          }
+        }
+      } catch {
+        // ignore
+      }
       const finalSummary: Record<string, any> = {
         ...aiSummary,
         title: opportunity.title,
@@ -257,6 +445,9 @@ export default function BidSummaryPage() {
         originalOpportunityLink: opportunity.link,
         originalClosingDate: opportunity.closingDate,
       };
+      if (preservedJobId) {
+        finalSummary.analysisJobId = preservedJobId;
+      }
       if (descHtml) {
         finalSummary.description = descHtml;
         setDescriptionHtml(descHtml);
@@ -268,8 +459,9 @@ export default function BidSummaryPage() {
       }
     };
 
-    // Helper: start a fresh analysis job
-    const startNewAnalysis = async (opportunity: SamGovOpportunity) => {
+    // Helper: start a fresh analysis job. `force=true` bypasses the backend's
+    // opportunity_id → existing-job cache (used by the Reanalyze button).
+    const startNewAnalysis = async (opportunity: SamGovOpportunity, force = false) => {
       setAnalysisProgress({
         status: 'pending',
         progress: 'Starting analysis...',
@@ -285,6 +477,8 @@ export default function BidSummaryPage() {
             startedAt: Date.now(),
           }));
         },
+        opportunity.id,
+        force,
       );
       setAnalysisProgress(null);
       if (aiSummary) {
@@ -298,13 +492,14 @@ export default function BidSummaryPage() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const response = await fetch(`/api/sam-gov?id=${id}`);
+        // Use the by-id route so we get the cache-then-SAM.gov-direct fallback,
+        // not the 2000-row list lookup that misses anything not in the window.
+        const response = await fetch(`/api/sam-gov/opportunity/${id}`);
         if (!response.ok) {
           const err = await response.json();
           throw new Error(err.error || "Failed to fetch opportunity.");
         }
-        const opportunities: SamGovOpportunity[] = await response.json();
-        const opportunity = opportunities.find((op) => op.id === id);
+        const opportunity: SamGovOpportunity = await response.json();
         if (!opportunity) throw new Error("Opportunity not found.");
 
         if (opportunity.resourceLinks.length == 0) {
@@ -450,6 +645,91 @@ export default function BidSummaryPage() {
     router.push(`/rfq/${summary.id}`);
   };
 
+  const [isReanalyzing, setIsReanalyzing] = useState(false);
+
+  const handleReanalyze = async () => {
+    if (!summary || isReanalyzing) return;
+    const ok = typeof window !== "undefined"
+      ? window.confirm(
+          "Re-analyze this solicitation from scratch?\n\n" +
+          "This will create a fresh vector store, re-extract every section, " +
+          "and replace the current summary. It costs roughly $0.25 in OpenAI charges " +
+          "and takes about a minute."
+        )
+      : true;
+    if (!ok) return;
+
+    setIsReanalyzing(true);
+    try {
+      // Wipe both caches so the new analysis takes the slow path.
+      localStorage.removeItem(`summary-${id}`);
+      localStorage.removeItem(`analysis-job-${id}`);
+
+      // Refetch the opportunity for its resourceLinks.
+      const oppRes = await fetch(`/api/sam-gov/opportunity/${id}`);
+      if (!oppRes.ok) {
+        const err = await oppRes.json().catch(() => ({}));
+        throw new Error(err.error || "Could not refetch opportunity for reanalysis.");
+      }
+      const opportunity: SamGovOpportunity = await oppRes.json();
+      if (!opportunity?.resourceLinks?.length) {
+        throw new Error("Opportunity has no attachments to reanalyze.");
+      }
+
+      setSummary(null);
+      setAnalysisProgress({
+        status: "pending",
+        progress: "Starting reanalysis...",
+        totalDocuments: opportunity.resourceLinks.length,
+        processedDocuments: 0,
+      });
+      setLoading(true);
+
+      const { result: aiSummary, jobId: newJobId } = await fetchAnalyzedContractSummaryAsync(
+        opportunity.resourceLinks as string[],
+        (progress) => setAnalysisProgress(progress),
+        (jobId) => {
+          localStorage.setItem(`analysis-job-${id}`, JSON.stringify({
+            jobId,
+            startedAt: Date.now(),
+          }));
+        },
+        opportunity.id,
+        true,                              // force = true
+      );
+
+      setAnalysisProgress(null);
+      if (!aiSummary) {
+        throw new Error("Reanalysis returned no summary.");
+      }
+
+      const finalSummary: Record<string, any> = {
+        ...aiSummary,
+        title: opportunity.title,
+        id: opportunity.id,
+        agency: opportunity.department || "N/A",
+        originalOpportunityLink: opportunity.link,
+        originalClosingDate: opportunity.closingDate,
+        analysisJobId: newJobId,
+      };
+      // Carry forward the original description HTML — reanalysis only refreshes
+      // the structured summary, not the SAM.gov listing description.
+      if (descriptionHtml) {
+        finalSummary.description = descriptionHtml;
+      }
+
+      setSummary(finalSummary);
+      localStorage.removeItem(`analysis-job-${id}`);
+      localStorage.setItem(`summary-${id}`, JSON.stringify(finalSummary));
+    } catch (err: any) {
+      console.error("Reanalyze failed:", err);
+      setError(err?.message || "Failed to reanalyze.");
+    } finally {
+      setIsReanalyzing(false);
+      setLoading(false);
+    }
+  };
+
   const handleSendMessage = async () => {
     if (!chatInput.trim() || isSendingMessage) return;
 
@@ -461,11 +741,32 @@ export default function BidSummaryPage() {
 
     setTotalContext({ summary, chatHistory: updatedMessages });
 
+    // Pull the analysis job id so the backend can look up the full per-document
+    // comprehensive_texts and ground its answers in the actual document content,
+    // not just the structured summary. Prefer the id stored on the summary
+    // (persists across reloads); fall back to the in-flight job entry.
+    let jobId: string | undefined =
+      typeof summary?.analysisJobId === "string" ? summary.analysisJobId : undefined;
+    if (!jobId) {
+      try {
+        const raw = localStorage.getItem(`analysis-job-${id}`);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed.jobId === "string") {
+            jobId = parsed.jobId;
+          }
+        }
+      } catch {
+        // ignore — chatbot will fall back to summary-only context
+      }
+    }
+
     try {
       const contextPayload = {
         summary: summary,
         chatHistory: updatedMessages,
         userMessage: userMessage.content,
+        jobId,
       };
 
       const response = await fetch("/api/backend/message-chat", {
@@ -512,8 +813,9 @@ export default function BidSummaryPage() {
       const statusLabel: Record<string, string> = {
         pending: 'Starting...',
         downloading: 'Downloading documents...',
+        indexing: 'Indexing documents for retrieval...',
         analyzing: 'Analyzing documents with AI...',
-        summarizing: 'Generating final summary...',
+        summarizing: 'Extracting structured summary...',
         completed: 'Done!',
         failed: 'Analysis failed.',
       };
@@ -534,9 +836,11 @@ export default function BidSummaryPage() {
                 style={{
                   width: analysisProgress.status === 'summarizing'
                     ? '90%'
-                    : analysisProgress.status === 'downloading'
-                      ? '15%'
-                      : `${Math.max(pct, 5)}%`,
+                    : analysisProgress.status === 'indexing'
+                      ? '50%'
+                      : analysisProgress.status === 'downloading'
+                        ? '15%'
+                        : `${Math.max(pct, 5)}%`,
                 }}
               />
             </div>
@@ -589,16 +893,39 @@ export default function BidSummaryPage() {
     );
   }
 
-  // Separate meta info from content sections
-  const contentSections = Object.entries(summary).filter(([key]) => !metaKeys.includes(key));
+  // Separate meta info from content sections, then sort by the canonical
+  // ordering defined in sectionMeta (unknown keys go to the end alphabetically).
+  const contentSections = Object.entries(summary)
+    .filter(([key]) => !metaKeys.includes(key))
+    .sort(([a], [b]) => {
+      const oa = sectionMeta[a]?.order ?? 999;
+      const ob = sectionMeta[b]?.order ?? 999;
+      if (oa !== ob) return oa - ob;
+      return a.localeCompare(b);
+    });
 
   return (
     <main className="container mx-auto p-6 space-y-6 max-w-5xl animate-fadeIn">
-      {/* Back Button */}
-      <Button onClick={() => router.back()} variant="outline" size="sm" className="gap-2">
-        <ArrowLeft className="h-4 w-4" />
-        Back
-      </Button>
+      {/* Top bar: Back + Reanalyze */}
+      <div className="flex items-center justify-between gap-2">
+        <Button onClick={() => router.back()} variant="outline" size="sm" className="gap-2">
+          <ArrowLeft className="h-4 w-4" />
+          Back
+        </Button>
+        {summary?.analysisJobId && (
+          <Button
+            onClick={handleReanalyze}
+            disabled={isReanalyzing}
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            title="Wipe the cached summary, rebuild the vector store, and re-extract every section."
+          >
+            <RefreshCw className={`h-4 w-4 ${isReanalyzing ? "animate-spin" : ""}`} />
+            {isReanalyzing ? "Reanalyzing..." : "Reanalyze"}
+          </Button>
+        )}
+      </div>
 
       {/* Header */}
       <div className="space-y-2">
@@ -667,18 +994,24 @@ export default function BidSummaryPage() {
       {/* AI analysis sections */}
       {contentSections.length > 0 && (
         <div className="space-y-4">
-          {contentSections.map(([key, value]) => (
-            <CollapsibleSection
-              key={key}
-              title={formatKey(key)}
-              icon={sectionIcons[key] || <ClipboardList className="h-5 w-5 text-primary" />}
-              defaultOpen={false}
-            >
-              <div className="pt-2">
-                {renderValue(value)}
-              </div>
-            </CollapsibleSection>
-          ))}
+          {contentSections.map(([key, value]) => {
+            const meta = sectionMeta[key];
+            const title = meta?.title ?? formatKey(key);
+            const icon = meta?.icon ?? <ClipboardList className="h-5 w-5 text-primary" />;
+            const isProducts = key === "product_line_items";
+            return (
+              <CollapsibleSection
+                key={key}
+                title={title}
+                icon={icon}
+                defaultOpen={isProducts}
+              >
+                <div className="pt-2">
+                  {isProducts ? renderProductLineItems(value) : renderValue(value)}
+                </div>
+              </CollapsibleSection>
+            );
+          })}
         </div>
       )}
 
@@ -692,7 +1025,7 @@ export default function BidSummaryPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Messages Container */}
-          <div className="h-64 overflow-y-auto rounded-lg bg-muted/30 p-4 space-y-4 border">
+          <div className="h-96 overflow-y-auto rounded-lg bg-muted/30 p-4 space-y-4 border">
             {chatMessages.map((msg: ChatMessage, index: number) => (
               <div
                 key={index}

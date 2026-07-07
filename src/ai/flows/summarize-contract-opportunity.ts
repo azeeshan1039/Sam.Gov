@@ -1,5 +1,5 @@
 export type AnalysisProgress = {
-  status: 'pending' | 'downloading' | 'analyzing' | 'summarizing' | 'completed' | 'failed';
+  status: 'pending' | 'downloading' | 'indexing' | 'analyzing' | 'summarizing' | 'completed' | 'failed';
   progress: string;
   totalDocuments: number;
   processedDocuments: number;
@@ -120,17 +120,27 @@ async function pollExistingJob(
  * Starts an async analysis job and polls until completion.
  * Calls onJobStarted immediately with the jobId so the caller can persist it.
  * Returns { result, jobId } on completion.
+ *
+ * If `opportunityId` is provided and `force` is false, the backend will
+ * reuse a previously-completed analysis for the same SAM.gov opportunity
+ * instead of rebuilding the vector store and re-running extraction.
  */
 async function fetchAnalyzedContractSummaryAsync(
   urls: string[],
   onProgress?: (progress: AnalysisProgress) => void,
   onJobStarted?: (jobId: string) => void,
+  opportunityId?: string,
+  force?: boolean,
 ): Promise<AnalysisResult> {
   try {
     const startRes = await fetch('/api/backend/analyze-solicitations/start', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ urls }),
+      body: JSON.stringify({
+        urls,
+        ...(opportunityId ? { opportunity_id: opportunityId } : {}),
+        ...(force ? { force: true } : {}),
+      }),
     });
 
     if (!startRes.ok) {

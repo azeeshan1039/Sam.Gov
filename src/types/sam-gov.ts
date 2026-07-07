@@ -136,6 +136,50 @@ export interface BidSummary {
 
 
 /**
+ * Represents one product / line item extracted from a solicitation.
+ * Mirrors the schema produced by EXTRACTION_PROMPT in backendGOVAI/app.py.
+ */
+export interface ProductLineItem {
+  line_item_number: string | null;
+  nsn_or_part_number: string | null;
+  description: string | null;
+  brand: string | null;
+  quantity: string | null;
+  unit_of_measure: string | null;
+  unit_price: string | null;
+  extended_amount: string | null;
+  /** One entry per spec / salient-characteristic bullet — never concatenated. */
+  specifications: string[];
+  /** Bullets from a section explicitly labeled "Salient Characteristics", if any. */
+  salient_characteristics: string[];
+  delivery_schedule: string | null;
+  multi_year_pricing: Record<string, unknown> | null;
+}
+
+/**
+ * Top-level structured analysis returned by the backend's analyze pipeline.
+ * The backend also attaches metadata fields (title, id, agency, originalOpportunityLink,
+ * originalClosingDate, description) and bookkeeping (analysisJobId, comprehensive_texts,
+ * processing_stats) which the bid-summary page filters out before rendering sections.
+ */
+export interface SolicitationAnalysis {
+  solicitation_metadata: Record<string, unknown> | null;
+  submission_requirements: Record<string, unknown> | null;
+  pricing_clin_information: Record<string, unknown> | null;
+  technical_requirements: Record<string, unknown> | null;
+  evaluation_criteria: Record<string, unknown> | null;
+  compliance_regulatory: Record<string, unknown> | null;
+  delivery_information: Record<string, unknown> | null;
+  amendments_attachments: Record<string, unknown> | null;
+  disqualification_risk_factors: Record<string, unknown> | null;
+  product_line_items: ProductLineItem[];
+
+  // Backend bookkeeping (not rendered as sections)
+  comprehensive_texts?: string[];
+  processing_stats?: Record<string, unknown>;
+}
+
+/**
  * Represents a classified SEPTA listing.
  */
 export interface ClassifiedSeptaListing {

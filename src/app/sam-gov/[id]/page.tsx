@@ -106,14 +106,20 @@ export default function SamGovOpportunityPage() {
       setDescriptionIsHtml(false);
 
       try {
-        // Fetch all opportunities from the API route
-        const response = await fetch(`/api/sam-gov`);
+        // Fetch this single opportunity by id. Falls back to a direct SAM.gov
+        // lookup server-side when the id isn't in the cached recent-list, so
+        // archived/older solicitations also resolve here.
+        const response = await fetch(`/api/sam-gov/opportunity/${encodeURIComponent(id)}`);
+        if (response.status === 404) {
+          setError('Opportunity not found.');
+          setOpportunity(null);
+          return;
+        }
         if (!response.ok) {
-          const errorData = await response.json();
+          const errorData = await response.json().catch(() => ({}));
           throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
         }
-        const allOpportunities: SamGovOpportunity[] = await response.json();
-        const foundOpportunity = allOpportunities.find(opp => opp.id === id);
+        const foundOpportunity: SamGovOpportunity | null = await response.json();
 
         if (foundOpportunity) {
           setOpportunity(foundOpportunity);

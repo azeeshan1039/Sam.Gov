@@ -13,6 +13,7 @@ import { useRouter } from "next/navigation";
 import { Sparkles, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
 import type { SamGovOpportunity } from "@/types/sam-gov";
 import { getStoredUser } from "@/lib/auth";
+import { isProductRfq } from "@/lib/ai-suggestion-prefilter";
 
 const DEFAULT_NOTICE_TYPES: string[] = [];
 const DEFAULT_DATE_RANGE: DateRangeKey = "any";
@@ -27,15 +28,6 @@ type SearchMode = "any_words" | "all_words" | "exact_phrase";
 interface AiSuggestion extends SamGovOpportunity {
   fitScore: number;
   fitReason: string;
-}
-
-interface CompanyProfile {
-  company_name: string;
-  naics_codes: string[];
-  set_aside_qualifications: string[];
-  capabilities: string[];
-  geographic_preferences: string[];
-  past_performance: string[];
 }
 
 const DATE_RANGE_OPTIONS: { value: DateRangeKey; label: string }[] = [
@@ -308,10 +300,15 @@ export default function SamGovPage() {
 
   // AI Suggestions state
   const [aiSuggestions, setAiSuggestions] = useState<AiSuggestion[]>([]);
-  const [aiProfile, setAiProfile] = useState<CompanyProfile | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
-  const [aiStats, setAiStats] = useState<{ total_analyzed: number; total_suggestions: number; threshold: number } | null>(null);
+  const [aiStats, setAiStats] = useState<{
+    total_analyzed: number;
+    total_dropped_by_gate: number;
+    total_ai_scored: number;
+    total_suggestions: number;
+    threshold: number;
+  } | null>(null);
   const [aiFetched, setAiFetched] = useState(false);
 
   useEffect(() => {
@@ -351,7 +348,6 @@ export default function SamGovPage() {
       if (cached) {
         const data = JSON.parse(cached);
         setAiSuggestions(data.suggestions || []);
-        setAiProfile(data.profile || null);
         setAiStats(data.stats || null);
         setAiFetched(true);
       }
@@ -369,7 +365,7 @@ export default function SamGovPage() {
       const res = await fetch("/api/sam-gov/ai-suggestions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ opportunities: allOpportunities }),
+        body: JSON.stringify({ opportunities: allOpportunities.filter(isProductRfq) }),
       });
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
@@ -377,17 +373,17 @@ export default function SamGovPage() {
       }
       const data = await res.json();
       const suggestions = data.suggestions || [];
-      const profile = data.profile || null;
       const stats = {
         total_analyzed: data.total_analyzed || 0,
+        total_dropped_by_gate: data.total_dropped_by_gate || 0,
+        total_ai_scored: data.total_ai_scored || 0,
         total_suggestions: data.total_suggestions || 0,
-        threshold: data.threshold || 70,
+        threshold: data.threshold || 60,
       };
       setAiSuggestions(suggestions);
-      setAiProfile(profile);
       setAiStats(stats);
       setAiFetched(true);
-      localStorage.setItem("ai-suggestions-cache", JSON.stringify({ suggestions, profile, stats }));
+      localStorage.setItem("ai-suggestions-cache", JSON.stringify({ suggestions, stats }));
     } catch (e) {
       setAiError(e instanceof Error ? e.message : "Failed to get AI suggestions");
     } finally {
@@ -708,30 +704,20 @@ export default function SamGovPage() {
 
         {/* ==================== AI SUGGESTIONS TAB ==================== */}
         <TabsContent value="suggestions" className="mt-6">
-          {/* Profile banner */}
-          {aiProfile && (
+          {/* Banner */}
+          {aiStats && (
             <div className="mb-6 rounded-lg border border-indigo-200 bg-gradient-to-r from-indigo-50 to-violet-50 p-4">
-              <div className="flex items-start gap-3">
-                <div className="mt-0.5 rounded-lg bg-indigo-100 p-2">
+              <div className="flex items-center gap-3">
+                <div className="rounded-lg bg-indigo-100 p-2">
                   <Sparkles className="h-5 w-5 text-indigo-600" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-indigo-900">
-                    AI-powered suggestions for {aiProfile.company_name}
+                    Recommended opportunities
                   </p>
-                  <p className="mt-1 text-xs text-indigo-700 leading-relaxed">
-                    Based on:{" "}
-                    <span className="font-medium">{aiProfile.capabilities.slice(0, 4).join(", ")}</span>
-                    {" | NAICS: "}
-                    <span className="font-medium">{aiProfile.naics_codes.join(", ")}</span>
-                    {" | Set-Aside: "}
-                    <span className="font-medium">{aiProfile.set_aside_qualifications.join(", ")}</span>
+                  <p className="mt-0.5 text-xs text-indigo-700">
+                    {aiStats.total_suggestions} match{aiStats.total_suggestions === 1 ? "" : "es"} from {aiStats.total_analyzed} reviewed.
                   </p>
-                  {aiStats && (
-                    <p className="mt-1.5 text-xs text-indigo-600">
-                      Analyzed {aiStats.total_analyzed} opportunities — showing {aiStats.total_suggestions} with {aiStats.threshold}%+ fit score
-                    </p>
-                  )}
                 </div>
               </div>
             </div>
@@ -769,8 +755,8 @@ export default function SamGovPage() {
               {aiSuggestions.length === 0 ? (
                 <div className="rounded-lg border border-slate-200 bg-white py-12 text-center">
                   <Sparkles className="mx-auto h-10 w-10 text-slate-300 mb-3" />
-                  <p className="text-slate-500 text-sm">No opportunities scored above the {aiStats?.threshold || 70}% threshold.</p>
-                  <p className="text-slate-400 text-xs mt-1">All {aiStats?.total_analyzed || 0} opportunities were analyzed but none matched strongly enough.</p>
+                  <p className="text-slate-500 text-sm">No opportunities scored above the {aiStats?.threshold || 60}% threshold.</p>
+                  <p className="text-slate-400 text-xs mt-1">Reviewed {aiStats?.total_analyzed || 0} · rule-dropped {aiStats?.total_dropped_by_gate || 0} · AI-scored {aiStats?.total_ai_scored || 0}.</p>
                 </div>
               ) : (
                 <>

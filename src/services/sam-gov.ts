@@ -176,82 +176,7 @@ export async function getSamGovOpportunities(
 
   if (allFetchedOpportunitiesData.length > 0) {
     console.log(`Fetched a total of ${allFetchedOpportunitiesData.length} opportunities from API over ${pagesFetched} page(s).`);
-    const mappedOpportunities: SamGovOpportunity[] = allFetchedOpportunitiesData.map((apiOpp: any) => {
-      let ncodeString = '';
-      if (Array.isArray(apiOpp.naicsCode)) {
-        ncodeString = apiOpp.naicsCode.join(',');
-      } else if (typeof apiOpp.naicsCode === 'string') {
-        ncodeString = apiOpp.naicsCode;
-      }
-      ncodeString = ncodeString.toLowerCase().replace(/\s+/g, '');
-
-      const officeAddr = apiOpp.officeAddress;
-      const officeAddressString = officeAddr ?
-        `${officeAddr.city || ''}${officeAddr.city && officeAddr.state ? ', ' : ''}${officeAddr.state || ''}${officeAddr.zipcode ? ' ' + officeAddr.zipcode : ''}${officeAddr.countryCode ? ', ' + officeAddr.countryCode : ''}`.trim()
-        : 'N/A';
-
-      const pop = apiOpp.placeOfPerformance;
-      let locationObject: SamGovOpportunity['location'] = null;
-      if (pop) {
-        const countryFromPop = pop.country?.name
-          ? { name: pop.country.name, code: pop.country.code }
-          : undefined;
-        const countryFallback = !countryFromPop && officeAddr?.countryCode === 'USA'
-          ? { name: 'UNITED STATES', code: 'USA' }
-          : undefined;
-
-        locationObject = {
-          city: pop.city?.name ? { name: pop.city.name, code: pop.city.code } : undefined,
-          state: pop.state?.name ? { name: pop.state.name, code: pop.state.code } : undefined,
-          country: countryFromPop || countryFallback,
-          zip: pop.zipCode || undefined,
-        };
-      } else if (officeAddr?.countryCode) {
-        const countryName = officeAddr.countryCode === 'USA' ? 'UNITED STATES' : officeAddr.countryCode;
-        locationObject = {
-          country: { name: countryName, code: officeAddr.countryCode },
-        };
-      }
-
-      const parentPath = apiOpp.fullParentPathName?.split('.') || [];
-      const department = parentPath[0]?.trim() || 'N/A';
-      const subtier = parentPath[1]?.trim() || 'N/A';
-      const office = parentPath.length > 2 ? parentPath.slice(2).join('. ').trim() : (parentPath.pop()?.trim() || 'N/A');
-      const descriptionText = apiOpp.description || 'No description available.';
-
-      // Map resourceLinks - SAM.gov returns array of objects with name & link
-      const resourceLinks = (apiOpp.resourceLinks || []).map((rl: any) => {
-        if (typeof rl === 'string') {
-          return rl;
-        }
-        if (rl && typeof rl === 'object') {
-          return {
-            name: rl.name || rl.title || 'Attachment',
-            link: rl.link || rl.url || rl.href || ''
-          };
-        }
-        return rl;
-      }).filter((rl: any) => rl && (typeof rl === 'string' || rl.link));
-      return {
-        id: apiOpp.noticeId,
-        title: apiOpp.title || 'N/A',
-        ncode: ncodeString || 'N/A',
-        department: department,
-        subtier: subtier,
-        office: office,
-        location: locationObject,
-        closingDate: apiOpp.responseDeadLine,
-        postedDate: apiOpp.postedDate || apiOpp.modifiedDate || undefined,
-        type: apiOpp.type || 'N/A',
-        setAside: apiOpp.typeOfSetAsideDescription || apiOpp.typeOfSetAside || undefined,
-        classificationCode: apiOpp.classificationCode || undefined,
-        organizationHierarchy: apiOpp.fullParentPathName || undefined,
-        link: apiOpp.uiLink || '#',
-        officeAddress: officeAddressString,
-        description: descriptionText,
-        resourceLinks: resourceLinks,
-      };
-    });
+    const mappedOpportunities: SamGovOpportunity[] = allFetchedOpportunitiesData.map(mapApiOpportunity);
 
     const newCache: SamGovCache = {
       data: mappedOpportunities,
@@ -265,6 +190,179 @@ export async function getSamGovOpportunities(
     console.log("No new opportunities fetched from API. Using existing file cache (if any) or returning empty list.");
     return applyFilters(samGovCacheFromFile?.data || [], searchCriteria);
   }
+}
+
+/**
+ * Map a single SAM.gov API opportunity record to our internal SamGovOpportunity shape.
+ * Extracted from the bulk fetch loop so by-id lookups can reuse it.
+ */
+function mapApiOpportunity(apiOpp: any): SamGovOpportunity {
+  let ncodeString = '';
+  if (Array.isArray(apiOpp.naicsCode)) {
+    ncodeString = apiOpp.naicsCode.join(',');
+  } else if (typeof apiOpp.naicsCode === 'string') {
+    ncodeString = apiOpp.naicsCode;
+  }
+  ncodeString = ncodeString.toLowerCase().replace(/\s+/g, '');
+
+  const officeAddr = apiOpp.officeAddress;
+  const officeAddressString = officeAddr ?
+    `${officeAddr.city || ''}${officeAddr.city && officeAddr.state ? ', ' : ''}${officeAddr.state || ''}${officeAddr.zipcode ? ' ' + officeAddr.zipcode : ''}${officeAddr.countryCode ? ', ' + officeAddr.countryCode : ''}`.trim()
+    : 'N/A';
+
+  const pop = apiOpp.placeOfPerformance;
+  let locationObject: SamGovOpportunity['location'] = null;
+  if (pop) {
+    const countryFromPop = pop.country?.name
+      ? { name: pop.country.name, code: pop.country.code }
+      : undefined;
+    const countryFallback = !countryFromPop && officeAddr?.countryCode === 'USA'
+      ? { name: 'UNITED STATES', code: 'USA' }
+      : undefined;
+
+    locationObject = {
+      city: pop.city?.name ? { name: pop.city.name, code: pop.city.code } : undefined,
+      state: pop.state?.name ? { name: pop.state.name, code: pop.state.code } : undefined,
+      country: countryFromPop || countryFallback,
+      zip: pop.zipCode || undefined,
+    };
+  } else if (officeAddr?.countryCode) {
+    const countryName = officeAddr.countryCode === 'USA' ? 'UNITED STATES' : officeAddr.countryCode;
+    locationObject = {
+      country: { name: countryName, code: officeAddr.countryCode },
+    };
+  }
+
+  const parentPath = apiOpp.fullParentPathName?.split('.') || [];
+  const department = parentPath[0]?.trim() || 'N/A';
+  const subtier = parentPath[1]?.trim() || 'N/A';
+  const office = parentPath.length > 2 ? parentPath.slice(2).join('. ').trim() : (parentPath.pop()?.trim() || 'N/A');
+  const descriptionText = apiOpp.description || 'No description available.';
+
+  const resourceLinks = (apiOpp.resourceLinks || []).map((rl: any) => {
+    if (typeof rl === 'string') {
+      return rl;
+    }
+    if (rl && typeof rl === 'object') {
+      return {
+        name: rl.name || rl.title || 'Attachment',
+        link: rl.link || rl.url || rl.href || ''
+      };
+    }
+    return rl;
+  }).filter((rl: any) => rl && (typeof rl === 'string' || rl.link));
+
+  return {
+    id: apiOpp.noticeId,
+    title: apiOpp.title || 'N/A',
+    ncode: ncodeString || 'N/A',
+    department: department,
+    subtier: subtier,
+    office: office,
+    location: locationObject,
+    closingDate: apiOpp.responseDeadLine,
+    postedDate: apiOpp.postedDate || apiOpp.modifiedDate || undefined,
+    type: apiOpp.type || 'N/A',
+    setAside: apiOpp.typeOfSetAsideDescription || apiOpp.typeOfSetAside || undefined,
+    classificationCode: apiOpp.classificationCode || undefined,
+    organizationHierarchy: apiOpp.fullParentPathName || undefined,
+    link: apiOpp.uiLink || '#',
+    officeAddress: officeAddressString,
+    description: descriptionText,
+    resourceLinks: resourceLinks,
+  };
+}
+
+/**
+ * Fetch a single SAM.gov opportunity by noticeId.
+ *
+ * The bulk getSamGovOpportunities cache only holds at most ~2,000 recent rows
+ * (last 364 days, ptype=o,k). This function is the escape hatch when the user
+ * navigates to a specific opportunity ID outside that window: we hit SAM.gov's
+ * search endpoint with `noticeid=<id>` directly and a wide enough date range
+ * to cover archived solicitations.
+ *
+ * Tries the file cache first (free), then falls back to one direct API call.
+ * Returns null if not found anywhere.
+ */
+export async function getSamGovOpportunityById(id: string): Promise<SamGovOpportunity | null> {
+  if (!id) return null;
+
+  // 1) Cheap path: hit the existing file cache.
+  const cache = await readCache();
+  const fromCache = cache?.data?.find(o => o.id === id);
+  if (fromCache) {
+    return fromCache;
+  }
+
+  // 2) Direct lookup via SAM.gov search API by noticeid.
+  const apiKey = process.env.SAM_GOV_API_KEY ?? process.env.NEXT_PUBLIC_SAM_GOV_API_KEY;
+  if (!apiKey) {
+    console.warn('SAM_GOV_API_KEY not set — cannot do direct by-id lookup.');
+    return null;
+  }
+
+  // SAM.gov's search endpoint enforces a max 1-year postedFrom-to-postedTo
+  // window. Walk back in 1-year slices (newest first) until we find the
+  // notice or exhaust a bounded number of years.
+  const MAX_YEARS_BACK = 4;
+  const fmt = (d: Date) => `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}/${d.getFullYear()}`;
+
+  const today = new Date();
+
+  for (let yearsBack = 0; yearsBack < MAX_YEARS_BACK; yearsBack++) {
+    const windowTo = new Date(today);
+    windowTo.setFullYear(today.getFullYear() - yearsBack);
+    const windowFrom = new Date(windowTo);
+    windowFrom.setFullYear(windowTo.getFullYear() - 1);
+    // Pad by one day so the boundary doesn't trigger "Date range must be null year(s) apart"
+    windowFrom.setDate(windowFrom.getDate() + 1);
+
+    const params = new URLSearchParams({
+      api_key: apiKey,
+      noticeid: id,
+      postedFrom: fmt(windowFrom),
+      postedTo: fmt(windowTo),
+      limit: '10',
+    });
+    const url = `https://api.sam.gov/opportunities/v2/search?${params.toString()}`;
+
+    try {
+      const res = await fetch(url);
+      if (!res.ok) {
+        const body = await res.text();
+        console.error(`SAM.gov by-id lookup failed (window ${fmt(windowFrom)}-${fmt(windowTo)}): ${res.status} ${res.statusText}`, body.slice(0, 200));
+        if (res.status === 401 || res.status === 403) {
+          const e: any = new Error('SAM.gov API key invalid or expired.');
+          e.code = 'SAMGOV_AUTH';
+          throw e;
+        }
+        if (res.status === 429) {
+          const e: any = new Error('SAM.gov API rate limit exceeded.');
+          e.code = 'SAMGOV_RATE_LIMIT';
+          throw e;
+        }
+        // 400 / other — try next window instead of bailing
+        continue;
+      }
+      const data: any = await res.json();
+      const list: any[] = Array.isArray(data?.opportunitiesData) ? data.opportunitiesData : [];
+      const match = list.find(o => o?.noticeId === id) || list[0];
+      if (match) {
+        return mapApiOpportunity(match);
+      }
+      // Empty list in this window — try next one
+    } catch (err: any) {
+      if (err?.code === 'SAMGOV_AUTH' || err?.code === 'SAMGOV_RATE_LIMIT') {
+        throw err;
+      }
+      console.error(`Error in window ${fmt(windowFrom)}-${fmt(windowTo)}:`, err);
+      // Continue to next window
+    }
+  }
+
+  // Walked all windows, no hit.
+  return null;
 }
 
 // Helper function to apply filters

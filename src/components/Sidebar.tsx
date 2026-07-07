@@ -3,12 +3,13 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Globe, Handshake, LayoutDashboard, LogOut, PanelLeftClose, PanelLeftOpen, Users } from "lucide-react";
+import { Award, Globe, Handshake, LayoutDashboard, LogOut, PanelLeftClose, PanelLeftOpen, Users } from "lucide-react";
 import { clearStoredUser, getStoredUser, type AuthUser } from "@/lib/auth";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/sam-gov", label: "Sam.Gov", icon: Globe },
+  { href: "/contract-awards", label: "Contract Awards", icon: Award },
   { href: "/negotiations", label: "Negotiations", icon: Handshake },
 ];
 
