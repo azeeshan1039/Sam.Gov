@@ -3,7 +3,21 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Award, Globe, Handshake, LayoutDashboard, LogOut, PanelLeftClose, PanelLeftOpen, Users } from "lucide-react";
+import {
+  Award,
+  BarChart3,
+  CheckSquare,
+  ClipboardList,
+  DollarSign,
+  Globe,
+  Handshake,
+  LayoutDashboard,
+  LogOut,
+  PanelLeftClose,
+  PanelLeftOpen,
+  UserRound,
+  Users,
+} from "lucide-react";
 import { clearStoredUser, getStoredUser, type AuthUser } from "@/lib/auth";
 
 const navItems = [
@@ -13,7 +27,14 @@ const navItems = [
   { href: "/negotiations", label: "Negotiations", icon: Handshake },
 ];
 
-const adminItems = [{ href: "/team", label: "Team", icon: Users }];
+const adminItems = [
+  { href: "/pipeline", label: "Pipeline", icon: ClipboardList },
+  { href: "/hundred-k", label: "100k Bids", icon: DollarSign },
+  { href: "/approvals", label: "Approvals", icon: CheckSquare },
+  { href: "/by-person", label: "By person", icon: UserRound },
+  { href: "/stats", label: "Stats", icon: BarChart3 },
+  { href: "/team", label: "Team", icon: Users },
+];
 
 export default function Sidebar() {
   const pathname = usePathname();

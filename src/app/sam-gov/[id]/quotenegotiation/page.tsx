@@ -1001,13 +1001,40 @@ Procurement Team`
       // Update session status to bid_submitted
       if (negotiationSession) {
         try {
-          await fetch(`/api/sam-gov/negotiate/${negotiationSession.id}/status`, {
+          const finalPrice = parseFloat(
+            String(
+              selectedSupplier.metrics?.final_price ??
+                selectedSupplier.messages?.find((m) => m.price_mentioned)?.price_mentioned ??
+                ''
+            )
+          );
+          const statusRes = await fetch(`/api/sam-gov/negotiate/${negotiationSession.id}/status`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: 'bid_submitted', ...getRequesterPayload() })
+            body: JSON.stringify({
+              status: 'bid_submitted',
+              portal: 'SAM.GOV',
+              amount: Number.isFinite(finalPrice) ? finalPrice : null,
+              won: selectedSupplier.status === 'completed',
+              supplier_id: selectedSupplier.id,
+              ...getRequesterPayload(),
+            }),
           });
+          const statusData = await statusRes.json().catch(() => ({}));
+          if (!statusRes.ok) {
+            console.error('[stats] Submit bid status update failed', {
+              status: statusRes.status,
+              body: statusData,
+              sessionId: negotiationSession.id,
+            });
+            throw new Error(statusData.error || `Failed to submit bid (${statusRes.status})`);
+          }
+          if (!statusData.bid_id) {
+            console.warn('[stats] Bid submitted but no bid_id returned', statusData);
+          }
         } catch (statusErr) {
-          console.error('Failed to update session status:', statusErr);
+          console.error('[stats] Failed to update session status / record bid:', statusErr);
+          throw statusErr;
         }
       }
 
