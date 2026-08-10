@@ -1032,6 +1032,11 @@ Procurement Team`
           if (!statusData.bid_id) {
             console.warn('[stats] Bid submitted but no bid_id returned', statusData);
           }
+          if (!statusData.pipeline_id) {
+            console.warn('[pipeline] Bid submitted but no pipeline_id returned', statusData);
+          } else {
+            console.log('[pipeline] Linked pipeline row', statusData.pipeline_id);
+          }
         } catch (statusErr) {
           console.error('[stats] Failed to update session status / record bid:', statusErr);
           throw statusErr;
