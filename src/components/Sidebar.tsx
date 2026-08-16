@@ -9,6 +9,7 @@ import {
   CheckSquare,
   ClipboardList,
   DollarSign,
+  FileSpreadsheet,
   Globe,
   Handshake,
   LayoutDashboard,
@@ -25,6 +26,7 @@ const navItems = [
   { href: "/sam-gov", label: "Sam.Gov", icon: Globe },
   { href: "/contract-awards", label: "Contract Awards", icon: Award },
   { href: "/negotiations", label: "Negotiations", icon: Handshake },
+  { href: "/my-bids", label: "My bids", icon: FileSpreadsheet },
 ];
 
 const adminItems = [

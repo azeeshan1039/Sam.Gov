@@ -19,6 +19,7 @@ export interface PipelineItem {
   gross_sales: number | null;
   gross_profit: number | null;
   markup_amount: number | null;
+  awarded_amount: number | null;
   internal_status: string;
   approval_status: string;
   approved_by_user_id: number | null;

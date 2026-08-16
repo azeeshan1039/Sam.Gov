@@ -7,7 +7,29 @@ import {
   type PipelineItem,
 } from "@/lib/pipeline";
 
-type Variant = "full" | "hundred-k" | "person";
+function dash(value: string | number | null | undefined) {
+  if (value == null || value === "") return "—";
+  return String(value);
+}
+
+function SheetLink({ href }: { href: string | null | undefined }) {
+  if (!href) return <span>—</span>;
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className="whitespace-nowrap text-blue-600 underline hover:text-blue-800"
+    >
+      Link
+    </a>
+  );
+}
+
+const sheetHead = "whitespace-nowrap";
+const sheetCell = "whitespace-nowrap";
+
+type Variant = "full" | "hundred-k" | "person" | "my-bids";
 
 export function PipelineTable({
   items,
@@ -81,6 +103,75 @@ export function PipelineTable({
               <TableCell>{row.days_remaining ?? "—"}</TableCell>
               <TableCell className="whitespace-nowrap">{formatMoney(row.gross_sales)}</TableCell>
               <TableCell>{row.approved_by_name || "—"}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    );
+  }
+
+  if (variant === "my-bids") {
+    return (
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className={sheetHead}>Internal Status</TableHead>
+            <TableHead className={sheetHead}>ID</TableHead>
+            <TableHead className={sheetHead}>Solicitation #</TableHead>
+            <TableHead className={sheetHead}>Title</TableHead>
+            <TableHead className={sheetHead}>Manufacturer</TableHead>
+            <TableHead className={sheetHead}>Bid link</TableHead>
+            <TableHead className={sheetHead}>Portal</TableHead>
+            <TableHead className={sheetHead}>Assign Date</TableHead>
+            <TableHead className={sheetHead}>Due Date</TableHead>
+            <TableHead className={sheetHead}>Days Remaining</TableHead>
+            <TableHead className={sheetHead}>Due time</TableHead>
+            <TableHead className={sheetHead}>Shipping</TableHead>
+            <TableHead className={sheetHead}>Agent</TableHead>
+            <TableHead className={sheetHead}>Approved by</TableHead>
+            <TableHead className={sheetHead}>Final Quote Link</TableHead>
+            <TableHead className={sheetHead}>Price</TableHead>
+            <TableHead className={sheetHead}>Markup (%)</TableHead>
+            <TableHead className={sheetHead}>Submitted</TableHead>
+            <TableHead className={sheetHead}>Profit</TableHead>
+            <TableHead className={sheetHead}>Approval Status</TableHead>
+            <TableHead className={sheetHead}>CO NAME</TableHead>
+            <TableHead className={sheetHead}>Email</TableHead>
+            <TableHead className={sheetHead}>Delivery Address</TableHead>
+            <TableHead className={sheetHead}>Awarded amount</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {items.map((row) => (
+            <TableRow key={row.id}>
+              <TableCell className={sheetCell}>{formatStatus(row.internal_status)}</TableCell>
+              <TableCell className={`font-medium ${sheetCell}`}>{row.bid_id}</TableCell>
+              <TableCell className={sheetCell}>{dash(row.solicitation_number)}</TableCell>
+              <TableCell className="min-w-[12rem]">{dash(row.title)}</TableCell>
+              <TableCell className={sheetCell}>{dash(row.manufacturer)}</TableCell>
+              <TableCell className={sheetCell}>
+                <SheetLink href={row.bid_url} />
+              </TableCell>
+              <TableCell className={sheetCell}>{dash(row.portal)}</TableCell>
+              <TableCell className={sheetCell}>{formatDate(row.assign_date)}</TableCell>
+              <TableCell className={sheetCell}>{formatDate(row.due_date)}</TableCell>
+              <TableCell className={sheetCell}>{row.days_remaining ?? "—"}</TableCell>
+              <TableCell className={sheetCell}>{dash(row.due_time)}</TableCell>
+              <TableCell className="min-w-[8rem]">{dash(row.shipping_notes)}</TableCell>
+              <TableCell className={sheetCell}>{dash(row.agent_name)}</TableCell>
+              <TableCell className={sheetCell}>{dash(row.approved_by_name)}</TableCell>
+              <TableCell className={sheetCell}>
+                <SheetLink href={row.final_quote_url} />
+              </TableCell>
+              <TableCell className={sheetCell}>{formatMoney(row.cost)}</TableCell>
+              <TableCell className={sheetCell}>{formatMoney(row.markup_amount)}</TableCell>
+              <TableCell className={sheetCell}>{formatMoney(row.gross_sales)}</TableCell>
+              <TableCell className={sheetCell}>{formatMoney(row.gross_profit)}</TableCell>
+              <TableCell className={sheetCell}>{formatStatus(row.approval_status)}</TableCell>
+              <TableCell className={sheetCell}>{dash(row.co_name)}</TableCell>
+              <TableCell className={sheetCell}>{dash(row.contact_email)}</TableCell>
+              <TableCell className="min-w-[10rem]">{dash(row.delivery_address)}</TableCell>
+              <TableCell className={sheetCell}>{formatMoney(row.awarded_amount)}</TableCell>
             </TableRow>
           ))}
         </TableBody>

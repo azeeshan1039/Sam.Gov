@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { useRouter } from "next/navigation";
 import { BarChart3 } from "lucide-react";
 import { getStoredUser, type AuthUser } from "@/lib/auth";
+import { etMonthKey, etMonthOptions } from "@/lib/eastern";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -83,16 +84,6 @@ interface StatsPayload {
   bid_stats: BidStatsRow[];
 }
 
-function monthOptions(now = new Date()) {
-  const options: { value: string; label: string }[] = [];
-  for (let i = 0; i < 18; i += 1) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-    const label = d.toLocaleString("en-US", { month: "long", year: "numeric" });
-    options.push({ value, label });
-  }
-  return options;
-}
 
 function formatMoney(value: number | null | undefined) {
   const n = Number(value || 0);
@@ -106,14 +97,11 @@ function formatMoney(value: number | null | undefined) {
 export default function StatsPage() {
   const router = useRouter();
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [monthKey, setMonthKey] = useState(() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-  });
+  const [monthKey, setMonthKey] = useState(() => etMonthKey());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState<StatsPayload | null>(null);
-  const months = useMemo(() => monthOptions(), []);
+  const months = useMemo(() => etMonthOptions(), []);
 
   useEffect(() => {
     const currentUser = getStoredUser();
@@ -184,7 +172,7 @@ export default function StatsPage() {
             Stats
           </h1>
           <p className="mt-1 text-muted-foreground">
-            Company bid performance for the selected month.
+            Company bid performance for the selected month (Eastern Time).
           </p>
         </div>
         <div className="w-full sm:w-56">
@@ -238,7 +226,7 @@ export default function StatsPage() {
         </TabsContent>
 
         <TabsContent value="monthly-goal">
-          <StatsCard title="Monthly Goal" description="Company submitted-bid count vs goal.">
+          <StatsCard title="Monthly Goal" description="Company submitted-bid count vs the sum of each employee's monthly goal.">
             <SimpleTable
               loading={loading}
               headers={["Achieved", "Monthly", "Left"]}
@@ -313,7 +301,7 @@ export default function StatsPage() {
         </TabsContent>
 
         <TabsContent value="tracker">
-          <StatsCard title="Tracker" description="Per-employee progress toward the member monthly goal.">
+          <StatsCard title="Tracker" description="Per-employee progress toward their own monthly goal.">
             <SimpleTable
               loading={loading}
               headers={["Employee", "Achieved", "Left", "Monthly"]}

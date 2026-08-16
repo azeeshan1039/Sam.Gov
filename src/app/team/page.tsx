@@ -16,6 +16,7 @@ interface TeamMember {
   full_name: string;
   job_title?: string | null;
   role: 'admin' | 'member';
+  monthly_goal?: number;
   created_at?: string | null;
 }
 
@@ -29,6 +30,7 @@ interface PendingInvite {
 interface TeamOverviewResponse {
   slots_remaining: number;
   max_team_members: number;
+  company_monthly_goal: number;
   members: TeamMember[];
   pending_invites: PendingInvite[];
 }
@@ -44,9 +46,12 @@ export default function TeamPage() {
   const [teamData, setTeamData] = useState<TeamOverviewResponse>({
     slots_remaining: 0,
     max_team_members: 5,
+    company_monthly_goal: 0,
     members: [],
     pending_invites: [],
   });
+  const [goalDrafts, setGoalDrafts] = useState<Record<number, string>>({});
+  const [savingGoalId, setSavingGoalId] = useState<number | null>(null);
 
   useEffect(() => {
     const currentUser = getStoredUser();
@@ -77,12 +82,19 @@ export default function TeamPage() {
       if (!res.ok) {
         throw new Error(data.error || 'Could not load team data');
       }
+      const members = data.members || [];
       setTeamData({
         slots_remaining: data.slots_remaining ?? 0,
         max_team_members: data.max_team_members ?? 5,
-        members: data.members || [],
+        company_monthly_goal: data.company_monthly_goal ?? 0,
+        members,
         pending_invites: data.pending_invites || [],
       });
+      const drafts: Record<number, string> = {};
+      for (const member of members) {
+        drafts[member.id] = String(member.monthly_goal ?? 50);
+      }
+      setGoalDrafts(drafts);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load team data');
     } finally {
@@ -127,6 +139,50 @@ export default function TeamPage() {
     }
   };
 
+  const saveMemberGoal = async (memberId: number) => {
+    if (!user) return;
+    const raw = goalDrafts[memberId];
+    const goal = Number.parseInt(String(raw ?? ''), 10);
+    if (Number.isNaN(goal) || goal < 0) {
+      setError('Monthly goal must be a whole number of 0 or more.');
+      return;
+    }
+    const current = teamData.members.find((member) => member.id === memberId);
+    if (current && current.monthly_goal === goal) {
+      return;
+    }
+
+    setSavingGoalId(memberId);
+    setError(null);
+    try {
+      const res = await fetch(`/api/backend/auth/team/members/${memberId}/goal`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          company_id: user.company_id,
+          requester_user_id: user.id,
+          monthly_goal: goal,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || 'Could not save monthly goal');
+      }
+      setTeamData((prev) => ({
+        ...prev,
+        company_monthly_goal: data.company_monthly_goal ?? prev.company_monthly_goal,
+        members: prev.members.map((member) =>
+          member.id === memberId ? { ...member, monthly_goal: data.monthly_goal ?? goal } : member
+        ),
+      }));
+      setGoalDrafts((prev) => ({ ...prev, [memberId]: String(data.monthly_goal ?? goal) }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save monthly goal');
+    } finally {
+      setSavingGoalId(null);
+    }
+  };
+
   if (loading || !user) {
     return (
       <div className="space-y-6 p-6 lg:p-8">
@@ -145,7 +201,7 @@ export default function TeamPage() {
           Team
         </h1>
         <p className="mt-1 text-muted-foreground">
-          Manage teammates and pending invitations for your company workspace.
+          Manage teammates, monthly bid goals, and pending invitations.
         </p>
       </div>
 
@@ -203,6 +259,10 @@ export default function TeamPage() {
       <Card>
         <CardHeader>
           <CardTitle>Team Members</CardTitle>
+          <CardDescription>
+            Company monthly goal is the sum of individual goals:{' '}
+            <span className="font-medium text-foreground">{teamData.company_monthly_goal}</span>
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {teamLoading ? (
@@ -217,6 +277,7 @@ export default function TeamPage() {
                   <TableHead>Email</TableHead>
                   <TableHead>Role</TableHead>
                   <TableHead>Title</TableHead>
+                  <TableHead className="w-40">Monthly goal</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -226,6 +287,25 @@ export default function TeamPage() {
                     <TableCell>{member.email}</TableCell>
                     <TableCell className="capitalize">{member.role}</TableCell>
                     <TableCell>{member.job_title || '-'}</TableCell>
+                    <TableCell>
+                      <Input
+                        type="number"
+                        min={0}
+                        step={1}
+                        className="w-24"
+                        value={goalDrafts[member.id] ?? String(member.monthly_goal ?? 50)}
+                        disabled={savingGoalId === member.id}
+                        onChange={(e) =>
+                          setGoalDrafts((prev) => ({ ...prev, [member.id]: e.target.value }))
+                        }
+                        onBlur={() => saveMemberGoal(member.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            (e.target as HTMLInputElement).blur();
+                          }
+                        }}
+                      />
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
