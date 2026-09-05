@@ -6,9 +6,6 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   Award,
   BarChart3,
-  CheckSquare,
-  ClipboardList,
-  DollarSign,
   FileSpreadsheet,
   Globe,
   Handshake,
@@ -16,7 +13,6 @@ import {
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
-  UserRound,
   Users,
 } from "lucide-react";
 import { clearStoredUser, getStoredUser, type AuthUser } from "@/lib/auth";
@@ -30,10 +26,6 @@ const navItems = [
 ];
 
 const adminItems = [
-  { href: "/pipeline", label: "Pipeline", icon: ClipboardList },
-  { href: "/hundred-k", label: "100k Bids", icon: DollarSign },
-  { href: "/approvals", label: "Approvals", icon: CheckSquare },
-  { href: "/by-person", label: "By person", icon: UserRound },
   { href: "/stats", label: "Stats", icon: BarChart3 },
   { href: "/team", label: "Team", icon: Users },
 ];
