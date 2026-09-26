@@ -31,6 +31,8 @@ export interface PipelineItem {
   delivery_address: string | null;
   shipping_notes: string | null;
   session_id: number | null;
+  submitted_at: string | null;
+  outcome: string | null;
 }
 
 export interface PipelineEmployeeGroup {
@@ -54,6 +56,12 @@ export function formatDate(value: string | null | undefined) {
   const d = new Date(`${value}T00:00:00`);
   if (Number.isNaN(d.getTime())) return value;
   return d.toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "numeric" });
+}
+
+export function formatOutcome(outcome: string | null | undefined) {
+  if (outcome === "won") return "Won";
+  if (outcome === "no_quote") return "No quote";
+  return "—";
 }
 
 export function formatStatus(status: string | null | undefined) {

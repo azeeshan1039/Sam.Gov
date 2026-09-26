@@ -1029,9 +1029,6 @@ Procurement Team`
             });
             throw new Error(statusData.error || `Failed to submit bid (${statusRes.status})`);
           }
-          if (!statusData.bid_id) {
-            console.warn('[stats] Bid submitted but no bid_id returned', statusData);
-          }
           if (!statusData.pipeline_id) {
             console.warn('[pipeline] Bid submitted but no pipeline_id returned', statusData);
           } else {

@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { FileSpreadsheet } from "lucide-react";
 import { getStoredUser, getUserDisplayName, type AuthUser } from "@/lib/auth";
+import MyBidsAlerts from "@/components/notifications/MyBidsAlerts";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PipelineTable } from "@/components/pipeline/PipelineTable";
@@ -17,6 +18,9 @@ interface MyGoal {
 
 export default function MyBidsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const bidParam = searchParams.get("bid");
+  const highlightId = bidParam && /^\d+$/.test(bidParam) ? Number(bidParam) : null;
   const [user, setUser] = useState<AuthUser | null>(null);
   const [items, setItems] = useState<PipelineItem[]>([]);
   const [goal, setGoal] = useState<MyGoal | null>(null);
@@ -71,6 +75,11 @@ export default function MyBidsPage() {
     if (user) load();
   }, [user, load]);
 
+  useEffect(() => {
+    if (!highlightId || loading) return;
+    document.getElementById(`pipeline-row-${highlightId}`)?.scrollIntoView({ block: "center" });
+  }, [highlightId, loading, items]);
+
   if (!user) {
     return (
       <div className="space-y-6 p-6 lg:p-8">
@@ -89,6 +98,7 @@ export default function MyBidsPage() {
         </h1>
         <p className="mt-1 text-muted-foreground">Your assigned solicitations.</p>
       </div>
+      <MyBidsAlerts />
       {error && (
         <div className="rounded border border-destructive bg-destructive/10 p-3 text-sm text-destructive">
           {error}
@@ -126,7 +136,12 @@ export default function MyBidsPage() {
           {loading ? (
             <Skeleton className="h-40 w-full" />
           ) : (
-            <PipelineTable items={items} variant="my-bids" empty="No bids assigned to you yet." />
+            <PipelineTable
+              items={items}
+              variant="my-bids"
+              empty="No bids assigned to you yet."
+              highlightId={highlightId}
+            />
           )}
         </CardContent>
       </Card>

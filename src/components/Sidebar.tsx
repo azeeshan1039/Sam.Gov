@@ -9,6 +9,7 @@ import {
   FileSpreadsheet,
   Globe,
   Handshake,
+  History,
   LayoutDashboard,
   LogOut,
   PanelLeftClose,
@@ -26,6 +27,7 @@ const navItems = [
 ];
 
 const adminItems = [
+  { href: "/bid-history", label: "Bid history", icon: History },
   { href: "/stats", label: "Stats", icon: BarChart3 },
   { href: "/team", label: "Team", icon: Users },
 ];

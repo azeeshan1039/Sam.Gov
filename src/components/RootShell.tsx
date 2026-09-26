@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { User } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
+import { AgentAlertsProvider } from "@/components/notifications/AgentAlertsProvider";
+import NotificationBell from "@/components/notifications/NotificationBell";
 import { getStoredUser, getUserDisplayName, getUserInitials, type AuthUser } from "@/lib/auth";
 
 export default function RootShell({ children }: { children: React.ReactNode }) {
@@ -21,6 +23,7 @@ export default function RootShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
+    <AgentAlertsProvider user={user}>
     <div className="fixed inset-0 flex overflow-hidden">
       <Sidebar />
       <main
@@ -28,7 +31,8 @@ export default function RootShell({ children }: { children: React.ReactNode }) {
         className="min-h-0 min-w-0 flex-1 overflow-y-auto bg-slate-50"
       >
         <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/90 backdrop-blur">
-          <div className="flex min-h-16 items-center justify-end px-6 py-3 lg:px-8">
+          <div className="flex min-h-16 items-center justify-end gap-3 px-6 py-3 lg:px-8">
+            {user ? <NotificationBell /> : null}
             {user ? (
               <div className="flex items-center gap-3 rounded-full border border-slate-200 bg-white px-3 py-2 shadow-sm">
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-900 text-white">
@@ -48,5 +52,6 @@ export default function RootShell({ children }: { children: React.ReactNode }) {
         {children}
       </main>
     </div>
+    </AgentAlertsProvider>
   );
 }

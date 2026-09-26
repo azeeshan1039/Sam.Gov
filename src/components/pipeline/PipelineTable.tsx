@@ -2,6 +2,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import {
   formatDate,
   formatMoney,
+  formatOutcome,
   formatStatus,
   hundredKRowClass,
   type PipelineItem,
@@ -29,16 +30,23 @@ function SheetLink({ href }: { href: string | null | undefined }) {
 const sheetHead = "whitespace-nowrap";
 const sheetCell = "whitespace-nowrap";
 
-type Variant = "full" | "hundred-k" | "person" | "my-bids";
+type Variant = "full" | "hundred-k" | "person" | "my-bids" | "history";
+
+function bidPrice(row: PipelineItem) {
+  if (row.gross_sales != null) return row.gross_sales;
+  return row.cost;
+}
 
 export function PipelineTable({
   items,
   variant = "full",
   empty = "No rows.",
+  highlightId = null,
 }: {
   items: PipelineItem[];
   variant?: Variant;
   empty?: string;
+  highlightId?: number | null;
 }) {
   if (items.length === 0) {
     return <p className="text-sm text-muted-foreground">{empty}</p>;
@@ -143,7 +151,11 @@ export function PipelineTable({
         </TableHeader>
         <TableBody>
           {items.map((row) => (
-            <TableRow key={row.id}>
+            <TableRow
+              key={row.id}
+              id={`pipeline-row-${row.id}`}
+              className={highlightId === row.id ? "bg-amber-100" : undefined}
+            >
               <TableCell className={sheetCell}>{formatStatus(row.internal_status)}</TableCell>
               <TableCell className={`font-medium ${sheetCell}`}>{row.bid_id}</TableCell>
               <TableCell className={sheetCell}>{dash(row.solicitation_number)}</TableCell>
@@ -172,6 +184,41 @@ export function PipelineTable({
               <TableCell className={sheetCell}>{dash(row.contact_email)}</TableCell>
               <TableCell className="min-w-[10rem]">{dash(row.delivery_address)}</TableCell>
               <TableCell className={sheetCell}>{formatMoney(row.awarded_amount)}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    );
+  }
+
+  if (variant === "history") {
+    return (
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Solicitation #</TableHead>
+            <TableHead>Title</TableHead>
+            <TableHead>Portal</TableHead>
+            <TableHead>Agent</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead>Price</TableHead>
+            <TableHead>Assign date</TableHead>
+            <TableHead>Due date</TableHead>
+            <TableHead>Outcome</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {items.map((row) => (
+            <TableRow key={row.id}>
+              <TableCell className="whitespace-nowrap font-medium">{dash(row.solicitation_number)}</TableCell>
+              <TableCell className="min-w-[12rem]">{dash(row.title)}</TableCell>
+              <TableCell className="whitespace-nowrap">{dash(row.portal)}</TableCell>
+              <TableCell className="whitespace-nowrap">{dash(row.agent_name)}</TableCell>
+              <TableCell className="whitespace-nowrap">{formatStatus(row.internal_status)}</TableCell>
+              <TableCell className="whitespace-nowrap">{formatMoney(bidPrice(row))}</TableCell>
+              <TableCell className="whitespace-nowrap">{formatDate(row.assign_date)}</TableCell>
+              <TableCell className="whitespace-nowrap">{formatDate(row.due_date)}</TableCell>
+              <TableCell className="whitespace-nowrap">{formatOutcome(row.outcome)}</TableCell>
             </TableRow>
           ))}
         </TableBody>
