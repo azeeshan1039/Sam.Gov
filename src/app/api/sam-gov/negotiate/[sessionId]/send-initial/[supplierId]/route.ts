@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { BACKEND_URL } from '@/lib/backend-config';
+import { backendAuthHeaders } from '@/lib/backend-auth';
 
 export async function POST(
   request: NextRequest,
@@ -13,9 +14,7 @@ export async function POST(
       `${BACKEND_URL}/api/negotiate/${sessionId}/send-initial/${supplierId}`,
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: backendAuthHeaders(request),
         body: JSON.stringify(body)
       }
     );

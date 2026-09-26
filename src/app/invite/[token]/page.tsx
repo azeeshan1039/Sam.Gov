@@ -23,7 +23,7 @@ export default function InviteAcceptPage() {
   const router = useRouter();
   const token = typeof params.token === "string" ? params.token : "";
 
-  const [preview, setPreview] = useState<{ email: string; company_name: string } | null>(null);
+  const [preview, setPreview] = useState<{ email: string; company_name: string; full_name?: string | null } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(true);
@@ -45,7 +45,7 @@ export default function InviteAcceptPage() {
           setLoadError(data.error || "This invite is not valid.");
           return;
         }
-        setPreview({ email: data.email, company_name: data.company_name });
+        setPreview({ email: data.email, company_name: data.company_name, full_name: data.full_name });
       } catch {
         setLoadError("Could not load invite.");
       } finally {
@@ -173,6 +173,7 @@ export default function InviteAcceptPage() {
               <Input
                 id="full_name"
                 name="full_name"
+                defaultValue={preview.full_name || ''}
                 required
                 autoComplete="name"
                 className={authInputClassName}

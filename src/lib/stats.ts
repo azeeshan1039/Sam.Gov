@@ -45,6 +45,7 @@ export interface WeekCell {
 export interface EmployeeStatsRow {
   user_id: number;
   name: string;
+  is_active: boolean;
   weeks: WeekCell[];
   month_total: number;
   monthly_goal: number;

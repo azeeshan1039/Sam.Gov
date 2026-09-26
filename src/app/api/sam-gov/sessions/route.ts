@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+export const dynamic = 'force-dynamic';
 import { BACKEND_URL } from '@/lib/backend-config';
+import { backendAuthHeaders } from '@/lib/backend-auth';
 
 export async function GET(request: NextRequest) {
   try {
@@ -12,9 +14,7 @@ export async function GET(request: NextRequest) {
 
     const response = await fetch(`${BACKEND_URL}/api/sam-gov/sessions${suffix}`, {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: backendAuthHeaders(request),
       cache: 'no-store',
     });
 

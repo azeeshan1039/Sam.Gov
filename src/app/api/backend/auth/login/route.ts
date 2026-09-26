@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { BACKEND_URL } from "@/lib/backend-config";
+import { authenticatedResponse } from "@/lib/backend-auth";
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,7 +19,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    return NextResponse.json(data, { status: response.status });
+    const token = String(data?.token || "");
+    if (!token) {
+      return NextResponse.json({ error: "Backend did not issue a session." }, { status: 502 });
+    }
+    return authenticatedResponse({ user: data.user }, token, response.status);
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to login" },

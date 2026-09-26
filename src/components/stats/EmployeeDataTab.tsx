@@ -45,6 +45,7 @@ function EmployeeCell({ row }: { row: EmployeeStatsRow }) {
         {initials(row.name)}
       </span>
       <span className="font-medium text-slate-900">{displayName(row.name)}</span>
+      {!row.is_active && <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-600">Inactive</span>}
     </div>
   );
 }

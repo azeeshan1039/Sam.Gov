@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
+export const dynamic = 'force-dynamic';
 import { BACKEND_URL } from '@/lib/backend-config';
+import { backendAuthHeaders } from '@/lib/backend-auth';
 
 export async function GET(request: NextRequest) {
     try {
         const suffix = request.nextUrl.search || '';
         const response = await fetch(`${BACKEND_URL}/api/sam-gov/dashboard-stats${suffix}`, {
             method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: backendAuthHeaders(request),
             cache: 'no-store',
         });
 

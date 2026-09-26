@@ -6,6 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import type { SamGovOpportunity } from '@/types/sam-gov'; // Updated import
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import Loading from '@/app/loading';
 import { Icons } from '@/components/icons';
 import { format, parseISO } from 'date-fns';
@@ -14,6 +15,20 @@ import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
 import { FileText } from 'lucide-react';
 import DOMPurify from 'dompurify';
+import { getStoredUser, type AuthUser } from '@/lib/auth';
+
+interface Availability {
+  available: boolean;
+  tracked_opportunity_id?: number | null;
+  assignee?: { id: number; full_name: string } | null;
+}
+
+interface AgentOption {
+  id: number;
+  full_name: string;
+  is_active: boolean;
+  role: 'admin' | 'agent';
+}
 
 // Detect if content looks like HTML (has tags)
 function looksLikeHtml(text: string): boolean {
@@ -94,6 +109,17 @@ export default function SamGovOpportunityPage() {
   const [detailedDescription, setDetailedDescription] = useState<string | null>(null);
   const [descriptionIsHtml, setDescriptionIsHtml] = useState(false);
   const [descriptionLoading, setDescriptionLoading] = useState<boolean>(false);
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const [availability, setAvailability] = useState<Availability | null>(null);
+  const [agents, setAgents] = useState<AgentOption[]>([]);
+  const [selectedAgentId, setSelectedAgentId] = useState('');
+  const [expectedBidValue, setExpectedBidValue] = useState('');
+  const [claimLoading, setClaimLoading] = useState(false);
+  const [claimError, setClaimError] = useState<string | null>(null);
+  const [overrideLimits, setOverrideLimits] = useState(false);
+  const [overrideReason, setOverrideReason] = useState('');
+
+  useEffect(() => { setCurrentUser(getStoredUser()); }, []);
 
 
   useEffect(() => {
@@ -169,6 +195,75 @@ export default function SamGovOpportunityPage() {
     fetchOpportunityDetails();
   }, [id]);
 
+  const refreshAvailability = async (item: SamGovOpportunity) => {
+    const response = await fetch('/api/backend/opportunities/availability', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ opportunities: [{
+        external_notice_id: item.id,
+        solicitation_number: item.solicitationNumber || item.id,
+        source: 'SAM.GOV',
+      }] }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (response.ok) setAvailability(data.opportunities?.[0] || null);
+  };
+
+  useEffect(() => {
+    if (!opportunity || !currentUser) return;
+    void refreshAvailability(opportunity);
+    if (currentUser.role === 'admin') {
+      fetch('/api/backend/auth/team', { cache: 'no-store' })
+        .then(async (response) => ({ ok: response.ok, data: await response.json() }))
+        .then(({ ok, data }) => {
+          if (ok) setAgents((data.members || []).filter((member: AgentOption) => member.role === 'agent' && member.is_active));
+        })
+        .catch(() => undefined);
+    }
+  }, [opportunity, currentUser]);
+
+  const claimOpportunity = async () => {
+    if (!opportunity || !currentUser) return;
+    const value = Number(expectedBidValue);
+    if (!Number.isFinite(value) || value < 0 || expectedBidValue.trim() === '') {
+      setClaimError('Enter the expected bid value before assigning this opportunity.');
+      return;
+    }
+    if (currentUser.role === 'admin' && !selectedAgentId) {
+      setClaimError('Select an agent.');
+      return;
+    }
+    setClaimLoading(true);
+    setClaimError(null);
+    try {
+      const endpoint = currentUser.role === 'admin' ? 'assign' : 'pickup';
+      const response = await fetch(`/api/backend/opportunities/${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          source: 'SAM.GOV',
+          external_notice_id: opportunity.id,
+          solicitation_number: opportunity.solicitationNumber || opportunity.id,
+          title: opportunity.title,
+          link: opportunity.link,
+          response_deadline: opportunity.closingDate,
+          expected_bid_value: value,
+          agent_user_id: currentUser.role === 'admin' ? Number(selectedAgentId) : undefined,
+          override_limits: currentUser.role === 'admin' && overrideLimits,
+          override_reason: currentUser.role === 'admin' ? overrideReason : undefined,
+          raw_snapshot: opportunity,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Could not assign opportunity');
+      await refreshAvailability(opportunity);
+    } catch (err) {
+      setClaimError(err instanceof Error ? err.message : 'Could not assign opportunity');
+    } finally {
+      setClaimLoading(false);
+    }
+  };
+
   if (loading) {
     return <Loading />;
   }
@@ -212,6 +307,12 @@ export default function SamGovOpportunityPage() {
   const formattedClosingDate = opportunity.closingDate
     ? format(parseISO(opportunity.closingDate), 'PPP HH:mm zzz')
     : 'N/A';
+  const ownedByCurrentAgent = Boolean(
+    currentUser?.role === 'agent' &&
+    availability &&
+    !availability.available &&
+    availability.assignee?.id === currentUser.id
+  );
 
   return (
     <main className="flex-1 p-6 bg-gradient-to-br from-secondary/30 to-background animate-fadeIn">
@@ -326,12 +427,26 @@ export default function SamGovOpportunityPage() {
               </div>
             )}
 
-            <div className="md:col-span-2 mt-6 gap-10 flex justify-end">
-              <Button asChild size="lg">
-                <Link href={`/sam-gov/${id}/bid-summary`}>
-                  Start Bidding Process
-                </Link>
-              </Button>
+            <div className="md:col-span-2 mt-6 rounded-lg border bg-slate-50 p-4">
+              <h3 className="font-semibold">Company ownership</h3>
+              {!currentUser ? (
+                <p className="mt-2 text-sm text-muted-foreground">Sign in to pick up this opportunity.</p>
+              ) : availability && !availability.available ? (
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-sm">Assigned to <span className="font-semibold">{availability.assignee?.full_name || 'a company agent'}</span>. Duplicate pickup is blocked.</p>
+                  {ownedByCurrentAgent && <Button asChild size="lg"><Link href={`/sam-gov/${id}/bid-summary`}>Start Bidding Process</Link></Button>}
+                </div>
+              ) : (
+                <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+                  <div><Label>Expected bid value</Label><Input type="number" min="0" step="0.01" value={expectedBidValue} onChange={(event) => setExpectedBidValue(event.target.value)} placeholder="Required for limit checks" /></div>
+                  {currentUser.role === 'admin' ? (
+                    <div><Label>Assign to agent</Label><select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={selectedAgentId} onChange={(event) => setSelectedAgentId(event.target.value)}><option value="">Select agent</option>{agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.full_name}</option>)}</select></div>
+                  ) : <div className="text-sm text-muted-foreground">Pickup is first-come, first-served and checked against your active-bid and dollar limits.</div>}
+                  <Button onClick={claimOpportunity} disabled={claimLoading}>{claimLoading ? 'Assigning...' : currentUser.role === 'admin' ? 'Assign' : 'Pick up'}</Button>
+                  {currentUser.role === 'admin' && <div className="sm:col-span-3 flex flex-wrap items-center gap-3"><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={overrideLimits} onChange={(event) => setOverrideLimits(event.target.checked)} />Override agent limits</label>{overrideLimits && <Input className="max-w-md" value={overrideReason} onChange={(event) => setOverrideReason(event.target.value)} placeholder="Required audit reason" />}</div>}
+                </div>
+              )}
+              {claimError && <p className="mt-3 text-sm text-destructive">{claimError}</p>}
             </div>
           </CardContent>
         </Card>

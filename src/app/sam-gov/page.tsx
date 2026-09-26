@@ -30,6 +30,11 @@ interface AiSuggestion extends SamGovOpportunity {
   fitReason: string;
 }
 
+interface OpportunityAvailability {
+  available: boolean;
+  assignee?: { id: number; full_name: string } | null;
+}
+
 const DATE_RANGE_OPTIONS: { value: DateRangeKey; label: string }[] = [
   { value: "past_day", label: "Past Day" },
   { value: "past_week", label: "Past Week" },
@@ -102,13 +107,14 @@ function ScoreBadge({ score }: { score: number }) {
   );
 }
 
-function OpportunityCard({ opp }: { opp: SamGovOpportunity }) {
+function OpportunityCard({ opp, availability }: { opp: SamGovOpportunity; availability?: OpportunityAvailability }) {
   const locationStr = opp.location
     ? `${opp.location.city?.name || ""}${opp.location.city?.name && opp.location.state?.name ? ", " : ""}${opp.location.state?.name || ""}`
     : "—";
 
   return (
     <article className="flex flex-col rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md">
+      {availability && <span className={`mb-2 w-fit rounded-full px-2 py-0.5 text-xs font-medium ${availability.available ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900'}`}>{availability.available ? 'Available' : `Taken by ${availability.assignee?.full_name || 'company agent'}`}</span>}
       <h3 className="line-clamp-2 text-base font-semibold text-slate-900" title={opp.title}>
         {opp.title || "Untitled"}
       </h3>
@@ -158,7 +164,7 @@ function OpportunityCard({ opp }: { opp: SamGovOpportunity }) {
   );
 }
 
-function SuggestionCard({ opp }: { opp: AiSuggestion }) {
+function SuggestionCard({ opp, availability }: { opp: AiSuggestion; availability?: OpportunityAvailability }) {
   const [expanded, setExpanded] = useState(false);
   const locationStr = opp.location
     ? `${opp.location.city?.name || ""}${opp.location.city?.name && opp.location.state?.name ? ", " : ""}${opp.location.state?.name || ""}`
@@ -168,6 +174,7 @@ function SuggestionCard({ opp }: { opp: AiSuggestion }) {
     <article className="flex flex-col rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md">
       <div className="flex items-start justify-between gap-2 mb-2">
         <ScoreBadge score={opp.fitScore} />
+        {availability && <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${availability.available ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900'}`}>{availability.available ? 'Available' : 'Taken'}</span>}
       </div>
       <h3 className="line-clamp-2 text-base font-semibold text-slate-900" title={opp.title}>
         {opp.title || "Untitled"}
@@ -280,6 +287,7 @@ export default function SamGovPage() {
   const router = useRouter();
   const [authChecked, setAuthChecked] = useState(false);
   const [allOpportunities, setAllOpportunities] = useState<SamGovOpportunity[]>([]);
+  const [availabilityById, setAvailabilityById] = useState<Record<string, OpportunityAvailability>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("opportunities");
@@ -332,6 +340,15 @@ export default function SamGovPage() {
         }
         const data: SamGovOpportunity[] = await res.json();
         setAllOpportunities(data);
+        const availabilityResponse = await fetch('/api/backend/opportunities/availability', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ opportunities: data.slice(0, 1000).map((item) => ({ external_notice_id: item.id, solicitation_number: item.solicitationNumber || item.id, source: 'SAM.GOV' })) }),
+        });
+        if (availabilityResponse.ok) {
+          const availabilityData = await availabilityResponse.json();
+          setAvailabilityById(Object.fromEntries((availabilityData.opportunities || []).map((item: OpportunityAvailability & { external_notice_id: string }) => [item.external_notice_id, item])));
+        }
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to load opportunities");
       } finally {
@@ -454,7 +471,7 @@ export default function SamGovPage() {
       if (selectedCountry !== "all" && opp.location?.country?.name !== selectedCountry) return false;
 
       if (activeOnly) {
-        const isActive = closingDate ? closingDate >= today : false;
+        const isActive = opp.active ?? (closingDate ? closingDate >= today : false);
         if (!isActive) return false;
       }
 
@@ -690,7 +707,7 @@ export default function SamGovPage() {
                 <>
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                     {filteredOpportunities.map((opp, i) => (
-                      <OpportunityCard key={opp.id || `opp-${i}`} opp={opp} />
+                      <OpportunityCard key={opp.id || `opp-${i}`} opp={opp} availability={availabilityById[opp.id]} />
                     ))}
                   </div>
                   <p className="mt-4 text-center text-sm text-slate-500">
@@ -762,7 +779,7 @@ export default function SamGovPage() {
                 <>
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                     {aiSuggestions.map((opp, i) => (
-                      <SuggestionCard key={opp.id || `ai-${i}`} opp={opp} />
+                      <SuggestionCard key={opp.id || `ai-${i}`} opp={opp} availability={availabilityById[opp.id]} />
                     ))}
                   </div>
                   <p className="mt-4 text-center text-sm text-slate-500">
