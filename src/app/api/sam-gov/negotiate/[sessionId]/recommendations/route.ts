@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { BACKEND_URL } from '@/lib/backend-config';
+import { backendAuthHeaders } from '@/lib/backend-auth';
 
 export async function GET(
   request: NextRequest,
@@ -11,9 +12,7 @@ export async function GET(
     
     const response = await fetch(`${BACKEND_URL}/api/negotiate/${sessionId}/recommendations${suffix}`, {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: backendAuthHeaders(request),
     });
 
     if (!response.ok) {

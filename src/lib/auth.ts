@@ -7,8 +7,13 @@ export interface AuthUser {
   job_title?: string | null;
   title?: string | null;
   phone?: string | null;
-  role: "admin" | "member";
+  role: "admin" | "agent";
   company_id: number;
+  is_active?: boolean;
+  employment_start_date?: string | null;
+  monthly_goal?: number;
+  active_bid_limit?: number;
+  dollar_ceiling?: number;
   company_name?: string;
   company?: {
     id: number;

@@ -15,6 +15,10 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Users,
+  ClipboardCheck,
+  CircleDollarSign,
+  UserRoundSearch,
+  BadgeCheck,
 } from "lucide-react";
 import { clearStoredUser, getStoredUser, type AuthUser } from "@/lib/auth";
 
@@ -27,6 +31,11 @@ const navItems = [
 ];
 
 const adminItems = [
+  { href: "/work-management", label: "Work management", icon: ClipboardCheck },
+  { href: "/pipeline", label: "Pipeline", icon: FileSpreadsheet },
+  { href: "/by-person", label: "By person", icon: UserRoundSearch },
+  { href: "/hundred-k", label: "$100k+", icon: CircleDollarSign },
+  { href: "/approvals", label: "Approvals", icon: BadgeCheck },
   { href: "/bid-history", label: "Bid history", icon: History },
   { href: "/stats", label: "Stats", icon: BarChart3 },
   { href: "/team", label: "Team", icon: Users },
@@ -42,7 +51,8 @@ export default function Sidebar() {
     setUser(getStoredUser());
   }, []);
 
-  const handleSignOut = () => {
+  const handleSignOut = async () => {
+    await fetch("/api/backend/auth/logout", { method: "POST" }).catch(() => undefined);
     clearStoredUser();
     router.replace("/login");
   };
@@ -68,7 +78,7 @@ export default function Sidebar() {
       {/* Navigation */}
       <nav className="flex-1 p-2">
         <div className="space-y-1">
-        {navItems.map((item) => {
+        {navItems.filter((item) => user?.role !== "admin" || item.href !== "/my-bids").map((item) => {
           const isActive = pathname === item.href;
           const Icon = item.icon;
           return (

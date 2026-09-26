@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { BACKEND_URL } from '@/lib/backend-config';
+import { backendAuthHeaders } from '@/lib/backend-auth';
 
 export async function GET(
   request: NextRequest,
@@ -9,6 +10,7 @@ export async function GET(
     const { sessionId } = await params
     const suffix = request.nextUrl.search || '';
     const response = await fetch(`${BACKEND_URL}/api/negotiate/${sessionId}${suffix}`, {
+      headers: backendAuthHeaders(request),
       cache: 'no-store',
     });
 

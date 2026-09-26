@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { BACKEND_URL } from "@/lib/backend-config";
+import { backendAuthHeaders } from "@/lib/backend-auth";
 
 export async function GET(request: NextRequest) {
   try {
@@ -14,7 +15,7 @@ export async function GET(request: NextRequest) {
       `${BACKEND_URL}/api/team${suffix}`,
       {
         method: "GET",
-        headers: { "Content-Type": "application/json" },
+        headers: backendAuthHeaders(request),
         cache: "no-store",
       }
     );
@@ -46,7 +47,7 @@ export async function POST(request: NextRequest) {
 
     const response = await fetch(`${BACKEND_URL}/api/team/invites`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: backendAuthHeaders(request),
       body: JSON.stringify(payload),
     });
 

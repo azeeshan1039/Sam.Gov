@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+export const dynamic = 'force-dynamic';
 import { BACKEND_URL } from '@/lib/backend-config';
 
 export const maxDuration = 60;

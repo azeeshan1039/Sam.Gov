@@ -254,6 +254,8 @@ function mapApiOpportunity(apiOpp: any): SamGovOpportunity {
 
   return {
     id: apiOpp.noticeId,
+    solicitationNumber: apiOpp.solicitationNumber || apiOpp.noticeId,
+    active: typeof apiOpp.active === 'boolean' ? apiOpp.active : undefined,
     title: apiOpp.title || 'N/A',
     ncode: ncodeString || 'N/A',
     department: department,

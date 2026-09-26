@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Handshake, ArrowRight, TrendingUp, TrendingDown, Loader2 } from "lucide-react";
+import { Handshake, ArrowRight, TrendingUp, TrendingDown, Loader2, Trophy, AlertTriangle, ShieldCheck } from "lucide-react";
 import { getStoredUser } from "@/lib/auth";
 
 const DashboardChart = dynamic(() => import("@/components/DashboardChart"), {
@@ -37,8 +37,12 @@ export default function DashboardPage() {
   const [authChecked, setAuthChecked] = useState(false);
   const [userId, setUserId] = useState<number | null>(null);
   const [companyId, setCompanyId] = useState<number | null>(null);
+  const [role, setRole] = useState<"admin" | "agent" | null>(null);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [leaderboard, setLeaderboard] = useState<Array<{ rank: number; user_id: number; name: string; amount: number; bid_count: number }>>([]);
+  const [duplicateFlags, setDuplicateFlags] = useState<Array<{ id: number; solicitation_number: string; attempted_by?: { full_name: string }; existing_agent?: { full_name: string }; detected_at: string }>>([]);
+  const [rosterRules, setRosterRules] = useState<Array<{ id: number; full_name: string; active_bid_limit: number; dollar_ceiling: number; is_active: boolean; role: string }>>([]);
 
   useEffect(() => {
     const user = getStoredUser();
@@ -48,6 +52,7 @@ export default function DashboardPage() {
     }
     setUserId(user.id);
     setCompanyId(user.company_id);
+    setRole(user.role);
     setAuthChecked(true);
   }, [router]);
 
@@ -66,6 +71,25 @@ export default function DashboardPage() {
           const data = await res.json();
           setStats(data.stats);
         }
+        const leaderboardResponse = await fetch('/api/backend/stats/leaderboard', { cache: 'no-store' });
+        if (leaderboardResponse.ok) {
+          const leaderboardData = await leaderboardResponse.json();
+          setLeaderboard(leaderboardData.leaderboard || []);
+        }
+        if (role === 'admin') {
+          const [flagsResponse, teamResponse] = await Promise.all([
+            fetch('/api/backend/opportunities/duplicates', { cache: 'no-store' }),
+            fetch('/api/backend/auth/team', { cache: 'no-store' }),
+          ]);
+          if (flagsResponse.ok) {
+            const flagsData = await flagsResponse.json();
+            setDuplicateFlags(flagsData.incidents || []);
+          }
+          if (teamResponse.ok) {
+            const teamData = await teamResponse.json();
+            setRosterRules((teamData.members || []).filter((member: { role: string }) => member.role === 'agent'));
+          }
+        }
       } catch (err) {
         console.error("Failed to fetch dashboard stats:", err);
       } finally {
@@ -73,7 +97,7 @@ export default function DashboardPage() {
       }
     };
     fetchStats();
-  }, [authChecked, companyId, userId]);
+  }, [authChecked, companyId, role, userId]);
 
   const formatCurrency = (value: number) => {
     if (value >= 1000000) {
@@ -128,9 +152,13 @@ export default function DashboardPage() {
   return (
     <div className="p-6 lg:p-8">
       <header className="mb-8">
-        <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
+        <h1 className="text-2xl font-bold text-slate-900">
+          {role === "agent" ? "My dashboard" : "Company dashboard"}
+        </h1>
         <p className="text-slate-600 mt-1">
-          Overview of government contract opportunities
+          {role === "agent"
+            ? "Your government contract opportunities and progress"
+            : "Company-wide government contract opportunities and team performance"}
         </p>
       </header>
 
@@ -195,6 +223,22 @@ export default function DashboardPage() {
             );
           })
         )}
+      </section>
+
+      {role === 'admin' && <section className="mb-8 grid gap-6 lg:grid-cols-2">
+        <div className="rounded-xl border border-amber-200 bg-white p-5 shadow-sm">
+          <div className="mb-3 flex items-center justify-between"><h2 className="flex items-center gap-2 text-lg font-semibold"><AlertTriangle className="h-5 w-5 text-amber-500" />Duplicate flags</h2><Link href="/work-management" className="text-sm font-medium text-blue-600 hover:underline">Review all</Link></div>
+          {duplicateFlags.length ? <div className="space-y-2">{duplicateFlags.slice(0, 4).map((flag) => <div key={flag.id} className="rounded-md border bg-amber-50/60 p-3"><p className="font-medium">{flag.solicitation_number}</p><p className="text-xs text-slate-600">{flag.attempted_by?.full_name || 'Unknown'} attempted work owned by {flag.existing_agent?.full_name || 'Unknown'} · {new Date(flag.detected_at).toLocaleString()}</p></div>)}</div> : <p className="text-sm text-slate-500">No unresolved duplicate flags.</p>}
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-3 flex items-center justify-between"><h2 className="flex items-center gap-2 text-lg font-semibold"><ShieldCheck className="h-5 w-5 text-blue-600" />Pickup rules</h2><Link href="/team" className="text-sm font-medium text-blue-600 hover:underline">Edit roster</Link></div>
+          {rosterRules.length ? <div className="space-y-2">{rosterRules.map((member) => <div key={member.id} className="flex items-center justify-between rounded-md border p-3 text-sm"><div><span className="font-medium">{member.full_name}</span>{!member.is_active && <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">Inactive</span>}</div><div className="text-right text-xs text-slate-600">{member.active_bid_limit} active bids · {formatCurrency(member.dollar_ceiling)}</div></div>)}</div> : <p className="text-sm text-slate-500">No agents configured.</p>}
+        </div>
+      </section>}
+
+      <section className="mb-8 rounded-xl border border-slate-200/80 bg-white p-5 shadow-sm">
+        <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-slate-900"><Trophy className="h-5 w-5 text-amber-500" />Agent leaderboard</h2>
+        {leaderboard.length ? <div className="grid gap-3 sm:grid-cols-3">{leaderboard.slice(0, 3).map((entry) => <div key={entry.user_id} className="rounded-lg border bg-slate-50 p-3"><div className="text-xs font-semibold uppercase text-slate-500">#{entry.rank}</div><div className="font-semibold">{entry.name}</div><div className="text-sm text-slate-600">{entry.bid_count} bids · {formatCurrency(entry.amount)}</div></div>)}</div> : <p className="text-sm text-slate-500">No submitted agent bids for this month yet.</p>}
       </section>
 
       {/* Charts */}
