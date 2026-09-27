@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { BACKEND_URL } from "@/lib/backend-config";
+import { backendAuthHeaders } from "@/lib/backend-auth";
+
+export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   try {
@@ -7,7 +10,7 @@ export async function GET(request: NextRequest) {
     const url = `${BACKEND_URL}/api/pipeline/history${suffix}`;
     const response = await fetch(url, {
       method: "GET",
-      headers: { "Content-Type": "application/json" },
+      headers: backendAuthHeaders(request),
       cache: "no-store",
     });
     const data = await response.json().catch(() => ({}));
