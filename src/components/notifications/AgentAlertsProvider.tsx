@@ -79,10 +79,15 @@ export function AgentAlertsProvider({
   return <AgentAlertsContext.Provider value={value}>{children}</AgentAlertsContext.Provider>;
 }
 
+const EMPTY_ALERTS: AgentAlertsContextValue = {
+  alerts: [],
+  unreadCount: 0,
+  loading: false,
+  error: null,
+  refresh: async () => {},
+  markRead: async () => {},
+};
+
 export function useAgentAlerts() {
-  const value = useContext(AgentAlertsContext);
-  if (!value) {
-    throw new Error("useAgentAlerts must be used inside AgentAlertsProvider");
-  }
-  return value;
+  return useContext(AgentAlertsContext) ?? EMPTY_ALERTS;
 }

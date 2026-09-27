@@ -14,6 +14,7 @@ const router = { replace, push: jest.fn(), back: jest.fn() };
 jest.mock("next/navigation", () => ({
   usePathname: () => "/",
   useRouter: () => router,
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 jest.mock("next/dynamic", () => () => {
@@ -123,6 +124,17 @@ describe("KAN-18, KAN-19, and KAN-22 dashboard views", () => {
           }],
         });
       }
+      if (url.includes("opportunities/stale")) {
+        return response({
+          bids: [{
+            claim_id: 4,
+            solicitation_number: "SOL-STALE",
+            title: "Idle bid",
+            assignee: { full_name: "Agent One" },
+            last_status_at: "2026-09-20T12:00:00Z",
+          }],
+        });
+      }
       if (url.includes("auth/team")) {
         return response({
           members: [{
@@ -144,6 +156,7 @@ describe("KAN-18, KAN-19, and KAN-22 dashboard views", () => {
     expect(await screen.findByText("SOL-100")).toBeInTheDocument();
     expect(screen.getByText("3 active bids · $250.0K")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Review all" })).toHaveAttribute("href", "/work-management");
+    expect(await screen.findByText("SOL-STALE")).toBeInTheDocument();
   });
 
   test("agent dashboard stays personal and does not request or render admin rules", async () => {

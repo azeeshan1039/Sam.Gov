@@ -25,6 +25,7 @@ interface ActiveClaim {
   expected_bid_value?: number | null;
   response_deadline?: string | null;
   state: string;
+  stale?: boolean;
 }
 
 export default function MyBidsPage() {
@@ -182,6 +183,11 @@ export default function MyBidsPage() {
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-3 text-sm">
+                    {claim.stale && (
+                      <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+                        Stale
+                      </span>
+                    )}
                     <span className="font-medium">
                       {claim.expected_bid_value == null
                         ? "Value not set"

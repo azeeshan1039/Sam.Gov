@@ -42,6 +42,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [leaderboard, setLeaderboard] = useState<Array<{ rank: number; user_id: number; name: string; amount: number; bid_count: number }>>([]);
   const [duplicateFlags, setDuplicateFlags] = useState<Array<{ id: number; solicitation_number: string; attempted_by?: { full_name: string }; existing_agent?: { full_name: string }; detected_at: string }>>([]);
+  const [staleFlags, setStaleFlags] = useState<Array<{ claim_id: number; solicitation_number: string | null; title: string; assignee?: { full_name: string }; last_status_at: string | null }>>([]);
   const [rosterRules, setRosterRules] = useState<Array<{ id: number; full_name: string; active_bid_limit: number; dollar_ceiling: number; is_active: boolean; role: string }>>([]);
 
   useEffect(() => {
@@ -77,13 +78,18 @@ export default function DashboardPage() {
           setLeaderboard(leaderboardData.leaderboard || []);
         }
         if (role === 'admin') {
-          const [flagsResponse, teamResponse] = await Promise.all([
+          const [flagsResponse, staleResponse, teamResponse] = await Promise.all([
             fetch('/api/backend/opportunities/duplicates', { cache: 'no-store' }),
+            fetch('/api/backend/opportunities/stale', { cache: 'no-store' }),
             fetch('/api/backend/auth/team', { cache: 'no-store' }),
           ]);
           if (flagsResponse.ok) {
             const flagsData = await flagsResponse.json();
             setDuplicateFlags(flagsData.incidents || []);
+          }
+          if (staleResponse.ok) {
+            const staleData = await staleResponse.json();
+            setStaleFlags(staleData.bids || []);
           }
           if (teamResponse.ok) {
             const teamData = await teamResponse.json();
@@ -229,6 +235,10 @@ export default function DashboardPage() {
         <div className="rounded-xl border border-amber-200 bg-white p-5 shadow-sm">
           <div className="mb-3 flex items-center justify-between"><h2 className="flex items-center gap-2 text-lg font-semibold"><AlertTriangle className="h-5 w-5 text-amber-500" />Duplicate flags</h2><Link href="/work-management" className="text-sm font-medium text-blue-600 hover:underline">Review all</Link></div>
           {duplicateFlags.length ? <div className="space-y-2">{duplicateFlags.slice(0, 4).map((flag) => <div key={flag.id} className="rounded-md border bg-amber-50/60 p-3"><p className="font-medium">{flag.solicitation_number}</p><p className="text-xs text-slate-600">{flag.attempted_by?.full_name || 'Unknown'} attempted work owned by {flag.existing_agent?.full_name || 'Unknown'} · {new Date(flag.detected_at).toLocaleString()}</p></div>)}</div> : <p className="text-sm text-slate-500">No unresolved duplicate flags.</p>}
+        </div>
+        <div id="stale-flags" className="rounded-xl border border-amber-200 bg-white p-5 shadow-sm">
+          <div className="mb-3"><h2 className="flex items-center gap-2 text-lg font-semibold"><AlertTriangle className="h-5 w-5 text-amber-500" />Stale bids</h2></div>
+          {staleFlags.length ? <div className="space-y-2">{staleFlags.slice(0, 4).map((flag) => <div key={flag.claim_id} className="rounded-md border bg-amber-50/60 p-3"><p className="font-medium">{flag.solicitation_number || flag.title}</p><p className="text-xs text-slate-600">{flag.assignee?.full_name || 'Unknown'} · no status change since {flag.last_status_at ? new Date(flag.last_status_at).toLocaleString() : 'pickup'}</p></div>)}</div> : <p className="text-sm text-slate-500">No stale bids.</p>}
         </div>
         <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-3 flex items-center justify-between"><h2 className="flex items-center gap-2 text-lg font-semibold"><ShieldCheck className="h-5 w-5 text-blue-600" />Pickup rules</h2><Link href="/team" className="text-sm font-medium text-blue-600 hover:underline">Edit roster</Link></div>

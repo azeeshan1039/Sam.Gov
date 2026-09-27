@@ -329,6 +329,7 @@ export default function SamGovPage() {
   }, [router]);
 
   useEffect(() => {
+    let cancelled = false;
     const fetchData = async () => {
       setLoading(true);
       setError(null);
@@ -339,23 +340,34 @@ export default function SamGovPage() {
           throw new Error(errData.error || `Request failed (${res.status})`);
         }
         const data: SamGovOpportunity[] = await res.json();
+        if (cancelled) return;
         setAllOpportunities(data);
+        setLoading(false);
+        if (data.length === 0) return;
         const availabilityResponse = await fetch('/api/backend/opportunities/availability', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ opportunities: data.slice(0, 1000).map((item) => ({ external_notice_id: item.id, solicitation_number: item.solicitationNumber || item.id, source: 'SAM.GOV' })) }),
+          body: JSON.stringify({
+            opportunities: data.slice(0, 1000).map((item) => ({
+              external_notice_id: item.id,
+              solicitation_number: item.solicitationNumber || item.id,
+              source: 'SAM.GOV',
+            })),
+          }),
         });
-        if (availabilityResponse.ok) {
-          const availabilityData = await availabilityResponse.json();
-          setAvailabilityById(Object.fromEntries((availabilityData.opportunities || []).map((item: OpportunityAvailability & { external_notice_id: string }) => [item.external_notice_id, item])));
-        }
+        if (cancelled || !availabilityResponse.ok) return;
+        const availabilityData = await availabilityResponse.json();
+        setAvailabilityById(Object.fromEntries((availabilityData.opportunities || []).map((item: OpportunityAvailability & { external_notice_id: string }) => [item.external_notice_id, item])));
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to load opportunities");
+        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load opportunities");
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
     fetchData();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Load cached AI suggestions from localStorage on mount
