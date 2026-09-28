@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { BACKEND_URL } from '@/lib/backend-config';
+import { backendAuthHeaders } from '@/lib/backend-auth';
 
 export const maxDuration = 120;
 
@@ -32,7 +33,7 @@ export async function POST(request: NextRequest) {
         `${BACKEND_URL}/api/sam-gov/negotiate`,
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: backendAuthHeaders(request),
           body: JSON.stringify(body),
         },
         FETCH_TIMEOUT_MS,

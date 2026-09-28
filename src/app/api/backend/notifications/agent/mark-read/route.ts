@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { BACKEND_URL } from "@/lib/backend-config";
+import { backendAuthHeaders } from "@/lib/backend-auth";
+
+export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
   try {
@@ -8,7 +11,7 @@ export async function POST(request: NextRequest) {
     const url = `${BACKEND_URL}/api/notifications/agent/mark-read${suffix}`;
     const response = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: backendAuthHeaders(request),
       body: JSON.stringify(body),
       cache: "no-store",
     });

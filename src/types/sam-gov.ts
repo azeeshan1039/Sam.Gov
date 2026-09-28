@@ -7,6 +7,10 @@ export interface SamGovOpportunity {
    * The unique identifier for the opportunity.
    */
   id: string;
+  /** Solicitation number used for company-wide duplicate detection. */
+  solicitationNumber?: string;
+  /** Whether SAM.gov marks the notice active. */
+  active?: boolean;
   /**
    * The title or description of the opportunity.
    */
