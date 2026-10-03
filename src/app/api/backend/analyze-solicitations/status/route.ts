@@ -16,6 +16,7 @@ export async function GET(request: Request) {
         const response = await fetch(`${BACKEND_URL}/analyze-solicitations/status/${jobId}`, {
             method: 'GET',
             headers: { 'Content-Type': 'application/json' },
+            cache: 'no-store',
         });
 
         if (!response.ok) {
@@ -27,7 +28,9 @@ export async function GET(request: Request) {
         }
 
         const data = await response.json();
-        return NextResponse.json(data);
+        return NextResponse.json(data, {
+            headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' },
+        });
     } catch (error: any) {
         console.error('Error polling analysis status:', error);
         return NextResponse.json(

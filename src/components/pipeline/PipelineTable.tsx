@@ -1,10 +1,12 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import Link from "next/link";
 import {
   formatDate,
   formatMoney,
   formatOutcome,
   formatStatus,
   hundredKRowClass,
+  statusStyle,
   type PipelineItem,
 } from "@/lib/pipeline";
 
@@ -33,8 +35,11 @@ const sheetCell = "whitespace-nowrap";
 type Variant = "full" | "hundred-k" | "person" | "my-bids" | "history";
 
 function bidPrice(row: PipelineItem) {
-  if (row.gross_sales != null) return row.gross_sales;
-  return row.cost;
+  return row.submitted_price ?? row.expected_submitted_price;
+}
+
+function StatusBadge({ status }: { status: string }) {
+  return <span className="inline-flex rounded-full px-2 py-1 text-xs font-semibold" style={statusStyle(status)}>{formatStatus(status)}</span>;
 }
 
 export function PipelineTable({
@@ -73,7 +78,7 @@ export function PipelineTable({
               </TableCell>
               <TableCell>{row.title || "—"}</TableCell>
               <TableCell className="whitespace-nowrap">{formatDate(row.due_date)}</TableCell>
-              <TableCell className="whitespace-nowrap">{formatStatus(row.internal_status)}</TableCell>
+              <TableCell className="whitespace-nowrap"><StatusBadge status={row.internal_status} /></TableCell>
             </TableRow>
           ))}
         </TableBody>
@@ -101,15 +106,15 @@ export function PipelineTable({
         <TableBody>
           {items.map((row) => (
             <TableRow key={row.id}>
-              <TableCell className="whitespace-nowrap">{formatStatus(row.internal_status)}</TableCell>
-              <TableCell className="font-medium whitespace-nowrap">{row.bid_id}</TableCell>
+              <TableCell className="whitespace-nowrap"><StatusBadge status={row.internal_status} /></TableCell>
+              <TableCell className="font-medium whitespace-nowrap"><Link className="text-blue-600 underline" href={`/bids/${row.id}`}>{row.bid_id}</Link></TableCell>
               <TableCell className="whitespace-nowrap">{row.solicitation_number || "—"}</TableCell>
               <TableCell>{row.title || "—"}</TableCell>
               <TableCell className="whitespace-nowrap">{row.portal || "—"}</TableCell>
               <TableCell className="whitespace-nowrap">{formatDate(row.assign_date)}</TableCell>
               <TableCell className="whitespace-nowrap">{formatDate(row.due_date)}</TableCell>
               <TableCell>{row.days_remaining ?? "—"}</TableCell>
-              <TableCell className="whitespace-nowrap">{formatMoney(row.gross_sales)}</TableCell>
+              <TableCell className="whitespace-nowrap">{formatMoney(row.submitted_price)}</TableCell>
               <TableCell>{row.approved_by_name || "—"}</TableCell>
             </TableRow>
           ))}
@@ -156,8 +161,8 @@ export function PipelineTable({
               id={`pipeline-row-${row.id}`}
               className={highlightId === row.id ? "bg-amber-100" : undefined}
             >
-              <TableCell className={sheetCell}>{formatStatus(row.internal_status)}</TableCell>
-              <TableCell className={`font-medium ${sheetCell}`}>{row.bid_id}</TableCell>
+              <TableCell className={sheetCell}><StatusBadge status={row.internal_status} /></TableCell>
+              <TableCell className={`font-medium ${sheetCell}`}><Link className="text-blue-600 underline" href={`/bids/${row.id}`}>{row.bid_id}</Link></TableCell>
               <TableCell className={sheetCell}>{dash(row.solicitation_number)}</TableCell>
               <TableCell className="min-w-[12rem]">{dash(row.title)}</TableCell>
               <TableCell className={sheetCell}>{dash(row.manufacturer)}</TableCell>
@@ -175,9 +180,9 @@ export function PipelineTable({
               <TableCell className={sheetCell}>
                 <SheetLink href={row.final_quote_url} />
               </TableCell>
-              <TableCell className={sheetCell}>{formatMoney(row.cost)}</TableCell>
-              <TableCell className={sheetCell}>{formatMoney(row.markup_amount)}</TableCell>
-              <TableCell className={sheetCell}>{formatMoney(row.gross_sales)}</TableCell>
+              <TableCell className={sheetCell}>{formatMoney(row.supplier_cost)}</TableCell>
+              <TableCell className={sheetCell}>{row.markup_percent == null ? "—" : `${row.markup_percent.toFixed(2)}%`}</TableCell>
+              <TableCell className={sheetCell}>{formatMoney(row.submitted_price)}</TableCell>
               <TableCell className={sheetCell}>{formatMoney(row.gross_profit)}</TableCell>
               <TableCell className={sheetCell}>{formatStatus(row.approval_status)}</TableCell>
               <TableCell className={sheetCell}>{dash(row.co_name)}</TableCell>
@@ -214,7 +219,7 @@ export function PipelineTable({
               <TableCell className="min-w-[12rem]">{dash(row.title)}</TableCell>
               <TableCell className="whitespace-nowrap">{dash(row.portal)}</TableCell>
               <TableCell className="whitespace-nowrap">{dash(row.agent_name)}</TableCell>
-              <TableCell className="whitespace-nowrap">{formatStatus(row.internal_status)}</TableCell>
+              <TableCell className="whitespace-nowrap"><StatusBadge status={row.internal_status} /></TableCell>
               <TableCell className="whitespace-nowrap">{formatMoney(bidPrice(row))}</TableCell>
               <TableCell className="whitespace-nowrap">{formatDate(row.assign_date)}</TableCell>
               <TableCell className="whitespace-nowrap">{formatDate(row.due_date)}</TableCell>
@@ -246,16 +251,16 @@ export function PipelineTable({
       <TableBody>
         {items.map((row) => (
           <TableRow key={row.id}>
-            <TableCell className="font-medium whitespace-nowrap">{row.bid_id}</TableCell>
+            <TableCell className="font-medium whitespace-nowrap"><Link className="text-blue-600 underline" href={`/bids/${row.id}`}>{row.bid_id}</Link></TableCell>
             <TableCell className="whitespace-nowrap">{row.solicitation_number || "—"}</TableCell>
             <TableCell className="whitespace-nowrap">{row.portal || "—"}</TableCell>
             <TableCell>{row.title || "—"}</TableCell>
-            <TableCell className="whitespace-nowrap">{formatMoney(row.cost)}</TableCell>
-            <TableCell className="whitespace-nowrap">{formatMoney(row.gross_sales)}</TableCell>
+            <TableCell className="whitespace-nowrap">{formatMoney(row.supplier_cost)}</TableCell>
+            <TableCell className="whitespace-nowrap">{formatMoney(row.submitted_price)}</TableCell>
             <TableCell className="whitespace-nowrap">{formatMoney(row.gross_profit)}</TableCell>
             <TableCell className="whitespace-nowrap">{formatDate(row.assign_date || row.due_date)}</TableCell>
             <TableCell>{row.agent_name || "—"}</TableCell>
-            <TableCell className="whitespace-nowrap">{formatStatus(row.internal_status)}</TableCell>
+            <TableCell className="whitespace-nowrap"><StatusBadge status={row.internal_status} /></TableCell>
             <TableCell>{row.approved_by_name || "—"}</TableCell>
           </TableRow>
         ))}

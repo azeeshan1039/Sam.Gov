@@ -16,12 +16,10 @@ import Link from 'next/link';
 import { FileText } from 'lucide-react';
 import DOMPurify from 'dompurify';
 import { getStoredUser, type AuthUser } from '@/lib/auth';
-
-interface Availability {
-  available: boolean;
-  tracked_opportunity_id?: number | null;
-  assignee?: { id: number; full_name: string } | null;
-}
+import {
+  presentOpportunityAvailability,
+  type OpportunityAvailability,
+} from '@/lib/opportunity-availability';
 
 interface AgentOption {
   id: number;
@@ -110,7 +108,7 @@ export default function SamGovOpportunityPage() {
   const [descriptionIsHtml, setDescriptionIsHtml] = useState(false);
   const [descriptionLoading, setDescriptionLoading] = useState<boolean>(false);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
-  const [availability, setAvailability] = useState<Availability | null>(null);
+  const [availability, setAvailability] = useState<OpportunityAvailability | null>(null);
   const [agents, setAgents] = useState<AgentOption[]>([]);
   const [selectedAgentId, setSelectedAgentId] = useState('');
   const [expectedBidValue, setExpectedBidValue] = useState('');
@@ -226,7 +224,7 @@ export default function SamGovOpportunityPage() {
     if (!opportunity || !currentUser) return;
     const value = Number(expectedBidValue);
     if (!Number.isFinite(value) || value < 0 || expectedBidValue.trim() === '') {
-      setClaimError('Enter the expected bid value before assigning this opportunity.');
+      setClaimError('Enter the expected submitted price before assigning this opportunity.');
       return;
     }
     if (currentUser.role === 'admin' && !selectedAgentId) {
@@ -247,7 +245,7 @@ export default function SamGovOpportunityPage() {
           title: opportunity.title,
           link: opportunity.link,
           response_deadline: opportunity.closingDate,
-          expected_bid_value: value,
+          expected_submitted_price: value,
           agent_user_id: currentUser.role === 'admin' ? Number(selectedAgentId) : undefined,
           override_limits: currentUser.role === 'admin' && overrideLimits,
           override_reason: currentUser.role === 'admin' ? overrideReason : undefined,
@@ -310,9 +308,12 @@ export default function SamGovOpportunityPage() {
   const ownedByCurrentAgent = Boolean(
     currentUser?.role === 'agent' &&
     availability &&
-    !availability.available &&
+    presentOpportunityAvailability(availability).state === 'claimed' &&
     availability.assignee?.id === currentUser.id
   );
+  const availabilityPresentation = availability
+    ? presentOpportunityAvailability(availability)
+    : null;
 
   return (
     <main className="flex-1 p-6 bg-gradient-to-br from-secondary/30 to-background animate-fadeIn">
@@ -431,14 +432,19 @@ export default function SamGovOpportunityPage() {
               <h3 className="font-semibold">Company ownership</h3>
               {!currentUser ? (
                 <p className="mt-2 text-sm text-muted-foreground">Sign in to pick up this opportunity.</p>
-              ) : availability && !availability.available ? (
+              ) : availabilityPresentation?.state === 'claimed' ? (
                 <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
-                  <p className="text-sm">Assigned to <span className="font-semibold">{availability.assignee?.full_name || 'a company agent'}</span>. Duplicate pickup is blocked.</p>
+                  <p className="text-sm">Assigned to <span className="font-semibold">{availability?.assignee?.full_name || 'a company agent'}</span>. Duplicate pickup is blocked.</p>
                   {ownedByCurrentAgent && <Button asChild size="lg"><Link href={`/sam-gov/${id}/bid-summary`}>Start Bidding Process</Link></Button>}
+                </div>
+              ) : availabilityPresentation?.state === 'terminal' ? (
+                <div className="mt-2 rounded-md border border-slate-200 bg-white p-3">
+                  <p className="text-sm font-medium">{availabilityPresentation.label}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">This opportunity is closed in the company workflow and cannot be picked up again.</p>
                 </div>
               ) : (
                 <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
-                  <div><Label>Expected bid value</Label><Input type="number" min="0" step="0.01" value={expectedBidValue} onChange={(event) => setExpectedBidValue(event.target.value)} placeholder="Required for limit checks" /></div>
+                  <div><Label>Expected submitted price</Label><Input aria-label="Expected submitted price" type="number" min="0" step="0.01" value={expectedBidValue} onChange={(event) => setExpectedBidValue(event.target.value)} placeholder="Per-bid ceiling check" /></div>
                   {currentUser.role === 'admin' ? (
                     <div><Label>Assign to agent</Label><select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={selectedAgentId} onChange={(event) => setSelectedAgentId(event.target.value)}><option value="">Select agent</option>{agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.full_name}</option>)}</select></div>
                   ) : <div className="text-sm text-muted-foreground">Pickup is first-come, first-served and checked against your active-bid and dollar limits.</div>}

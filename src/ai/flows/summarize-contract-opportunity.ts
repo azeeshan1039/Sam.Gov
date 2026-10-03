@@ -29,7 +29,8 @@ async function _pollJob(
     let statusRes: Response;
     try {
       statusRes = await fetch(
-        `/api/backend/analyze-solicitations/status?job_id=${encodeURIComponent(jobId)}`
+        `/api/backend/analyze-solicitations/status?job_id=${encodeURIComponent(jobId)}`,
+        { cache: 'no-store' },
       );
     } catch (networkErr) {
       consecutiveErrors++;

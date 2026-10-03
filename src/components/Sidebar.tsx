@@ -19,21 +19,25 @@ import {
   CircleDollarSign,
   UserRoundSearch,
   BadgeCheck,
+  Inbox,
+  CalendarDays,
 } from "lucide-react";
 import { clearStoredUser, getStoredUser, type AuthUser } from "@/lib/auth";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/sam-gov", label: "Sam.Gov", icon: Globe },
+  { href: "/unclaimed-bids", label: "Unclaimed bids", icon: Inbox },
   { href: "/contract-awards", label: "Contract Awards", icon: Award },
   { href: "/negotiations", label: "Negotiations", icon: Handshake },
   { href: "/my-bids", label: "My bids", icon: FileSpreadsheet },
+  { href: "/agent-bid-data", label: "Agent Bid Data", icon: UserRoundSearch },
+  { href: "/weekly-submissions", label: "Weekly submissions", icon: CalendarDays },
 ];
 
 const adminItems = [
   { href: "/work-management", label: "Work management", icon: ClipboardCheck },
   { href: "/pipeline", label: "Pipeline", icon: FileSpreadsheet },
-  { href: "/by-person", label: "By person", icon: UserRoundSearch },
   { href: "/hundred-k", label: "$100k+", icon: CircleDollarSign },
   { href: "/approvals", label: "Approvals", icon: BadgeCheck },
   { href: "/bid-history", label: "Bid history", icon: History },
@@ -78,7 +82,9 @@ export default function Sidebar() {
       {/* Navigation */}
       <nav className="flex-1 p-2">
         <div className="space-y-1">
-        {navItems.filter((item) => user?.role !== "admin" || item.href !== "/my-bids").map((item) => {
+        {navItems.filter((item) => user?.role === "admin"
+          ? !["/my-bids", "/unclaimed-bids"].includes(item.href)
+          : item.href !== "/sam-gov").map((item) => {
           const isActive = pathname === item.href;
           const Icon = item.icon;
           return (
@@ -104,7 +110,7 @@ export default function Sidebar() {
         {user?.role === "admin" && (
           <div className="mt-4 border-t border-slate-700/50 pt-4">
             {!collapsed && (
-              <p className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+              <p className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-300">
                 Admin
               </p>
             )}
