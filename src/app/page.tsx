@@ -251,7 +251,7 @@ export default function DashboardPage() {
           {rosterRules.length ? <div className="space-y-2">{rosterRules.map((member) => <div key={member.id} className="flex items-center justify-between rounded-md border p-3 text-sm"><div><span className="font-medium">{member.full_name}</span>{!member.is_active && <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">Inactive</span>}</div><div className="text-right text-xs text-slate-600">{member.active_bid_limit} active bids · {formatCurrency(member.dollar_ceiling)}</div></div>)}</div> : <p className="text-sm text-slate-500">No agents configured.</p>}
         </div>
         <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2">
-          <h2 className="mb-3 text-lg font-semibold">Latest status activity</h2>
+          <div className="mb-3 flex items-center justify-between gap-3"><h2 className="text-lg font-semibold">Latest status activity</h2><Link href="/activity-log" className="text-sm font-medium text-blue-600 hover:underline">View all activity</Link></div>
           {statusActivity.length ? <div className="divide-y">{statusActivity.map((event) => <Link key={event.id} href={`/bids/${event.bid_id}`} className="flex flex-wrap justify-between gap-2 py-3 text-sm hover:bg-slate-50"><span><strong>{event.solicitation_number}</strong> · {event.old_status} → {event.new_status}</span><span className="text-slate-500">{event.changed_by_name} · {new Date(event.changed_at_eastern).toLocaleString("en-US", { timeZone: "America/New_York" })}</span></Link>)}</div> : <p className="text-sm text-slate-500">No status changes yet.</p>}
         </div>
       </section>}

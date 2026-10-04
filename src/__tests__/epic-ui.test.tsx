@@ -163,6 +163,7 @@ describe("KAN-18, KAN-19, and KAN-22 dashboard views", () => {
     expect(await screen.findByText("SOL-100")).toBeInTheDocument();
     expect(screen.getByText("3 active bids · $250.0K")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Review all" })).toHaveAttribute("href", "/work-management");
+    expect(screen.getByRole("link", { name: "View all activity" })).toHaveAttribute("href", "/activity-log");
     expect(await screen.findByText("SOL-STALE")).toBeInTheDocument();
   });
 
