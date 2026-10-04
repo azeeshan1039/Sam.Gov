@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getStoredUser, type AuthUser } from "@/lib/auth";
 import { formatMoney } from "@/lib/pipeline";
-import { dateOnly, easternTodayUtc } from "@/lib/eastern-date";
+import { dateOnly, easternTodayUtc, formatUtcDateRange } from "@/lib/eastern-date";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
@@ -17,7 +17,7 @@ export default function WeeklySubmissionsPage() {
     return Array.from({ length: 13 }, (_, index) => {
       const start = new Date(current); start.setUTCDate(start.getUTCDate() - index * 7);
       const end = new Date(start); end.setUTCDate(end.getUTCDate() + 6);
-      return { value: dateOnly(start), label: `${start.toLocaleDateString()} – ${end.toLocaleDateString()}` };
+      return { value: dateOnly(start), label: formatUtcDateRange(start, end) };
     });
   }, []);
   const [weekStart, setWeekStart] = useState(weeks[0].value);

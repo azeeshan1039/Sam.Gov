@@ -10,7 +10,7 @@ import { getStoredUser, type AuthUser } from "@/lib/auth";
 import UnclaimedBidsPage from "@/app/unclaimed-bids/page";
 import BidDetailPage from "@/app/bids/[id]/page";
 import { BID_STATUSES } from "@/lib/pipeline";
-import { easternReportingRange } from "@/lib/eastern-date";
+import { easternReportingRange, formatUtcDateRange } from "@/lib/eastern-date";
 
 const replace = jest.fn();
 const router = { replace, push: jest.fn(), back: jest.fn() };
@@ -419,6 +419,22 @@ describe("KAN-48 Eastern reporting periods", () => {
     expect(easternReportingRange("today", instant)).toEqual({ from: "2026-02-28", to: "2026-02-28" });
     expect(easternReportingRange("month", instant)).toEqual({ from: "2026-02-01", to: "2026-02-28" });
     expect(easternReportingRange("week", instant)).toEqual({ from: "2026-02-23", to: "2026-02-28" });
+  });
+});
+
+describe("KAN-50 weekly labels", () => {
+  test("keeps Monday-Sunday labels on UTC calendar dates for viewers west of UTC", () => {
+    const previousTimezone = process.env.TZ;
+    process.env.TZ = "America/Los_Angeles";
+    try {
+      expect(formatUtcDateRange(
+        new Date("2026-10-05T00:00:00.000Z"),
+        new Date("2026-10-11T00:00:00.000Z"),
+      )).toBe("10/5/2026 – 10/11/2026");
+    } finally {
+      if (previousTimezone === undefined) delete process.env.TZ;
+      else process.env.TZ = previousTimezone;
+    }
   });
 });
 

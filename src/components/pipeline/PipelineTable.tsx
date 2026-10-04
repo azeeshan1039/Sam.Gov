@@ -210,6 +210,7 @@ export function PipelineTable({
             <TableHead>Assign date</TableHead>
             <TableHead>Due date</TableHead>
             <TableHead>Outcome</TableHead>
+            <TableHead>History</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -224,6 +225,7 @@ export function PipelineTable({
               <TableCell className="whitespace-nowrap">{formatDate(row.assign_date)}</TableCell>
               <TableCell className="whitespace-nowrap">{formatDate(row.due_date)}</TableCell>
               <TableCell className="whitespace-nowrap">{formatOutcome(row.outcome)}</TableCell>
+              <TableCell className="whitespace-nowrap"><Link className="text-blue-600 underline" href={`/bids/${row.id}`}>View bid history</Link></TableCell>
             </TableRow>
           ))}
         </TableBody>

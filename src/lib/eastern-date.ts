@@ -15,6 +15,16 @@ export function dateOnly(value: Date) {
   return value.toISOString().slice(0, 10);
 }
 
+export function formatUtcDateRange(start: Date, end: Date) {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: "UTC",
+    month: "numeric",
+    day: "numeric",
+    year: "numeric",
+  });
+  return `${formatter.format(start)} – ${formatter.format(end)}`;
+}
+
 export function easternReportingRange(kind: ReportingPreset, now = new Date()) {
   const end = easternTodayUtc(now);
   const start = new Date(end);
