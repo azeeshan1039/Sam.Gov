@@ -42,12 +42,20 @@ interface Incident {
   created_at: string;
   detected_at: string;
 }
+interface StaleBid {
+  claim_id: number;
+  solicitation_number: string | null;
+  title: string;
+  assignee?: Person;
+  last_status_at: string | null;
+}
 
 export default function WorkManagementPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [staleBids, setStaleBids] = useState<StaleBid[]>([]);
   const [agents, setAgents] = useState<Person[]>([]);
   const [targetByOpportunity, setTargetByOpportunity] = useState<Record<number, string>>({});
   const [reasonByOpportunity, setReasonByOpportunity] = useState<Record<number, string>>({});
@@ -59,19 +67,22 @@ export default function WorkManagementPage() {
     setLoading(true);
     setError(null);
     try {
-      const [opportunityResponse, duplicateResponse, teamResponse] = await Promise.all([
+      const [opportunityResponse, duplicateResponse, staleResponse, teamResponse] = await Promise.all([
         fetch('/api/backend/opportunities/company', { cache: 'no-store' }),
         fetch('/api/backend/opportunities/duplicates', { cache: 'no-store' }),
+        fetch('/api/backend/opportunities/stale', { cache: 'no-store' }),
         fetch('/api/backend/auth/team', { cache: 'no-store' }),
       ]);
-      const [opportunityData, duplicateData, teamData] = await Promise.all([
-        opportunityResponse.json(), duplicateResponse.json(), teamResponse.json(),
+      const [opportunityData, duplicateData, staleData, teamData] = await Promise.all([
+        opportunityResponse.json(), duplicateResponse.json(), staleResponse.json(), teamResponse.json(),
       ]);
       if (!opportunityResponse.ok) throw new Error(opportunityData.error || 'Could not load opportunity ledger');
       if (!duplicateResponse.ok) throw new Error(duplicateData.error || 'Could not load duplicate incidents');
+      if (!staleResponse.ok) throw new Error(staleData.error || 'Could not load stale bids');
       if (!teamResponse.ok) throw new Error(teamData.error || 'Could not load roster');
       setOpportunities(opportunityData.opportunities || []);
       setIncidents(duplicateData.incidents || []);
+      setStaleBids(staleData.bids || []);
       setAgents((teamData.members || []).filter((member: { role: string; is_active: boolean }) => member.role === 'agent' && member.is_active));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load work management');
@@ -92,6 +103,10 @@ export default function WorkManagementPage() {
     setReasonByOpportunity((current) => ({ ...current, [opportunityId]: '' }));
     setOverrideByOpportunity((current) => ({ ...current, [opportunityId]: false }));
   };
+  useEffect(() => {
+    if (loading || window.location.hash !== '#stale-bids') return;
+    document.getElementById('stale-bids')?.scrollIntoView();
+  }, [loading]);
 
   const reassign = async (opportunity: Opportunity) => {
     const agentId = Number(targetByOpportunity[opportunity.id]);
@@ -154,7 +169,7 @@ export default function WorkManagementPage() {
   if (loading) return <div className="space-y-5 p-6 lg:p-8"><Skeleton className="h-9 w-64" /><Skeleton className="h-80 w-full" /></div>;
 
   return <div className="space-y-6 p-6 lg:p-8">
-    <div><h1 className="flex items-center gap-2 text-2xl font-bold"><ClipboardCheck className="h-6 w-6" />Work management</h1><p className="mt-1 text-muted-foreground">Company-wide ownership, reassignment, pool returns, and duplicate resolution.</p></div>
+    <div><h1 className="flex items-center gap-2 text-2xl font-bold"><ClipboardCheck className="h-6 w-6" />Work management</h1><p className="mt-1 text-muted-foreground">Company-wide ownership, reassignment, pool returns, duplicate resolution, and stale bids.</p></div>
     {error && <div className="rounded border border-destructive bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
     <Card><CardHeader><CardTitle>Tracked opportunities</CardTitle><CardDescription>SAM.gov stays the source catalog; this ledger stores only company workflow state and immutable assignment history.</CardDescription></CardHeader><CardContent className="overflow-x-auto">
       <Table><TableHeader><TableRow><TableHead>Opportunity</TableHead><TableHead>Value</TableHead><TableHead>State</TableHead><TableHead>Owner</TableHead><TableHead>Manager action</TableHead></TableRow></TableHeader>
@@ -175,6 +190,8 @@ export default function WorkManagementPage() {
         </TableRow>) : <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">No opportunities have been picked up yet.</TableCell></TableRow>}</TableBody>
       </Table>
     </CardContent></Card>
+
+    <Card id="stale-bids"><CardHeader><CardTitle className="flex items-center gap-2"><AlertTriangle className="h-5 w-5" />Stale bids</CardTitle><CardDescription>Assigned bids with no status change for 3 days. The list clears when the internal status changes.</CardDescription></CardHeader><CardContent className="space-y-3">{staleBids.length ? staleBids.map((bid) => <div key={bid.claim_id} className="rounded border p-3"><p className="font-medium">{bid.solicitation_number || bid.title}</p><p className="text-sm text-muted-foreground">{bid.title}</p><p className="text-xs text-muted-foreground">{bid.assignee?.full_name || 'Unknown'} · no status change since {bid.last_status_at ? new Date(bid.last_status_at).toLocaleString() : 'pickup'}</p></div>) : <p className="text-sm text-muted-foreground">No stale bids.</p>}</CardContent></Card>
 
     <Card><CardHeader><CardTitle className="flex items-center gap-2"><AlertTriangle className="h-5 w-5" />Unresolved duplicate flags</CardTitle><CardDescription>Every blocked pickup is retained for manager review. Resolved items leave this panel.</CardDescription></CardHeader><CardContent className="space-y-3">{incidents.length ? incidents.map((incident) => <div key={incident.id} className="rounded border p-3"><div className="flex flex-wrap justify-between gap-2"><div><p className="font-medium">Solicitation {incident.solicitation_number}</p><p className="text-sm text-muted-foreground">Attempted by {incident.attempted_by?.full_name || 'Unknown'}; owned by {incident.existing_agent?.full_name || 'Unknown'}</p><p className="text-xs text-muted-foreground">Detected {new Date(incident.detected_at || incident.created_at).toLocaleString()}</p></div><span className="text-sm capitalize">{incident.status}</span></div><div className="mt-3 flex gap-2"><Input placeholder="Resolution note" value={resolutionByIncident[incident.id] || ''} onChange={(event) => setResolutionByIncident({ ...resolutionByIncident, [incident.id]: event.target.value })} /><Button onClick={() => resolveIncident(incident)}>Resolve</Button></div></div>) : <p className="text-sm text-muted-foreground">No unresolved duplicate flags.</p>}</CardContent></Card>
   </div>;

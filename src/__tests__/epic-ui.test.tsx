@@ -162,7 +162,11 @@ describe("KAN-18, KAN-19, and KAN-22 dashboard views", () => {
     expect(await screen.findByRole("heading", { name: "Company dashboard" })).toBeInTheDocument();
     expect(await screen.findByText("SOL-100")).toBeInTheDocument();
     expect(screen.getByText("3 active bids · $250.0K")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Review all" })).toHaveAttribute("href", "/work-management");
+    const reviewLinks = screen.getAllByRole("link", { name: "Review all" });
+    expect(reviewLinks.map((link) => link.getAttribute("href"))).toEqual([
+        "/work-management",
+        "/work-management#stale-bids",
+      ]);
     expect(screen.getByRole("link", { name: "View all activity" })).toHaveAttribute("href", "/activity-log");
     expect(await screen.findByText("SOL-STALE")).toBeInTheDocument();
   });
@@ -341,6 +345,17 @@ describe("KAN-40 manager duplicate resolution", () => {
           }],
         });
       }
+      if (url.includes("opportunities/stale")) {
+        return response({
+          bids: [{
+            claim_id: 9,
+            solicitation_number: "SOL-STALE",
+            title: "Idle bid",
+            assignee: { id: 2, full_name: "Agent One" },
+            last_status_at: "2026-09-20T12:00:00Z",
+          }],
+        });
+      }
       if (url.includes("opportunities/company")) return response({ opportunities: [] });
       if (url.includes("auth/team")) return response({ members: [] });
       throw new Error(`Unexpected request: ${url}`);
@@ -349,8 +364,9 @@ describe("KAN-40 manager duplicate resolution", () => {
     const user = userEvent.setup();
 
     render(<WorkManagementPage />);
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4));
     await waitFor(() => expect(document.body.innerHTML).toContain("SOL-44"));
+    expect(screen.getByText("SOL-STALE")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Resolve" }));
     expect(await screen.findByText("Enter a resolution note.")).toBeInTheDocument();
 
