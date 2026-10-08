@@ -11,6 +11,15 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 interface Person { id: number; full_name: string; email?: string }
+interface AssignmentHistoryEvent {
+  id: number;
+  agent?: Person | null;
+  actor?: Person | null;
+  action: string;
+  reason?: string | null;
+  limit_override: boolean;
+  started_at: string;
+}
 interface Opportunity {
   id: number;
   source: string;
@@ -20,6 +29,7 @@ interface Opportunity {
   expected_bid_value?: number;
   state: string;
   assignee?: Person | null;
+  assignment_history?: AssignmentHistoryEvent[];
 }
 interface Incident {
   id: number;
@@ -88,6 +98,11 @@ export default function WorkManagementPage() {
     void load();
   }, [load, router]);
 
+  const clearActionControls = (opportunityId: number) => {
+    setTargetByOpportunity((current) => ({ ...current, [opportunityId]: '' }));
+    setReasonByOpportunity((current) => ({ ...current, [opportunityId]: '' }));
+    setOverrideByOpportunity((current) => ({ ...current, [opportunityId]: false }));
+  };
   useEffect(() => {
     if (loading || window.location.hash !== '#stale-bids') return;
     document.getElementById('stale-bids')?.scrollIntoView();
@@ -105,6 +120,7 @@ export default function WorkManagementPage() {
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) return setError(data.error || 'Could not reassign opportunity');
+    clearActionControls(opportunity.id);
     await load();
   };
 
@@ -125,6 +141,7 @@ export default function WorkManagementPage() {
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) return setError(data.error || 'Could not assign opportunity');
+    clearActionControls(opportunity.id);
     await load();
   };
 
@@ -134,6 +151,7 @@ export default function WorkManagementPage() {
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) return setError(data.error || 'Could not release opportunity');
+    clearActionControls(opportunity.id);
     await load();
   };
 
@@ -156,9 +174,19 @@ export default function WorkManagementPage() {
     <Card><CardHeader><CardTitle>Tracked opportunities</CardTitle><CardDescription>SAM.gov stays the source catalog; this ledger stores only company workflow state and immutable assignment history.</CardDescription></CardHeader><CardContent className="overflow-x-auto">
       <Table><TableHeader><TableRow><TableHead>Opportunity</TableHead><TableHead>Value</TableHead><TableHead>State</TableHead><TableHead>Owner</TableHead><TableHead>Manager action</TableHead></TableRow></TableHeader>
         <TableBody>{opportunities.length ? opportunities.map((item) => <TableRow key={item.id}>
-          <TableCell className="max-w-sm"><div className="font-medium">{item.title}</div><div className="text-xs text-muted-foreground">{item.solicitation_number || item.external_notice_id}</div></TableCell>
+          <TableCell className="max-w-sm"><div className="font-medium">{item.title}</div><div className="text-xs text-muted-foreground">{item.solicitation_number || item.external_notice_id}</div>
+            <details className="mt-2 text-xs">
+              <summary className="cursor-pointer font-medium text-primary">Assignment history ({item.assignment_history?.length || 0})</summary>
+              <p className="mt-2 text-muted-foreground">Immutable ownership audit trail</p>
+              {item.assignment_history?.length ? <ol className="mt-2 space-y-2 border-l pl-3">{item.assignment_history.map((event) => <li key={event.id}>
+                <p><span className="font-medium capitalize">{event.action}</span> · Agent: {event.agent?.full_name || 'Unassigned'}</p>
+                <p className="text-muted-foreground">Manager / actor: {event.actor?.full_name || 'Unknown'} · {new Date(event.started_at).toLocaleString()}</p>
+                <p>Reason: {event.reason || 'No reason provided'}{event.limit_override ? ' · Limit override' : ''}</p>
+              </li>)}</ol> : <p className="mt-2 text-muted-foreground">No assignment events recorded.</p>}
+            </details>
+          </TableCell>
           <TableCell>{item.expected_bid_value == null ? '-' : `$${item.expected_bid_value.toLocaleString()}`}</TableCell><TableCell className="capitalize">{item.state}</TableCell><TableCell>{item.assignee?.full_name || 'Pool'}</TableCell>
-          <TableCell>{item.state === 'assigned' || item.state === 'available' ? <div className="flex min-w-[430px] items-center gap-2"><select className="h-9 rounded-md border bg-background px-2 text-sm" value={targetByOpportunity[item.id] || ''} onChange={(event) => setTargetByOpportunity({ ...targetByOpportunity, [item.id]: event.target.value })}><option value="">Select agent</option>{agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.full_name}</option>)}</select><Input className="w-40" placeholder="Reason" value={reasonByOpportunity[item.id] || ''} onChange={(event) => setReasonByOpportunity({ ...reasonByOpportunity, [item.id]: event.target.value })} /><label className="flex items-center gap-1 text-xs"><input type="checkbox" checked={Boolean(overrideByOpportunity[item.id])} onChange={(event) => setOverrideByOpportunity({ ...overrideByOpportunity, [item.id]: event.target.checked })} />Override limits</label>{item.state === 'assigned' ? <Button size="sm" onClick={() => reassign(item)}>Reassign</Button> : <Button size="sm" onClick={() => assignFromPool(item)}>Assign</Button>}{item.state === 'assigned' && <Button size="sm" variant="outline" onClick={() => release(item)}>Return to pool</Button>}</div> : <span className="text-sm text-muted-foreground">Closed work — history retained</span>}</TableCell>
+          <TableCell>{item.state === 'assigned' || item.state === 'available' ? <div className="flex min-w-[520px] items-end gap-2"><label className="grid gap-1 text-xs">Agent<select className="h-9 rounded-md border bg-background px-2 text-sm" value={targetByOpportunity[item.id] || ''} onChange={(event) => setTargetByOpportunity({ ...targetByOpportunity, [item.id]: event.target.value })}><option value="">Select agent</option>{agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.full_name}</option>)}</select></label><label className="grid gap-1 text-xs">Reason for next action<Input className="w-44" placeholder="Optional unless overriding" value={reasonByOpportunity[item.id] || ''} onChange={(event) => setReasonByOpportunity({ ...reasonByOpportunity, [item.id]: event.target.value })} /></label><label className="mb-2 flex items-center gap-1 text-xs"><input type="checkbox" checked={Boolean(overrideByOpportunity[item.id])} onChange={(event) => setOverrideByOpportunity({ ...overrideByOpportunity, [item.id]: event.target.checked })} />Override limits</label>{item.state === 'assigned' ? <Button size="sm" onClick={() => reassign(item)}>Reassign</Button> : <Button size="sm" onClick={() => assignFromPool(item)}>Assign</Button>}{item.state === 'assigned' && <Button size="sm" variant="outline" onClick={() => release(item)}>Return to pool</Button>}</div> : <span className="text-sm text-muted-foreground">Closed work — history retained</span>}</TableCell>
         </TableRow>) : <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">No opportunities have been picked up yet.</TableCell></TableRow>}</TableBody>
       </Table>
     </CardContent></Card>

@@ -1,0 +1,36 @@
+[
+  {
+    "id": "NOTICE-ACTIVE",
+    "solicitationNumber": "SOL-ACTIVE",
+    "active": true,
+    "title": "Claimed equipment opportunity",
+    "ncode": "423450",
+    "department": "Department of Veterans Affairs",
+    "subtier": "VHA",
+    "office": "Medical Center",
+    "location": { "city": { "name": "Boston" }, "state": { "name": "Massachusetts" } },
+    "closingDate": "2026-10-20T17:00:00Z",
+    "type": "Solicitation",
+    "link": "https://sam.gov/opp/NOTICE-ACTIVE/view",
+    "officeAddress": "Boston, MA",
+    "description": "Equipment requirement",
+    "resourceLinks": []
+  },
+  {
+    "id": "NOTICE-SUBMITTED",
+    "solicitationNumber": "SOL-SUBMITTED",
+    "active": true,
+    "title": "Submitted medical opportunity",
+    "ncode": "423450",
+    "department": "Department of Veterans Affairs",
+    "subtier": "VHA",
+    "office": "Medical Center",
+    "location": { "city": { "name": "Albany" }, "state": { "name": "New York" } },
+    "closingDate": "2026-10-21T17:00:00Z",
+    "type": "Solicitation",
+    "link": "https://sam.gov/opp/NOTICE-SUBMITTED/view",
+    "officeAddress": "Albany, NY",
+    "description": "Medical requirement",
+    "resourceLinks": []
+  }
+]

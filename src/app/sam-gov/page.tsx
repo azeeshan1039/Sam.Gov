@@ -14,6 +14,10 @@ import { Sparkles, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
 import type { SamGovOpportunity } from "@/types/sam-gov";
 import { getStoredUser } from "@/lib/auth";
 import { isProductRfq } from "@/lib/ai-suggestion-prefilter";
+import {
+  presentOpportunityAvailability,
+  type OpportunityAvailability,
+} from "@/lib/opportunity-availability";
 
 const DEFAULT_NOTICE_TYPES: string[] = [];
 const DEFAULT_DATE_RANGE: DateRangeKey = "any";
@@ -28,11 +32,6 @@ type SearchMode = "any_words" | "all_words" | "exact_phrase";
 interface AiSuggestion extends SamGovOpportunity {
   fitScore: number;
   fitReason: string;
-}
-
-interface OpportunityAvailability {
-  available: boolean;
-  assignee?: { id: number; full_name: string } | null;
 }
 
 const DATE_RANGE_OPTIONS: { value: DateRangeKey; label: string }[] = [
@@ -108,17 +107,18 @@ function ScoreBadge({ score }: { score: number }) {
 }
 
 function OpportunityCard({ opp, availability }: { opp: SamGovOpportunity; availability?: OpportunityAvailability }) {
+  const availabilityPresentation = availability ? presentOpportunityAvailability(availability) : null;
   const locationStr = opp.location
     ? `${opp.location.city?.name || ""}${opp.location.city?.name && opp.location.state?.name ? ", " : ""}${opp.location.state?.name || ""}`
     : "—";
 
   return (
     <article className="flex flex-col rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md">
-      {availability && <span className={`mb-2 w-fit rounded-full px-2 py-0.5 text-xs font-medium ${availability.available ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900'}`}>{availability.available ? 'Available' : `Taken by ${availability.assignee?.full_name || 'company agent'}`}</span>}
+      {availabilityPresentation && <span className={`mb-2 w-fit rounded-full px-2 py-0.5 text-xs font-medium ${availabilityPresentation.className}`}>{availabilityPresentation.label}</span>}
       <h3 className="line-clamp-2 text-base font-semibold text-slate-900" title={opp.title}>
         {opp.title || "Untitled"}
       </h3>
-      <dl className="mt-3 flex-1 space-y-1.5 text-sm">
+      <div className="mt-3 flex-1 space-y-1.5 text-sm">
         <div>
           <span className="text-slate-500">NAICS</span>
           <span className="ml-1.5 text-slate-700">{opp.ncode || "—"}</span>
@@ -141,7 +141,7 @@ function OpportunityCard({ opp, availability }: { opp: SamGovOpportunity; availa
             {opp.closingDate ? new Date(opp.closingDate).toLocaleDateString() : "—"}
           </span>
         </div>
-      </dl>
+      </div>
       <div className="mt-4 flex gap-2">
         <Link
           href={`/sam-gov/${opp.id}`}
@@ -166,6 +166,7 @@ function OpportunityCard({ opp, availability }: { opp: SamGovOpportunity; availa
 
 function SuggestionCard({ opp, availability }: { opp: AiSuggestion; availability?: OpportunityAvailability }) {
   const [expanded, setExpanded] = useState(false);
+  const availabilityPresentation = availability ? presentOpportunityAvailability(availability) : null;
   const locationStr = opp.location
     ? `${opp.location.city?.name || ""}${opp.location.city?.name && opp.location.state?.name ? ", " : ""}${opp.location.state?.name || ""}`
     : "—";
@@ -174,12 +175,12 @@ function SuggestionCard({ opp, availability }: { opp: AiSuggestion; availability
     <article className="flex flex-col rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md">
       <div className="flex items-start justify-between gap-2 mb-2">
         <ScoreBadge score={opp.fitScore} />
-        {availability && <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${availability.available ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900'}`}>{availability.available ? 'Available' : 'Taken'}</span>}
+        {availabilityPresentation && <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${availabilityPresentation.className}`}>{availabilityPresentation.label}</span>}
       </div>
       <h3 className="line-clamp-2 text-base font-semibold text-slate-900" title={opp.title}>
         {opp.title || "Untitled"}
       </h3>
-      <dl className="mt-3 flex-1 space-y-1.5 text-sm">
+      <div className="mt-3 flex-1 space-y-1.5 text-sm">
         <div>
           <span className="text-slate-500">NAICS</span>
           <span className="ml-1.5 text-slate-700">{opp.ncode || "—"}</span>
@@ -202,7 +203,7 @@ function SuggestionCard({ opp, availability }: { opp: AiSuggestion; availability
             {opp.closingDate ? new Date(opp.closingDate).toLocaleDateString() : "—"}
           </span>
         </div>
-      </dl>
+      </div>
 
       <button
         onClick={() => setExpanded(!expanded)}
@@ -323,6 +324,10 @@ export default function SamGovPage() {
     const user = getStoredUser();
     if (!user) {
       router.replace("/register");
+      return;
+    }
+    if (user.role === "agent") {
+      router.replace("/unclaimed-bids");
       return;
     }
     setAuthChecked(true);
@@ -519,7 +524,7 @@ export default function SamGovPage() {
       <h1 className="text-2xl font-bold text-slate-900">SAM.gov Contract Opportunities</h1>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4">
-        <TabsList className="grid w-full max-w-md grid-cols-2">
+        <TabsList className="grid w-full max-w-md grid-cols-2 text-slate-700">
           <TabsTrigger value="opportunities">Opportunities</TabsTrigger>
           <TabsTrigger value="suggestions" className="gap-1.5">
             <Sparkles className="h-3.5 w-3.5" />
@@ -567,7 +572,7 @@ export default function SamGovPage() {
               <div>
                 <Label className="mb-1.5 block text-sm font-medium">Federal Organizations</Label>
                 <Select value={selectedOrg} onValueChange={setSelectedOrg}>
-                  <SelectTrigger className="text-sm">
+                  <SelectTrigger aria-label="Federal Organizations" className="text-sm">
                     <SelectValue placeholder="All Organizations" />
                   </SelectTrigger>
                   <SelectContent>
@@ -585,7 +590,7 @@ export default function SamGovPage() {
                 <div>
                   <Label className="mb-1.5 block text-xs text-slate-600">Response/Date Offers Due</Label>
                   <Select value={selectedResponseDate} onValueChange={(v) => setSelectedResponseDate(v as DateRangeKey)}>
-                    <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
+                    <SelectTrigger aria-label="Response or offers due date" className="text-sm"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {DATE_RANGE_OPTIONS.map((opt) => (
                         <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
@@ -596,7 +601,7 @@ export default function SamGovPage() {
                 <div>
                   <Label className="mb-1.5 block text-xs text-slate-600">Updated Date</Label>
                   <Select value={selectedDateRange} onValueChange={(v) => setSelectedDateRange(v as DateRangeKey)}>
-                    <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
+                    <SelectTrigger aria-label="Updated date" className="text-sm"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {DATE_RANGE_OPTIONS.map((opt) => (
                         <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
@@ -630,7 +635,7 @@ export default function SamGovPage() {
               <div>
                 <Label className="mb-1.5 block text-sm font-medium">Product or Service Information</Label>
                 <Select value={selectedPsc} onValueChange={setSelectedPsc}>
-                  <SelectTrigger className="text-sm"><SelectValue placeholder="All PSC Codes" /></SelectTrigger>
+                  <SelectTrigger aria-label="Product or service code" className="text-sm"><SelectValue placeholder="All PSC Codes" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All PSC Codes</SelectItem>
                     {filterOptions.pscs.map((psc) => (
@@ -644,7 +649,7 @@ export default function SamGovPage() {
               <div>
                 <Label className="mb-1.5 block text-sm font-medium">Set Aside</Label>
                 <Select value={selectedSetAside} onValueChange={setSelectedSetAside}>
-                  <SelectTrigger className="text-sm"><SelectValue placeholder="All Set-Asides" /></SelectTrigger>
+                  <SelectTrigger aria-label="Set Aside" className="text-sm"><SelectValue placeholder="All Set-Asides" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Set-Asides</SelectItem>
                     {filterOptions.setAsides.map((sa) => (
@@ -664,7 +669,7 @@ export default function SamGovPage() {
                 <div>
                   <Label className="mb-1.5 block text-xs text-slate-600">State / Territory</Label>
                   <Select value={selectedState} onValueChange={setSelectedState}>
-                    <SelectTrigger className="text-sm"><SelectValue placeholder="Select State / Territory" /></SelectTrigger>
+                    <SelectTrigger aria-label="State or territory" className="text-sm"><SelectValue placeholder="Select State / Territory" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All States</SelectItem>
                       {filterOptions.states.map((st) => (
@@ -676,7 +681,7 @@ export default function SamGovPage() {
                 <div>
                   <Label className="mb-1.5 block text-xs text-slate-600">Country</Label>
                   <Select value={selectedCountry} onValueChange={setSelectedCountry}>
-                    <SelectTrigger className="text-sm"><SelectValue placeholder="All Countries" /></SelectTrigger>
+                    <SelectTrigger aria-label="Country" className="text-sm"><SelectValue placeholder="All Countries" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Countries</SelectItem>
                       {filterOptions.countries.map((c) => (

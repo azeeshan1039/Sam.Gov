@@ -11,7 +11,8 @@ import { Icons } from '@/components/icons';
 import Loading from '@/app/loading';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsContent, TabsTrigger } from '@/components/ui/tabs';
+import { ScrollableTabsList } from '@/components/negotiation/ScrollableTabsList';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -146,6 +147,19 @@ function isAwaitingVendorEmailReply(
   return false;
 }
 
+function getSupplierFinalPrice(supplier: Supplier | undefined): number | null {
+  if (!supplier) return null;
+
+  const latestQuotedPrice = [...supplier.messages]
+    .reverse()
+    .find((message) => message.sender === 'supplier' && message.price_mentioned != null)
+    ?.price_mentioned;
+  const rawPrice = supplier.metrics?.final_price ?? latestQuotedPrice;
+  const parsedPrice = Number(rawPrice);
+
+  return Number.isFinite(parsedPrice) && parsedPrice >= 0 ? parsedPrice : null;
+}
+
 const EMAIL_INBOX_POLL_THROTTLE_MS = 10_000;
 
 export default function BidSummaryPage() {
@@ -201,6 +215,20 @@ export default function BidSummaryPage() {
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const [submittingBid, setSubmittingBid] = useState(false);
   const [bidSubmitted, setBidSubmitted] = useState(false);
+  const [customerSubmittedPrice, setCustomerSubmittedPrice] = useState('');
+  const selectedSupplierForBid = negotiationSession?.suppliers.find(
+    (supplier) => supplier.id === selectedVendorForBid,
+  );
+  const selectedSupplierCost = getSupplierFinalPrice(selectedSupplierForBid);
+  const parsedCustomerSubmittedPrice = Number(customerSubmittedPrice);
+  const hasValidCustomerSubmittedPrice =
+    customerSubmittedPrice.trim() !== '' &&
+    Number.isFinite(parsedCustomerSubmittedPrice) &&
+    parsedCustomerSubmittedPrice >= 0;
+  const previewGrossProfit =
+    selectedSupplierCost !== null && hasValidCustomerSubmittedPrice
+      ? parsedCustomerSubmittedPrice - selectedSupplierCost
+      : null;
 
   // AI target price estimation states
   const [loadingEstimate, setLoadingEstimate] = useState(false);
@@ -960,9 +988,18 @@ Procurement Team`
   const submitBid = async () => {
     if (!negotiationSession || !selectedVendorForBid || !opportunity) return;
 
-    setSubmittingBid(true);
     const selectedSupplier = negotiationSession.suppliers.find(s => s.id === selectedVendorForBid);
     if (!selectedSupplier) return;
+    const submittedPrice = Number(customerSubmittedPrice);
+    if (!Number.isFinite(submittedPrice) || submittedPrice < 0 || !customerSubmittedPrice.trim()) {
+      setError('Enter the customer submitted price before submitting the bid.');
+      return;
+    }
+    if (selectedSupplierCost === null) {
+      setError('Select a vendor with a valid final supplier quote before submitting the bid.');
+      return;
+    }
+    setSubmittingBid(true);
 
     try {
       // Update localStorage with bid status
@@ -986,7 +1023,8 @@ Procurement Team`
         source: 'SAM.gov',
         linkToOpportunity: `/sam-gov/${opportunity.id}`,
         selectedVendor: selectedSupplier.company_name,
-        finalPrice: selectedSupplier.metrics?.final_price,
+        supplierCost: selectedSupplierCost,
+        submittedPrice,
         submittedAt: new Date().toISOString()
       };
 
@@ -1001,21 +1039,14 @@ Procurement Team`
       // Update session status to bid_submitted
       if (negotiationSession) {
         try {
-          const finalPrice = parseFloat(
-            String(
-              selectedSupplier.metrics?.final_price ??
-                selectedSupplier.messages?.find((m) => m.price_mentioned)?.price_mentioned ??
-                ''
-            )
-          );
           const statusRes = await fetch(`/api/sam-gov/negotiate/${negotiationSession.id}/status`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               status: 'bid_submitted',
               portal: 'SAM.GOV',
-              amount: Number.isFinite(finalPrice) ? finalPrice : null,
-              won: selectedSupplier.status === 'completed',
+              supplier_cost: selectedSupplierCost,
+              submitted_price: submittedPrice,
               supplier_id: selectedSupplier.id,
               ...getRequesterPayload(),
             }),
@@ -1647,13 +1678,13 @@ Procurement Team`
                 </CardHeader>
                 <CardContent>
                   <Tabs defaultValue="0" className="w-full">
-                    <TabsList className="grid grid-cols-3 lg:grid-cols-5 mb-6">
+                    <ScrollableTabsList>
                       {negotiationSession?.suppliers?.map((supplier, idx) => {
                         const actionState = getSupplierActionState(supplier);
                         const hasPendingDraft = supplierDrafts.get(supplier.id)?.isPending;
 
                         return (
-                          <TabsTrigger key={supplier.id} value={idx.toString()}>
+                          <TabsTrigger className="min-w-[132px] flex-none" key={supplier.id} value={idx.toString()}>
                             <div className="text-center relative">
                               {hasPendingDraft && (
                                 <div className="absolute -top-1 -right-1 w-2 h-2 bg-orange-500 rounded-full animate-pulse" />
@@ -1676,7 +1707,7 @@ Procurement Team`
                           </TabsTrigger>
                         );
                       })}
-                    </TabsList>
+                    </ScrollableTabsList>
 
                     {negotiationSession?.suppliers?.map((supplier, idx) => {
                       const actionState = getSupplierActionState(supplier);
@@ -2047,6 +2078,61 @@ Procurement Team`
                     </div>
                   )}
 
+                  {!bidSubmitted && (
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-base">Submission financials</CardTitle>
+                        <CardDescription>
+                          Enter the customer-facing amount AMAFHH will submit. It is kept separate from the selected vendor&apos;s cost.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <div className="space-y-2">
+                            <Label>Selected supplier cost</Label>
+                            <div className="h-10 rounded-md border bg-muted/40 px-3 py-2 text-sm">
+                              {selectedSupplierCost === null
+                                ? 'Select a vendor with a final quote'
+                                : `$${selectedSupplierCost.toFixed(2)}`}
+                            </div>
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="customer-submitted-price">
+                              Submitted price / gross sale <span className="text-destructive">*</span>
+                            </Label>
+                            <Input
+                              id="customer-submitted-price"
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={customerSubmittedPrice}
+                              onChange={(event) => setCustomerSubmittedPrice(event.target.value)}
+                              placeholder="Customer-facing bid amount"
+                            />
+                          </div>
+                        </div>
+
+                        {previewGrossProfit !== null && (
+                          <div className="text-sm">
+                            Gross profit:{' '}
+                            <span className={previewGrossProfit < 0 ? 'font-semibold text-destructive' : 'font-semibold text-green-700'}>
+                              ${previewGrossProfit.toFixed(2)}
+                            </span>
+                          </div>
+                        )}
+
+                        {previewGrossProfit !== null && previewGrossProfit < 0 && (
+                          <Alert variant="destructive">
+                            <AlertTriangle className="h-4 w-4" />
+                            <AlertDescription>
+                              Warning: the submitted price is below the selected supplier cost and will produce a negative gross profit.
+                            </AlertDescription>
+                          </Alert>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
+
                   {/* Compliance Details for Selected Vendor */}
                   {selectedVendorForBid && complianceResults.get(selectedVendorForBid) && (
                     <Card>
@@ -2117,7 +2203,12 @@ Procurement Team`
 
                         <Button
                           onClick={submitBid}
-                          disabled={!selectedVendorForBid || submittingBid}
+                          disabled={
+                            !selectedVendorForBid ||
+                            selectedSupplierCost === null ||
+                            submittingBid ||
+                            !hasValidCustomerSubmittedPrice
+                          }
                         >
                           {submittingBid ? (
                             <>

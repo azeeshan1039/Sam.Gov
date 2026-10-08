@@ -44,6 +44,7 @@ export default function DashboardPage() {
   const [duplicateFlags, setDuplicateFlags] = useState<Array<{ id: number; solicitation_number: string; attempted_by?: { full_name: string }; existing_agent?: { full_name: string }; detected_at: string }>>([]);
   const [staleFlags, setStaleFlags] = useState<Array<{ claim_id: number; solicitation_number: string | null; title: string; assignee?: { full_name: string }; last_status_at: string | null }>>([]);
   const [rosterRules, setRosterRules] = useState<Array<{ id: number; full_name: string; active_bid_limit: number; dollar_ceiling: number; is_active: boolean; role: string }>>([]);
+  const [statusActivity, setStatusActivity] = useState<Array<{ id: number; bid_id: number; solicitation_number: string; changed_by_name: string; old_status: string; new_status: string; changed_at_eastern: string }>>([]);
 
   useEffect(() => {
     const user = getStoredUser();
@@ -78,10 +79,11 @@ export default function DashboardPage() {
           setLeaderboard(leaderboardData.leaderboard || []);
         }
         if (role === 'admin') {
-          const [flagsResponse, staleResponse, teamResponse] = await Promise.all([
+          const [flagsResponse, staleResponse, teamResponse, activityResponse] = await Promise.all([
             fetch('/api/backend/opportunities/duplicates', { cache: 'no-store' }),
             fetch('/api/backend/opportunities/stale', { cache: 'no-store' }),
             fetch('/api/backend/auth/team', { cache: 'no-store' }),
+            fetch('/api/backend/pipeline/activity?limit=20&offset=0', { cache: 'no-store' }),
           ]);
           if (flagsResponse.ok) {
             const flagsData = await flagsResponse.json();
@@ -94,6 +96,10 @@ export default function DashboardPage() {
           if (teamResponse.ok) {
             const teamData = await teamResponse.json();
             setRosterRules((teamData.members || []).filter((member: { role: string }) => member.role === 'agent'));
+          }
+          if (activityResponse.ok) {
+            const activityData = await activityResponse.json();
+            setStatusActivity(activityData.items || []);
           }
         }
       } catch (err) {
@@ -243,6 +249,10 @@ export default function DashboardPage() {
         <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-3 flex items-center justify-between"><h2 className="flex items-center gap-2 text-lg font-semibold"><ShieldCheck className="h-5 w-5 text-blue-600" />Pickup rules</h2><Link href="/team" className="text-sm font-medium text-blue-600 hover:underline">Edit roster</Link></div>
           {rosterRules.length ? <div className="space-y-2">{rosterRules.map((member) => <div key={member.id} className="flex items-center justify-between rounded-md border p-3 text-sm"><div><span className="font-medium">{member.full_name}</span>{!member.is_active && <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">Inactive</span>}</div><div className="text-right text-xs text-slate-600">{member.active_bid_limit} active bids · {formatCurrency(member.dollar_ceiling)}</div></div>)}</div> : <p className="text-sm text-slate-500">No agents configured.</p>}
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2">
+          <div className="mb-3 flex items-center justify-between gap-3"><h2 className="text-lg font-semibold">Latest status activity</h2><Link href="/activity-log" className="text-sm font-medium text-blue-600 hover:underline">View all activity</Link></div>
+          {statusActivity.length ? <div className="divide-y">{statusActivity.map((event) => <Link key={event.id} href={`/bids/${event.bid_id}`} className="flex flex-wrap justify-between gap-2 py-3 text-sm hover:bg-slate-50"><span><strong>{event.solicitation_number}</strong> · {event.old_status} → {event.new_status}</span><span className="text-slate-500">{event.changed_by_name} · {new Date(event.changed_at_eastern).toLocaleString("en-US", { timeZone: "America/New_York" })}</span></Link>)}</div> : <p className="text-sm text-slate-500">No status changes yet.</p>}
         </div>
       </section>}
 

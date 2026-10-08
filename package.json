@@ -8,7 +8,10 @@
     "start": "next start",
     "lint": "next lint",
     "test": "jest --runInBand",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --runInBand --coverage",
+    "test:e2e": "set PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers&& playwright test",
+    "test:e2e:chromium": "set PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers&& playwright test --project=chromium"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "^1.2.12",
@@ -50,6 +53,8 @@
     "undici": "^7.22.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
+    "@playwright/test": "^1.63.0",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.7",

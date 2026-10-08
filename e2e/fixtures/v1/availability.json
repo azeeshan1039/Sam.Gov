@@ -1,0 +1,22 @@
+{
+  "opportunities": [
+    {
+      "external_notice_id": "NOTICE-ACTIVE",
+      "available": false,
+      "availability_state": "claimed",
+      "workflow_state": "assigned",
+      "assignee": { "id": 2, "full_name": "Agent One" },
+      "last_assignee": { "id": 2, "full_name": "Agent One" },
+      "tracked_opportunity_id": 7
+    },
+    {
+      "external_notice_id": "NOTICE-SUBMITTED",
+      "available": false,
+      "availability_state": "terminal",
+      "workflow_state": "submitted",
+      "assignee": null,
+      "last_assignee": { "id": 3, "full_name": "Agent Two" },
+      "tracked_opportunity_id": 8
+    }
+  ]
+}

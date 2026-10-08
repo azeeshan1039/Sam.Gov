@@ -7,6 +7,10 @@ import TeamPage from "@/app/team/page";
 import WorkManagementPage from "@/app/work-management/page";
 import Sidebar from "@/components/Sidebar";
 import { getStoredUser, type AuthUser } from "@/lib/auth";
+import UnclaimedBidsPage from "@/app/unclaimed-bids/page";
+import BidDetailPage from "@/app/bids/[id]/page";
+import { BID_STATUSES } from "@/lib/pipeline";
+import { easternReportingRange, formatUtcDateRange } from "@/lib/eastern-date";
 
 const replace = jest.fn();
 const router = { replace, push: jest.fn(), back: jest.fn() };
@@ -15,6 +19,7 @@ jest.mock("next/navigation", () => ({
   usePathname: () => "/",
   useRouter: () => router,
   useSearchParams: () => new URLSearchParams(),
+  useParams: () => ({ id: "9" }),
 }));
 
 jest.mock("next/dynamic", () => () => {
@@ -88,7 +93,8 @@ describe("KAN-18 and KAN-19 role-specific navigation", () => {
     expect(screen.getByRole("link", { name: "Contract Awards" })).toHaveAttribute("href", "/contract-awards");
     expect(screen.getByRole("link", { name: "Negotiations" })).toHaveAttribute("href", "/negotiations");
     expect(screen.getByRole("link", { name: "Pipeline" })).toHaveAttribute("href", "/pipeline");
-    expect(screen.getByRole("link", { name: "By person" })).toHaveAttribute("href", "/by-person");
+    expect(screen.getByRole("link", { name: "Agent Bid Data" })).toHaveAttribute("href", "/agent-bid-data");
+    expect(screen.getByRole("link", { name: "Weekly submissions" })).toHaveAttribute("href", "/weekly-submissions");
     expect(screen.getByRole("link", { name: "$100k+" })).toHaveAttribute("href", "/hundred-k");
     expect(screen.getByRole("link", { name: "Approvals" })).toHaveAttribute("href", "/approvals");
     expect(screen.getByRole("link", { name: "Stats" })).toBeInTheDocument();
@@ -147,6 +153,7 @@ describe("KAN-18, KAN-19, and KAN-22 dashboard views", () => {
           }],
         });
       }
+      if (url.includes("pipeline/activity")) return response({ items: [] });
       throw new Error(`Unexpected request: ${url}`);
     }) as jest.Mock;
 
@@ -157,9 +164,10 @@ describe("KAN-18, KAN-19, and KAN-22 dashboard views", () => {
     expect(screen.getByText("3 active bids · $250.0K")).toBeInTheDocument();
     const reviewLinks = screen.getAllByRole("link", { name: "Review all" });
     expect(reviewLinks.map((link) => link.getAttribute("href"))).toEqual([
-      "/work-management",
-      "/work-management#stale-bids",
-    ]);
+        "/work-management",
+        "/work-management#stale-bids",
+      ]);
+    expect(screen.getByRole("link", { name: "View all activity" })).toHaveAttribute("href", "/activity-log");
     expect(await screen.findByText("SOL-STALE")).toBeInTheDocument();
   });
 
@@ -371,5 +379,117 @@ describe("KAN-40 manager duplicate resolution", () => {
     expect(JSON.parse(String(patchCall?.[1]?.body))).toEqual({
       resolution_note: "Original owner retains work",
     });
+  });
+});
+
+describe("KAN-26 unclaimed SAM.gov pool", () => {
+  test("renders only opportunities confirmed available by the batched ownership overlay", async () => {
+    mockedGetStoredUser.mockReturnValue(agent);
+    global.fetch = jest.fn((input: RequestInfo | URL) => {
+      const url = urlOf(input);
+      if (url === "/api/sam-gov") return response([
+        { id: "OPEN-1", title: "Available SAM bid", closingDate: "2026-10-20", solicitationNumber: "SOL-OPEN" },
+        { id: "TAKEN-1", title: "Claimed SAM bid", closingDate: "2026-10-21", solicitationNumber: "SOL-TAKEN" },
+      ]);
+      if (url.includes("opportunities/availability")) return response({ opportunities: [
+        { external_notice_id: "OPEN-1", available: true },
+        { external_notice_id: "TAKEN-1", available: false },
+      ] });
+      throw new Error(`Unexpected request: ${url}`);
+    }) as jest.Mock;
+
+    render(<UnclaimedBidsPage />);
+    expect(await screen.findByText("Available SAM bid")).toBeInTheDocument();
+    expect(screen.queryByText("Claimed SAM bid")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Review and pick up" })).toHaveAttribute("href", "/sam-gov/OPEN-1");
+  });
+
+  test("checks the full SAM.gov catalog in API-sized chunks", async () => {
+    mockedGetStoredUser.mockReturnValue(agent);
+    const catalog = Array.from({ length: 1001 }, (_, index) => ({
+      id: `NOTICE-${index}`,
+      title: `SAM bid ${index}`,
+      closingDate: "2026-10-20",
+      solicitationNumber: `SOL-${index}`,
+    }));
+    const chunkSizes: number[] = [];
+    global.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = urlOf(input);
+      if (url === "/api/sam-gov") return response(catalog);
+      if (url.includes("opportunities/availability")) {
+        const body = JSON.parse(String(init?.body));
+        chunkSizes.push(body.opportunities.length);
+        return response({ opportunities: body.opportunities.map((item: { external_notice_id: string }) => ({ ...item, available: item.external_notice_id === "NOTICE-1000" })) });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    }) as jest.Mock;
+
+    render(<UnclaimedBidsPage />);
+    expect(await screen.findByText("SAM bid 1000")).toBeInTheDocument();
+    expect(chunkSizes).toEqual([1000, 1]);
+  });
+});
+
+describe("KAN-48 Eastern reporting periods", () => {
+  test("uses the Eastern calendar even while UTC is on the next day", () => {
+    const instant = new Date("2026-03-01T04:30:00Z"); // February 28 at 11:30 PM Eastern.
+    expect(easternReportingRange("today", instant)).toEqual({ from: "2026-02-28", to: "2026-02-28" });
+    expect(easternReportingRange("month", instant)).toEqual({ from: "2026-02-01", to: "2026-02-28" });
+    expect(easternReportingRange("week", instant)).toEqual({ from: "2026-02-23", to: "2026-02-28" });
+  });
+});
+
+describe("KAN-50 weekly labels", () => {
+  test("keeps Monday-Sunday labels on UTC calendar dates for viewers west of UTC", () => {
+    const previousTimezone = process.env.TZ;
+    process.env.TZ = "America/Los_Angeles";
+    try {
+      expect(formatUtcDateRange(
+        new Date("2026-10-05T00:00:00.000Z"),
+        new Date("2026-10-11T00:00:00.000Z"),
+      )).toBe("10/5/2026 – 10/11/2026");
+    } finally {
+      if (previousTimezone === undefined) delete process.env.TZ;
+      else process.env.TZ = previousTimezone;
+    }
+  });
+});
+
+describe("KAN-30 and KAN-31 shared statuses and submission", () => {
+  test("keeps exact labels/colors and sends supplier cost separately from submitted price", async () => {
+    expect(Object.keys(BID_STATUSES)).toEqual([
+      "Finding Supplier", "Bid submitted", "Waiting Approval", "Bid No Approved",
+      "Approved for Submission", "Bid got removed", "Couldnt get quote",
+    ]);
+    expect(BID_STATUSES["Finding Supplier"]).toEqual({ color: "#8B0000", classification: "active" });
+    mockedGetStoredUser.mockReturnValue(agent);
+    const patchBodies: Array<Record<string, unknown>> = [];
+    const bid = {
+      id: 9, bid_id: "SAM-9", title: "Status bid", solicitation_number: "SOL-9",
+      internal_status: "Finding Supplier", current_owner_user_id: agent.id,
+      expected_submitted_price: 60000, supplier_cost: null, submitted_price: null,
+      gross_profit: null, markup_percent: null, negative_profit_warning: false,
+      award_outcome: "unknown", awarded_to: null, awarded_amount: null,
+      outcome_notes: null, status_history: [], ownership_history: [],
+    };
+    global.fetch = jest.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = urlOf(input);
+      if (init?.method === "PATCH") {
+        patchBodies.push(JSON.parse(String(init.body)));
+        return response({ bid: { ...bid, internal_status: "Bid submitted" }, changed: true });
+      }
+      if (url.includes("pipeline/bids/9")) return response({ bid });
+      throw new Error(`Unexpected request: ${url}`);
+    }) as jest.Mock;
+    const user = userEvent.setup();
+
+    render(<BidDetailPage />);
+    await screen.findByRole("heading", { name: "Status bid" });
+    await user.selectOptions(screen.getByLabelText("New status"), "Bid submitted");
+    await user.type(screen.getByLabelText("Supplier cost"), "40000");
+    await user.type(screen.getByLabelText("Submitted price"), "55000");
+    await user.click(screen.getByRole("button", { name: "Update status" }));
+    await waitFor(() => expect(patchBodies).toHaveLength(1));
+    expect(patchBodies[0]).toMatchObject({ status: "Bid submitted", supplier_cost: "40000", submitted_price: "55000" });
   });
 });

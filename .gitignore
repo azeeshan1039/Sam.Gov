@@ -7,6 +7,9 @@
 # testing
 /coverage
 /.npm-cache/
+/playwright-report/
+/test-results/
+/.playwright-browsers/
 
 # next.js
 /.next/
