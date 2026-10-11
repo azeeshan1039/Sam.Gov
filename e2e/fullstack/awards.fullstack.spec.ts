@@ -16,10 +16,15 @@ async function login(browser: Browser, email: string): Promise<Page> {
   const context = await browser.newContext();
   const page = await context.newPage();
   await page.goto("/login");
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill(PASSWORD);
+  await page.waitForLoadState("networkidle").catch(() => undefined);  // hydrated before typing
+  await expect(async () => {
+    await page.getByLabel("Email").fill(email);
+    await page.getByLabel("Password").fill(PASSWORD);
+    await expect(page.getByLabel("Email")).toHaveValue(email, { timeout: 1_000 });
+  }).toPass({ timeout: 30_000 });
   await page.getByRole("button", { name: "Login" }).click();
-  await expect(page).toHaveURL(/\/$/);
+  await expect(page).toHaveURL(/\/$/, { timeout: 60_000 });  // first visit compiles the dashboard
+  await page.waitForLoadState("networkidle").catch(() => undefined);
   return page;
 }
 
