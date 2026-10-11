@@ -43,6 +43,7 @@ export default function DashboardPage() {
   const [leaderboard, setLeaderboard] = useState<Array<{ rank: number; user_id: number; name: string; amount: number; bid_count: number }>>([]);
   const [duplicateFlags, setDuplicateFlags] = useState<Array<{ id: number; solicitation_number: string; attempted_by?: { full_name: string }; existing_agent?: { full_name: string }; detected_at: string }>>([]);
   const [staleFlags, setStaleFlags] = useState<Array<{ claim_id: number; solicitation_number: string | null; title: string; assignee?: { full_name: string }; last_status_at: string | null }>>([]);
+  const [awardFlags, setAwardFlags] = useState<Array<{ bid_id: number; display_bid_id: string; solicitation_number: string | null; title: string | null; agent_name: string | null; submitted_on: string | null; days_since_submission: number | null; href: string }>>([]);
   const [rosterRules, setRosterRules] = useState<Array<{ id: number; full_name: string; active_bid_limit: number; dollar_ceiling: number; is_active: boolean; role: string }>>([]);
   const [statusActivity, setStatusActivity] = useState<Array<{ id: number; bid_id: number; solicitation_number: string; changed_by_name: string; old_status: string; new_status: string; changed_at_eastern: string }>>([]);
 
@@ -100,6 +101,16 @@ export default function DashboardPage() {
           if (activityResponse.ok) {
             const activityData = await activityResponse.json();
             setStatusActivity(activityData.items || []);
+          }
+          // 90-day award flags (KAN-68) load on their own so a failure never hides the other flags.
+          try {
+            const awardFlagsResponse = await fetch('/api/backend/pipeline/award-flags', { cache: 'no-store' });
+            if (awardFlagsResponse.ok) {
+              const awardFlagsData = await awardFlagsResponse.json();
+              setAwardFlags(awardFlagsData.flags || []);
+            }
+          } catch (err) {
+            console.error("Failed to fetch award flags:", err);
           }
         }
       } catch (err) {
@@ -245,6 +256,10 @@ export default function DashboardPage() {
         <div id="stale-flags" className="rounded-xl border border-amber-200 bg-white p-5 shadow-sm">
           <div className="mb-3 flex items-center justify-between"><h2 className="flex items-center gap-2 text-lg font-semibold"><AlertTriangle className="h-5 w-5 text-amber-500" />Stale bids</h2><Link href="/work-management#stale-bids" className="text-sm font-medium text-blue-600 hover:underline">Review all</Link></div>
           {staleFlags.length ? <div className="space-y-2">{staleFlags.slice(0, 4).map((flag) => <div key={flag.claim_id} className="rounded-md border bg-amber-50/60 p-3"><p className="font-medium">{flag.solicitation_number || flag.title}</p><p className="text-xs text-slate-600">{flag.assignee?.full_name || 'Unknown'} · no status change since {flag.last_status_at ? new Date(flag.last_status_at).toLocaleString() : 'pickup'}</p></div>)}</div> : <p className="text-sm text-slate-500">No stale bids.</p>}
+        </div>
+        <div id="award-flags" className="rounded-xl border border-rose-200 bg-white p-5 shadow-sm lg:col-span-2">
+          <div className="mb-3 flex items-center justify-between"><h2 className="flex items-center gap-2 text-lg font-semibold"><AlertTriangle className="h-5 w-5 text-rose-500" />Award check overdue (90 days)</h2><Link href="/award-tracking?checkpoint_state=flagged" className="text-sm font-medium text-blue-600 hover:underline">Open Award Tracking</Link></div>
+          {awardFlags.length ? <div className="grid gap-2 md:grid-cols-2">{awardFlags.slice(0, 6).map((flag) => <Link key={flag.bid_id} href={flag.href} className="rounded-md border bg-rose-50/60 p-3 hover:bg-rose-50"><p className="font-medium">{flag.solicitation_number || flag.title || flag.display_bid_id}</p><p className="text-xs text-slate-600">{flag.agent_name || 'Unknown'} · submitted {flag.submitted_on || '—'} · {flag.days_since_submission} days, no award outcome logged</p></Link>)}</div> : <p className="text-sm text-slate-500">No submitted bids are past 90 days without an outcome.</p>}
         </div>
         <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-3 flex items-center justify-between"><h2 className="flex items-center gap-2 text-lg font-semibold"><ShieldCheck className="h-5 w-5 text-blue-600" />Pickup rules</h2><Link href="/team" className="text-sm font-medium text-blue-600 hover:underline">Edit roster</Link></div>

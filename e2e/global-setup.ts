@@ -22,6 +22,19 @@ async function waitForServer(child: ChildProcess) {
 }
 
 export default async function globalSetup() {
+  // E2E_EXTERNAL_SERVER=1: a server (e.g. `next start -p 3100`) is already running; just wait for it.
+  if (process.env.E2E_EXTERNAL_SERVER) {
+    const deadline = Date.now() + 120_000;
+    while (Date.now() < deadline) {
+      try {
+        if ((await fetch(SERVER_URL, { method: "HEAD" })).ok) return;
+      } catch {
+        // still starting
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    throw new Error(`E2E_EXTERNAL_SERVER is set but ${SERVER_URL} is not reachable.`);
+  }
   const nextCli = path.join(process.cwd(), "node_modules", "next", "dist", "bin", "next");
   const child = spawn(
     process.execPath,

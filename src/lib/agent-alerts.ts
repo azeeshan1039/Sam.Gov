@@ -23,6 +23,8 @@ const LABELS: Record<string, string> = {
   duplicate_detected: "Duplicate detected",
   blocked_pickup: "Blocked pickup",
   award_checkpoint_due: "Award checkpoint due",
+  award_check_overdue: "Award outcome missing (90 days)",
+  award_info_found: "SAM.gov award found",
 };
 
 export function agentAlertLabel(type: string) {

@@ -21,6 +21,7 @@ import {
   BadgeCheck,
   Inbox,
   CalendarDays,
+  Medal,
 } from "lucide-react";
 import { clearStoredUser, getStoredUser, type AuthUser } from "@/lib/auth";
 
@@ -33,6 +34,7 @@ const navItems = [
   { href: "/my-bids", label: "My bids", icon: FileSpreadsheet },
   { href: "/agent-bid-data", label: "Agent Bid Data", icon: UserRoundSearch },
   { href: "/weekly-submissions", label: "Weekly submissions", icon: CalendarDays },
+  { href: "/award-tracking", label: "Award Tracking", icon: Medal },
 ];
 
 const adminItems = [
