@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { getStoredUser, type AuthUser } from "@/lib/auth";
 import { formatMoney, type PipelineItem } from "@/lib/pipeline";
 import { PipelineTable } from "@/components/pipeline/PipelineTable";
@@ -23,6 +23,8 @@ const ALL_AGENTS = "all";
 
 export default function AgentBidDataPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const linkedAgent = searchParams.get("agent_user_id") || "";
   const [user, setUser] = useState<AuthUser | null>(null);
   const [agentId, setAgentId] = useState("");
   const [employees, setEmployees] = useState<Array<{ user_id: number; name: string; is_active: boolean }>>([]);
@@ -45,7 +47,8 @@ export default function AgentBidDataPage() {
     if (!current) return router.replace("/register");
     setUser(current);
     if (current.role === "agent") setAgentId(String(current.id));
-  }, [router]);
+    else if (linkedAgent) setAgentId(linkedAgent);
+  }, [router, linkedAgent]);
 
   const load = useCallback(async (nextAgent = agentId, from = dateFrom, to = dateTo, nextInterval = trendInterval) => {
     if (!user) return;
@@ -69,7 +72,11 @@ export default function AgentBidDataPage() {
     finally { if (requestId === latestRequest.current) setLoading(false); }
   }, [agentId, dateFrom, dateTo, trendInterval, user]);
 
-  useEffect(() => { if (user) load(); }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!user) return;
+    const nextAgent = user.role === "agent" ? String(user.id) : (linkedAgent || agentId);
+    load(nextAgent);
+  }, [user, linkedAgent]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const preset = (kind: ReportingPreset) => {
     const { from, to } = easternReportingRange(kind);

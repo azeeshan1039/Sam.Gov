@@ -154,6 +154,15 @@ describe("KAN-18, KAN-19, and KAN-22 dashboard views", () => {
         });
       }
       if (url.includes("pipeline/activity")) return response({ items: [] });
+      if (url.includes("dashboard-pulse")) {
+        return response({
+          periods: [
+            { key: "today", label: "Today", date_from: "2026-10-13", date_to: "2026-10-13", picked_up: 2, submitted: 1 },
+            { key: "week", label: "This week", date_from: "2026-10-12", date_to: "2026-10-13", picked_up: 4, submitted: 3 },
+            { key: "month", label: "This month", date_from: "2026-10-01", date_to: "2026-10-13", picked_up: 9, submitted: 6 },
+          ],
+        });
+      }
       throw new Error(`Unexpected request: ${url}`);
     }) as jest.Mock;
 
@@ -162,9 +171,22 @@ describe("KAN-18, KAN-19, and KAN-22 dashboard views", () => {
     expect(await screen.findByRole("heading", { name: "Company dashboard" })).toBeInTheDocument();
     expect(await screen.findByText("SOL-100")).toBeInTheDocument();
     expect(screen.getByText("3 active bids · $250.0K")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Company pulse" })).toBeInTheDocument();
+    expect(screen.getAllByText("Today").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("This week").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("This month").length).toBeGreaterThan(0);
+    expect(screen.getByRole("heading", { name: "Agent leaderboard" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "By submitted dollars" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "By bid count" })).toBeInTheDocument();
+    expect(screen.getByText("2")).toBeInTheDocument();
+    expect(screen.getByText("1")).toBeInTheDocument();
+    expect(screen.getByLabelText("Employee")).toHaveValue("2");
+    expect(screen.getByRole("link", { name: "Open Agent Bid Data" })).toHaveAttribute("href", "/agent-bid-data?agent_user_id=2");
+    expect(screen.getByRole("link", { name: /SOL-100/ })).toHaveAttribute("href", "/work-management#duplicate-7");
+    expect(screen.getByRole("link", { name: /SOL-STALE/ })).toHaveAttribute("href", "/work-management#stale-4");
     const reviewLinks = screen.getAllByRole("link", { name: "Review all" });
     expect(reviewLinks.map((link) => link.getAttribute("href"))).toEqual([
-        "/work-management",
+        "/work-management#duplicates",
         "/work-management#stale-bids",
       ]);
     expect(screen.getByRole("link", { name: "View all activity" })).toHaveAttribute("href", "/activity-log");
@@ -176,7 +198,6 @@ describe("KAN-18, KAN-19, and KAN-22 dashboard views", () => {
     const fetchMock = jest.fn((input: RequestInfo | URL) => {
       const url = urlOf(input);
       if (url.includes("dashboard-stats")) return response({ stats: {} });
-      if (url.includes("stats/leaderboard")) return response({ leaderboard: [] });
       throw new Error(`Admin endpoint requested by agent dashboard: ${url}`);
     });
     global.fetch = fetchMock as jest.Mock;
@@ -186,7 +207,8 @@ describe("KAN-18, KAN-19, and KAN-22 dashboard views", () => {
     expect(await screen.findByRole("heading", { name: "My dashboard" })).toBeInTheDocument();
     expect(screen.queryByText("Duplicate flags")).not.toBeInTheDocument();
     expect(screen.queryByText("Pickup rules")).not.toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole("heading", { name: "Agent leaderboard" })).not.toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
 

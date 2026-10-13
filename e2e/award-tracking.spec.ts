@@ -195,6 +195,13 @@ test("@critical the dashboard 90-day flag opens that bid's checkpoint", async ({
   await page.route("**/api/backend/pipeline/**", (route) => {
     const url = route.request().url();
     if (url.includes("/activity")) return route.fulfill({ json: { items: [] } });
+    if (url.includes("/dashboard-pulse")) {
+      return route.fulfill({ json: { periods: [
+        { key: "today", label: "Today", date_from: "2026-10-13", date_to: "2026-10-13", picked_up: 0, submitted: 0 },
+        { key: "week", label: "This week", date_from: "2026-10-12", date_to: "2026-10-13", picked_up: 0, submitted: 0 },
+        { key: "month", label: "This month", date_from: "2026-10-01", date_to: "2026-10-13", picked_up: 0, submitted: 0 },
+      ] } });
+    }
     if (url.includes("/award-flags")) {
       return route.fulfill({ json: { count: 1, flags: [{ bid_id: 3, display_bid_id: "AMF3", solicitation_number: "SOL-FLAG", title: "Beds", agent_name: "Agent One", submitted_on: "2026-04-01", days_since_submission: 193, href: "/award-tracking?checkpoint_state=flagged&bid=3" }] } });
     }

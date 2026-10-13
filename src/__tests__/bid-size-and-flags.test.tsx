@@ -7,10 +7,12 @@ import Sidebar from "@/components/Sidebar";
 import { agentChartOptions, bucketChartOptions, trendChartOptions, type SizeReport } from "@/components/bid-size/BidSizeSection";
 import { getStoredUser, type AuthUser } from "@/lib/auth";
 
+let searchParams = new URLSearchParams();
+
 jest.mock("next/navigation", () => ({
   usePathname: () => "/",
   useRouter: () => ({ replace: jest.fn(), push: jest.fn(), back: jest.fn() }),
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => searchParams,
 }));
 
 jest.mock("next/dynamic", () => () => {
@@ -77,6 +79,7 @@ function agentBidData(agentUserId: number | "all") {
 beforeEach(() => {
   mockedGetStoredUser.mockReset();
   urls = [];
+  searchParams = new URLSearchParams();
 });
 
 describe("KAN-60/KAN-61 Bid Value vs. Size in Agent Bid Data", () => {
@@ -162,6 +165,20 @@ describe("KAN-60/KAN-61 Bid Value vs. Size in Agent Bid Data", () => {
     expect(screen.getByText(/Company-wide submitted bids/)).toBeInTheDocument();
   });
 
+  test("KAN-44 opens the employee chosen on the dashboard", async () => {
+    searchParams = new URLSearchParams("agent_user_id=2");
+    mockedGetStoredUser.mockReturnValue(admin);
+    global.fetch = jest.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      urls.push(url);
+      return respond(agentBidData(2));
+    }) as jest.Mock;
+    render(<AgentBidDataPage />);
+    await waitFor(() => expect(urls[0]).toContain("agent_user_id=2"));
+    expect(screen.getByLabelText("Agent")).toHaveValue("2");
+    expect(await screen.findByText("Submitted bids")).toBeInTheDocument();
+  });
+
   test("renders an empty period without charts", async () => {
     mockedGetStoredUser.mockReturnValue(agent);
     const empty = { ...report, count: 0, total: 0, buckets: report.buckets.map((b) => ({ ...b, count: 0, total: 0, count_share: 0, value_share: 0 })) };
@@ -194,6 +211,7 @@ describe("KAN-68 dashboard 90-day award flag", () => {
       if (url.includes("opportunities/stale")) return respond({ bids: [] });
       if (url.includes("auth/team")) return respond({ members: [] });
       if (url.includes("pipeline/activity")) return respond({ items: [] });
+      if (url.includes("dashboard-pulse")) return respond({ periods: [] });
       if (url.includes("pipeline/award-flags")) return awardFlags();
       throw new Error(`Unexpected request: ${url}`);
     }) as jest.Mock;

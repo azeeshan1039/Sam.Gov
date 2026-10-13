@@ -1886,13 +1886,18 @@ Procurement Team`
                                 )}
 
                                 {supplier.status === 'negotiating' && supplier.messages.length > 0 && (
-                                  <Button
-                                    onClick={() => acceptQuote(supplier.id)}
-                                    variant="outline"
-                                    size="sm"
-                                  >
-                                    Accept Current Quote
-                                  </Button>
+                                  <div className="flex flex-col items-start gap-1">
+                                    <Button
+                                      onClick={() => acceptQuote(supplier.id)}
+                                      variant="outline"
+                                      size="sm"
+                                    >
+                                      Accept supplier quote
+                                    </Button>
+                                    <p className="max-w-xs text-xs text-slate-600">
+                                      Records this supplier quote only. The customer award is recorded later in Award Tracking.
+                                    </p>
+                                  </div>
                                 )}
                               </div>
                             </CardContent>

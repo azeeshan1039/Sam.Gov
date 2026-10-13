@@ -277,7 +277,10 @@ export function AwardPanel({
           aria-label="Record award outcome"
         >
           <fieldset className="md:col-span-2">
-            <legend className="mb-2 text-sm font-medium">Was the bid awarded?</legend>
+            <legend className="mb-1 text-sm font-medium">Was the bid awarded?</legend>
+            <p className="mb-2 text-xs text-slate-600">
+              AMAFHH customer award only. Accepting a supplier quote does not set Won, Lost, Pending, or Unknown.
+            </p>
             <div className="flex flex-wrap gap-2">
               {AWARD_OUTCOMES.map((value) => (
                 <label key={value} className={`flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm ${outcome === value ? outcomeBadgeClass(value) : ""}`}>

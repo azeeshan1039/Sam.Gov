@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AlertTriangle, ClipboardCheck } from 'lucide-react';
 import { getStoredUser } from '@/lib/auth';
@@ -48,6 +49,7 @@ interface StaleBid {
   title: string;
   assignee?: Person;
   last_status_at: string | null;
+  href?: string;
 }
 
 export default function WorkManagementPage() {
@@ -104,8 +106,9 @@ export default function WorkManagementPage() {
     setOverrideByOpportunity((current) => ({ ...current, [opportunityId]: false }));
   };
   useEffect(() => {
-    if (loading || window.location.hash !== '#stale-bids') return;
-    document.getElementById('stale-bids')?.scrollIntoView();
+    if (loading) return;
+    const id = window.location.hash.replace('#', '');
+    if (id) document.getElementById(id)?.scrollIntoView();
   }, [loading]);
 
   const reassign = async (opportunity: Opportunity) => {
@@ -191,8 +194,8 @@ export default function WorkManagementPage() {
       </Table>
     </CardContent></Card>
 
-    <Card id="stale-bids"><CardHeader><CardTitle className="flex items-center gap-2"><AlertTriangle className="h-5 w-5" />Stale bids</CardTitle><CardDescription>Assigned bids with no status change for 3 days. The list clears when the internal status changes.</CardDescription></CardHeader><CardContent className="space-y-3">{staleBids.length ? staleBids.map((bid) => <div key={bid.claim_id} className="rounded border p-3"><p className="font-medium">{bid.solicitation_number || bid.title}</p><p className="text-sm text-muted-foreground">{bid.title}</p><p className="text-xs text-muted-foreground">{bid.assignee?.full_name || 'Unknown'} · no status change since {bid.last_status_at ? new Date(bid.last_status_at).toLocaleString() : 'pickup'}</p></div>) : <p className="text-sm text-muted-foreground">No stale bids.</p>}</CardContent></Card>
+    <Card id="stale-bids"><CardHeader><CardTitle className="flex items-center gap-2"><AlertTriangle className="h-5 w-5" />Stale bids</CardTitle><CardDescription>Assigned bids with no status change for 3 days. The list clears when the internal status changes.</CardDescription></CardHeader><CardContent className="space-y-3">{staleBids.length ? staleBids.map((bid) => <div key={bid.claim_id} id={`stale-${bid.claim_id}`} className="rounded border p-3"><p className="font-medium">{bid.solicitation_number || bid.title}</p><p className="text-sm text-muted-foreground">{bid.title}</p><p className="text-xs text-muted-foreground">{bid.assignee?.full_name || 'Unknown'} · no status change since {bid.last_status_at ? new Date(bid.last_status_at).toLocaleString() : 'pickup'}</p>{bid.href && <Link href={bid.href} className="mt-2 inline-block text-sm font-medium text-primary hover:underline">Open bid</Link>}</div>) : <p className="text-sm text-muted-foreground">No stale bids.</p>}</CardContent></Card>
 
-    <Card><CardHeader><CardTitle className="flex items-center gap-2"><AlertTriangle className="h-5 w-5" />Unresolved duplicate flags</CardTitle><CardDescription>Every blocked pickup is retained for manager review. Resolved items leave this panel.</CardDescription></CardHeader><CardContent className="space-y-3">{incidents.length ? incidents.map((incident) => <div key={incident.id} className="rounded border p-3"><div className="flex flex-wrap justify-between gap-2"><div><p className="font-medium">Solicitation {incident.solicitation_number}</p><p className="text-sm text-muted-foreground">Attempted by {incident.attempted_by?.full_name || 'Unknown'}; owned by {incident.existing_agent?.full_name || 'Unknown'}</p><p className="text-xs text-muted-foreground">Detected {new Date(incident.detected_at || incident.created_at).toLocaleString()}</p></div><span className="text-sm capitalize">{incident.status}</span></div><div className="mt-3 flex gap-2"><Input placeholder="Resolution note" value={resolutionByIncident[incident.id] || ''} onChange={(event) => setResolutionByIncident({ ...resolutionByIncident, [incident.id]: event.target.value })} /><Button onClick={() => resolveIncident(incident)}>Resolve</Button></div></div>) : <p className="text-sm text-muted-foreground">No unresolved duplicate flags.</p>}</CardContent></Card>
+    <Card id="duplicates"><CardHeader><CardTitle className="flex items-center gap-2"><AlertTriangle className="h-5 w-5" />Unresolved duplicate flags</CardTitle><CardDescription>Every blocked pickup is retained for manager review. Resolved items leave this panel.</CardDescription></CardHeader><CardContent className="space-y-3">{incidents.length ? incidents.map((incident) => <div key={incident.id} id={`duplicate-${incident.id}`} className="rounded border p-3"><div className="flex flex-wrap justify-between gap-2"><div><p className="font-medium">Solicitation {incident.solicitation_number}</p><p className="text-sm text-muted-foreground">Attempted by {incident.attempted_by?.full_name || 'Unknown'}; owned by {incident.existing_agent?.full_name || 'Unknown'}</p><p className="text-xs text-muted-foreground">Detected {new Date(incident.detected_at || incident.created_at).toLocaleString()}</p></div><span className="text-sm capitalize">{incident.status}</span></div><div className="mt-3 flex gap-2"><Input placeholder="Resolution note" value={resolutionByIncident[incident.id] || ''} onChange={(event) => setResolutionByIncident({ ...resolutionByIncident, [incident.id]: event.target.value })} /><Button onClick={() => resolveIncident(incident)}>Resolve</Button></div></div>) : <p className="text-sm text-muted-foreground">No unresolved duplicate flags.</p>}</CardContent></Card>
   </div>;
 }
