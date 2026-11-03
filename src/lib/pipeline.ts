@@ -79,11 +79,63 @@ export interface PipelineItem {
   contact_email: string | null;
   delivery_address: string | null;
   shipping_notes: string | null;
+  bid_remarks?: string | null;
+  research_notes?: string | null;
   session_id: number | null;
   submitted_at: string | null;
   outcome: string | null;
   status_history?: StatusHistoryEvent[];
   ownership_history?: OwnershipHistoryEvent[];
+  workspace?: BidWorkspace;
+}
+
+export type OutreachState = "suggested" | "contacted" | "responded";
+
+export interface PreferredVendor {
+  company_name: string;
+  email: string;
+}
+
+export interface NegotiationRound {
+  round_number: number;
+  price: number | null;
+  status: "received" | "best_offer" | "stopped";
+  created_at: string | null;
+}
+
+export interface BidVendor {
+  id: number;
+  company_name: string | null;
+  email: string | null;
+  notes: string | null;
+  is_manual: boolean;
+  preferred: boolean;
+  status: string;
+  outreach_state: OutreachState;
+  negotiation_round: number;
+  rounds?: NegotiationRound[];
+  email_sent: boolean;
+  latest_price: number | null;
+}
+
+export interface BidConversationEvent {
+  supplier_id: number;
+  supplier_name: string | null;
+  sender: string;
+  content: string | null;
+  price_mentioned: number | null;
+  created_at: string | null;
+  direction?: "incoming" | "outgoing";
+}
+
+export interface BidWorkspace {
+  session_id: number | null;
+  negotiation_status: string | null;
+  rfq_href: string | null;
+  vendors: BidVendor[];
+  negotiation_history: BidConversationEvent[];
+  email_conversations: BidConversationEvent[];
+  preferred_vendors?: PreferredVendor[];
 }
 
 export interface PipelineEmployeeGroup {

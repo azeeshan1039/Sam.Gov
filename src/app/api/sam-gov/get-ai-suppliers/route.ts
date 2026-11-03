@@ -1,6 +1,7 @@
 // app/api/sam-gov/get-ai-suppliers/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { BACKEND_URL } from '@/lib/backend-config';
+import { backendAuthHeaders } from '@/lib/backend-auth';
 
 export async function POST(request: NextRequest) {
   try {
@@ -8,9 +9,7 @@ export async function POST(request: NextRequest) {
     
     const response = await fetch(`${BACKEND_URL}/api/sam-gov/get-ai-suppliers`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: backendAuthHeaders(request),
       body: JSON.stringify(body),
     });
 

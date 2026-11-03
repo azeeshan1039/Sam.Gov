@@ -31,6 +31,7 @@ interface Supplier {
   email_sent?: boolean;
   status: string;
   negotiation_round: number;
+  rounds?: { round_number: number; price: number | null; status: string }[];
   messages: Message[];
   metrics?: {
     initial_price: string;
@@ -201,6 +202,7 @@ export default function BidSummaryPage() {
   const [loadingAiSuppliers, setLoadingAiSuppliers] = useState(false);
   const [aiSuppliers, setAiSuppliers] = useState<AiSupplier[]>([]);
   const [manualVendors, setManualVendors] = useState<ManualVendor[]>([]);
+  const [preferredVendors, setPreferredVendors] = useState<Array<{ name: string; email: string }>>([]);
   const [newVendorName, setNewVendorName] = useState('');
   const [newVendorEmail, setNewVendorEmail] = useState('');
   const [newVendorNotes, setNewVendorNotes] = useState('');
@@ -479,6 +481,7 @@ export default function BidSummaryPage() {
       }));
 
       setAiSuppliers(suppliers);
+      setPreferredVendors(data.preferred_vendors || []);
       setShowVendorSelection(true);
     } catch (err) {
       console.error('Error fetching AI suppliers:', err);
@@ -841,6 +844,25 @@ Procurement Team`
     }
   };
 
+  const stopNegotiation = async (supplierId: number) => {
+    try {
+      const response = await fetch(`/api/sam-gov/negotiate/${negotiationSession?.id}/stop/${supplierId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(getRequesterPayload()),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        setError(data.error || 'Unable to stop negotiation.');
+        return;
+      }
+      fetchNegotiationStatus();
+    } catch (err) {
+      console.error('Failed to stop negotiation:', err);
+      setError('Unable to stop negotiation.');
+    }
+  };
+
   const acceptQuote = async (supplierId: number) => {
     try {
       await fetch(`/api/sam-gov/negotiate/${negotiationSession?.id}/accept/${supplierId}`, {
@@ -1095,6 +1117,14 @@ Procurement Team`
 
     if (supplier.status === 'completed') {
       return { type: 'completed', label: 'Negotiation Complete' };
+    }
+
+    if (supplier.status === 'stopped') {
+      return { type: 'stopped', label: 'Stopped' };
+    }
+
+    if (supplier.negotiation_round >= 3) {
+      return { type: 'best_offer', label: 'Best offer' };
     }
 
     if (draft?.isPending) {
@@ -1366,6 +1396,35 @@ Procurement Team`
                   </div>
 
                   <Separator />
+
+                  {preferredVendors.length > 0 && (
+                    <div className="space-y-3">
+                      <Label className="text-base font-semibold">Preferred vendors</Label>
+                      <p className="text-sm text-muted-foreground">Saved from earlier bids. Adding one includes them in this RFQ. It does not send email yet.</p>
+                      <div className="flex flex-wrap gap-2">
+                        {preferredVendors.map((vendor) => (
+                          <Button key={vendor.email} type="button" variant="outline" size="sm" onClick={() => {
+                            const email = vendor.email.trim().toLowerCase();
+                            const already = manualVendors.some((item) => item.email.trim().toLowerCase() === email)
+                              || aiSuppliers.some((item) => item.selected && item.email.trim().toLowerCase() === email);
+                            if (already) {
+                              setError("That vendor is already included.");
+                              return;
+                            }
+                            setManualVendors((current) => [...current, {
+                              id: `preferred-${email}`,
+                              name: vendor.name,
+                              email: vendor.email,
+                              notes: "",
+                            }]);
+                            setError(null);
+                          }}>
+                            Add {vendor.name}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Manual Vendor Input */}
                   <div className="space-y-3">
@@ -1743,7 +1802,7 @@ Procurement Team`
                                       supplier.status === 'negotiating' ? 'secondary' :
                                         'outline'
                                   }>
-                                    Round {supplier.negotiation_round}/3
+                                    {supplier.status === 'stopped' ? 'Stopped' : supplier.negotiation_round >= 3 ? 'Best offer' : `Round ${supplier.negotiation_round}/3`}
                                   </Badge>
                                 </div>
                               </div>
@@ -1882,6 +1941,32 @@ Procurement Team`
                                     ) : (
                                       'Get Supplier Response'
                                     )}
+                                  </Button>
+                                )}
+
+                                {actionState.type === 'stopped' && (
+                                  <Alert className="flex-1">
+                                    <AlertDescription>
+                                      Negotiation stopped. Further vendor emails stay in the thread and do not open another round.
+                                    </AlertDescription>
+                                  </Alert>
+                                )}
+
+                                {actionState.type === 'best_offer' && (
+                                  <Alert className="flex-1">
+                                    <AlertDescription>
+                                      The third reply is the best offer. This negotiation is closed.
+                                    </AlertDescription>
+                                  </Alert>
+                                )}
+
+                                {supplier.status !== 'completed' && supplier.status !== 'stopped' && supplier.negotiation_round < 3 && (
+                                  <Button
+                                    onClick={() => stopNegotiation(supplier.id)}
+                                    variant="outline"
+                                    size="sm"
+                                  >
+                                    Stop negotiation
                                   </Button>
                                 )}
 
