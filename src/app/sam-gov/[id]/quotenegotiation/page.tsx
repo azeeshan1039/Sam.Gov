@@ -392,8 +392,33 @@ export default function BidSummaryPage() {
     try {
       setLoading(true);
       const response = await fetch(`/api/sam-gov`);
-      const allOpportunities = await response.json();
-      const foundOpportunity = allOpportunities.find((opp: any) => opp.id === opportunityId);
+      const allOpportunities = await response.json().catch(() => []);
+      let foundOpportunity = Array.isArray(allOpportunities)
+        ? allOpportunities.find((opp: any) => opp.id === opportunityId)
+        : undefined;
+      // The cached list only holds recent notices. Older notices: ask SAM.gov directly.
+      if (!foundOpportunity && !opportunityId.startsWith('PIPELINE-')) {
+        const single = await fetch(`/api/sam-gov/opportunity/${encodeURIComponent(opportunityId)}`, { cache: 'no-store' });
+        if (single.ok) foundOpportunity = await single.json();
+      }
+      // Bids without a SAM.gov notice (vendors added from the bid page create a PIPELINE-<id>
+      // negotiation; bids from other portals): show the negotiation from its own record.
+      if (!foundOpportunity) {
+        const sessionsResponse = await fetch(`/api/sam-gov/sessions${getRequesterQuery()}`, { cache: 'no-store' });
+        const sessionsData = sessionsResponse.ok ? await sessionsResponse.json() : null;
+        const ownSession = sessionsData?.sessions?.find((s: any) => s.opportunity_id === opportunityId);
+        if (ownSession) {
+          foundOpportunity = {
+            id: opportunityId,
+            title: ownSession.opportunity_title || opportunityId,
+            department: null,
+            ncode: null,
+            type: 'No SAM.gov notice',
+            closingDate: null,
+            description: '',
+          };
+        }
+      }
 
       if (foundOpportunity) {
         setOpportunity(foundOpportunity);
@@ -1842,7 +1867,7 @@ Procurement Team`
 
                               <Separator className="my-4" />
 
-                              <div className="flex justify-between items-center gap-2">
+                              <div className="flex flex-wrap justify-between items-center gap-2">
                                 {/* Action buttons based on state */}
                                 {actionState.type === 'completed' && supplier.metrics && (
                                   <Card className="p-3 bg-success/10 w-full">
@@ -1903,7 +1928,7 @@ Procurement Team`
 
                                 {actionState.type === 'need_draft' && (
                                   <>
-                                    <Alert className="flex-1" variant="default">
+                                    <Alert className="min-w-[16rem] flex-1" variant="default">
                                       <AlertDescription>
                                         Supplier has responded. Generate your counter-offer.
                                       </AlertDescription>
@@ -1945,7 +1970,7 @@ Procurement Team`
                                 )}
 
                                 {actionState.type === 'stopped' && (
-                                  <Alert className="flex-1">
+                                  <Alert className="min-w-[16rem] flex-1">
                                     <AlertDescription>
                                       Negotiation stopped. Further vendor emails stay in the thread and do not open another round.
                                     </AlertDescription>
@@ -1953,14 +1978,15 @@ Procurement Team`
                                 )}
 
                                 {actionState.type === 'best_offer' && (
-                                  <Alert className="flex-1">
+                                  <Alert className="min-w-[16rem] flex-1">
                                     <AlertDescription>
                                       The third reply is the best offer. This negotiation is closed.
                                     </AlertDescription>
                                   </Alert>
                                 )}
 
-                                {supplier.status !== 'completed' && supplier.status !== 'stopped' && supplier.negotiation_round < 3 && (
+                                {supplier.status !== 'completed' && supplier.status !== 'stopped' && supplier.negotiation_round < 3
+                                  && (supplier.email_sent || supplier.messages.length > 0) && (
                                   <Button
                                     onClick={() => stopNegotiation(supplier.id)}
                                     variant="outline"

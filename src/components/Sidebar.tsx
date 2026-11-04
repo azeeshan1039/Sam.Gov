@@ -22,6 +22,7 @@ import {
   Inbox,
   CalendarDays,
   Medal,
+  Settings as SettingsIcon,
 } from "lucide-react";
 import { clearStoredUser, getStoredUser, type AuthUser } from "@/lib/auth";
 
@@ -35,6 +36,7 @@ const navItems = [
   { href: "/agent-bid-data", label: "Agent Bid Data", icon: UserRoundSearch },
   { href: "/weekly-submissions", label: "Weekly submissions", icon: CalendarDays },
   { href: "/award-tracking", label: "Award Tracking", icon: Medal },
+  { href: "/settings", label: "Settings", icon: SettingsIcon },
 ];
 
 const adminItems = [

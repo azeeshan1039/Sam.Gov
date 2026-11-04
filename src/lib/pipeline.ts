@@ -87,6 +87,8 @@ export interface PipelineItem {
   status_history?: StatusHistoryEvent[];
   ownership_history?: OwnershipHistoryEvent[];
   workspace?: BidWorkspace;
+  /** False when the viewer only has read access (e.g. the bid was reassigned to someone else). */
+  can_edit_workspace?: boolean;
 }
 
 export type OutreachState = "suggested" | "contacted" | "responded";
@@ -115,6 +117,8 @@ export interface BidVendor {
   negotiation_round: number;
   rounds?: NegotiationRound[];
   email_sent: boolean;
+  /** Gmail messages (KAN-74) exchanged with this vendor on the bid. */
+  gmail_message_count?: number;
   latest_price: number | null;
 }
 
@@ -126,6 +130,11 @@ export interface BidConversationEvent {
   price_mentioned: number | null;
   created_at: string | null;
   direction?: "incoming" | "outgoing";
+  /** 0 = initial RFQ, 1-3 = negotiation round, null = after the negotiation closed. */
+  round_number?: number | null;
+  /** "rfq" = the RFQ negotiation automation, "gmail" = connected Gmail (KAN-74). */
+  channel?: "rfq" | "gmail";
+  subject?: string | null;
 }
 
 export interface BidWorkspace {
