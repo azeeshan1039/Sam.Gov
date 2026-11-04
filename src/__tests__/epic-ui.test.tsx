@@ -501,6 +501,12 @@ describe("KAN-30 and KAN-31 shared statuses and submission", () => {
         return response({ bid: { ...bid, internal_status: "Bid submitted" }, changed: true });
       }
       if (url.includes("pipeline/bids/9")) return response({ bid });
+      // KAN-74 Emails card on the bid page.
+      if (url.includes("emails/bids/9/threads")) {
+        return response({ bid: { id: 9, solicitation_number: "SOL-9", title: "Status bid", contact_email: null, co_name: null },
+          threads: [], outbox: [], account: { status: "not_connected", connected: false }, current_user_id: agent.id });
+      }
+      if (url.includes("emails/unlinked")) return response({ threads: [], bids: {} });
       throw new Error(`Unexpected request: ${url}`);
     }) as jest.Mock;
     const user = userEvent.setup();
