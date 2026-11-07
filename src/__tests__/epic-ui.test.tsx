@@ -8,6 +8,7 @@ import WorkManagementPage from "@/app/work-management/page";
 import Sidebar from "@/components/Sidebar";
 import { getStoredUser, type AuthUser } from "@/lib/auth";
 import UnclaimedBidsPage from "@/app/unclaimed-bids/page";
+import NicheDirectoryPage from "@/app/niche-directory/page";
 import BidDetailPage from "@/app/bids/[id]/page";
 import { BID_STATUSES } from "@/lib/pipeline";
 import { easternReportingRange, formatUtcDateRange } from "@/lib/eastern-date";
@@ -94,6 +95,7 @@ describe("KAN-18 and KAN-19 role-specific navigation", () => {
     expect(screen.getByRole("link", { name: "Negotiations" })).toHaveAttribute("href", "/negotiations");
     expect(screen.getByRole("link", { name: "Pipeline" })).toHaveAttribute("href", "/pipeline");
     expect(screen.getByRole("link", { name: "Agent Bid Data" })).toHaveAttribute("href", "/agent-bid-data");
+    expect(screen.getByRole("link", { name: "Niche directory" })).toHaveAttribute("href", "/niche-directory");
     expect(screen.getByRole("link", { name: "Weekly submissions" })).toHaveAttribute("href", "/weekly-submissions");
     expect(screen.getByRole("link", { name: "$100k+" })).toHaveAttribute("href", "/hundred-k");
     expect(screen.getByRole("link", { name: "Approvals" })).toHaveAttribute("href", "/approvals");
@@ -107,6 +109,7 @@ describe("KAN-18 and KAN-19 role-specific navigation", () => {
     render(<Sidebar />);
 
     expect(await screen.findByRole("link", { name: "My bids" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Niche directory" })).toHaveAttribute("href", "/niche-directory");
     expect(screen.queryByRole("link", { name: "Work management" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Team" })).not.toBeInTheDocument();
   });
@@ -407,23 +410,29 @@ describe("KAN-40 manager duplicate resolution", () => {
 describe("KAN-26 unclaimed SAM.gov pool", () => {
   test("renders only opportunities confirmed available by the batched ownership overlay", async () => {
     mockedGetStoredUser.mockReturnValue(agent);
-    global.fetch = jest.fn((input: RequestInfo | URL) => {
+    let availabilityBody: { opportunities: Array<{ ncode?: string }> } | null = null;
+    global.fetch = jest.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = urlOf(input);
       if (url === "/api/sam-gov") return response([
-        { id: "OPEN-1", title: "Available SAM bid", closingDate: "2026-10-20", solicitationNumber: "SOL-OPEN" },
-        { id: "TAKEN-1", title: "Claimed SAM bid", closingDate: "2026-10-21", solicitationNumber: "SOL-TAKEN" },
+        { id: "OPEN-1", title: "Available SAM bid", closingDate: "2026-10-20", solicitationNumber: "SOL-OPEN", ncode: "541519", naicsDescription: "Other Computer Related Services" },
+        { id: "TAKEN-1", title: "Claimed SAM bid", closingDate: "2026-10-21", solicitationNumber: "SOL-TAKEN", ncode: "339112" },
       ]);
-      if (url.includes("opportunities/availability")) return response({ opportunities: [
-        { external_notice_id: "OPEN-1", available: true },
-        { external_notice_id: "TAKEN-1", available: false },
-      ] });
+      if (url.includes("opportunities/availability")) {
+        availabilityBody = JSON.parse(String(init?.body));
+        return response({ opportunities: [
+          { external_notice_id: "OPEN-1", available: true },
+          { external_notice_id: "TAKEN-1", available: false },
+        ] });
+      }
       throw new Error(`Unexpected request: ${url}`);
     }) as jest.Mock;
 
     render(<UnclaimedBidsPage />);
     expect(await screen.findByText("Available SAM bid")).toBeInTheDocument();
+    expect(screen.getByText(/541519 .* Other Computer Related Services/)).toBeInTheDocument();
     expect(screen.queryByText("Claimed SAM bid")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Review and pick up" })).toHaveAttribute("href", "/sam-gov/OPEN-1");
+    expect(availabilityBody?.opportunities.map((item) => item.ncode)).toEqual(["541519", "339112"]);
   });
 
   test("checks the full SAM.gov catalog in API-sized chunks", async () => {
@@ -449,6 +458,78 @@ describe("KAN-26 unclaimed SAM.gov pool", () => {
     render(<UnclaimedBidsPage />);
     expect(await screen.findByText("SAM bid 1000")).toBeInTheDocument();
     expect(chunkSizes).toEqual([1000, 1]);
+  });
+});
+
+describe("KAN-83 niche directory", () => {
+  const nichePerformance = {
+    date_from: "2026-11-01",
+    date_to: "2026-11-30",
+    baseline_label: "Non-niche allocated bids in the same date range",
+    niche: { submitted_bid_count: 3, won: 1, lost: 1, pending: 1, unknown: 0, terminal_outcome_count: 2, win_rate: 0.5 },
+    baseline: { submitted_bid_count: 2, won: 1, lost: 0, pending: 0, unknown: 1, terminal_outcome_count: 1, win_rate: 1 },
+    niches: [{ naics_code: "541519", naics_description: "Other Computer Related Services", submitted_bid_count: 3, won: 1, lost: 1, pending: 1, unknown: 0, terminal_outcome_count: 2, win_rate: 0.5 }],
+  };
+
+  test("renders NAICS ownership grouped by niche", async () => {
+    mockedGetStoredUser.mockReturnValue(agent);
+    global.fetch = jest.fn((input: RequestInfo | URL) => {
+      const url = urlOf(input);
+      if (url.includes("pipeline/niche-performance")) return response(nichePerformance);
+      if (url.includes("opportunities/niches")) return response({ niches: [{
+        naics_code: "541519",
+        naics_description: "Other Computer Related Services",
+        active_bid_count: 2,
+        total_bid_count: 3,
+        owners: [{ id: 2, full_name: "Agent One" }, { id: 3, full_name: "Agent Two" }],
+        opportunities: [{
+          id: 7,
+          external_notice_id: "NOTICE-7",
+          solicitation_number: "SOL-7",
+          title: "IT support",
+          state: "assigned",
+          assignee: { id: 2, full_name: "Agent One" },
+        }],
+      }] });
+      throw new Error(`Unexpected request: ${url}`);
+    }) as jest.Mock;
+
+    render(<NicheDirectoryPage />);
+    expect(await screen.findByText("541519 · Other Computer Related Services")).toBeInTheDocument();
+    expect(screen.getAllByText("50%").length).toBeGreaterThan(0);
+    expect(screen.getByText("Agent One, Agent Two")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /SOL-7/i })).toHaveAttribute("href", "/sam-gov/NOTICE-7");
+  });
+
+  test("KAN-85 lets admins approve pending niches", async () => {
+    mockedGetStoredUser.mockReturnValue(admin);
+    const user = userEvent.setup();
+    const requests: Array<{ url: string; body?: unknown }> = [];
+    global.fetch = jest.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = urlOf(input);
+      requests.push({ url, body: init?.body ? JSON.parse(String(init.body)) : undefined });
+      if (url.includes("opportunities/niches/approve")) return response({ approval: { status: "approved" } });
+      if (url.includes("pipeline/niche-performance")) return response(nichePerformance);
+      if (url.includes("opportunities/niches")) return response({ niches: [{
+        naics_code: "541519",
+        naics_description: "Other Computer Related Services",
+        active_bid_count: 0,
+        total_bid_count: 1,
+        owners: [],
+        qualified_owners: [],
+        approval: { status: "pending" },
+        opportunities: [],
+      }] });
+      throw new Error(`Unexpected request: ${url}`);
+    }) as jest.Mock;
+
+    render(<NicheDirectoryPage />);
+    await user.click(await screen.findByRole("button", { name: "Approve niche" }));
+    await waitFor(() => expect(requests.some((request) => request.url.includes("niches/approve"))).toBe(true));
+    expect(requests.find((request) => request.url.includes("niches/approve"))?.body).toMatchObject({
+      naics_code: "541519",
+      naics_description: "Other Computer Related Services",
+    });
   });
 });
 

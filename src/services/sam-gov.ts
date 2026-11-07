@@ -258,6 +258,7 @@ function mapApiOpportunity(apiOpp: any): SamGovOpportunity {
     active: typeof apiOpp.active === 'boolean' ? apiOpp.active : undefined,
     title: apiOpp.title || 'N/A',
     ncode: ncodeString || 'N/A',
+    naicsDescription: apiOpp.naicsDescription || apiOpp.naicsTitle || undefined,
     department: department,
     subtier: subtier,
     office: office,

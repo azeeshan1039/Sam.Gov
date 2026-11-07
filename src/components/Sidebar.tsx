@@ -23,6 +23,7 @@ import {
   CalendarDays,
   Medal,
   Settings as SettingsIcon,
+  Tags,
 } from "lucide-react";
 import { clearStoredUser, getStoredUser, type AuthUser } from "@/lib/auth";
 
@@ -33,6 +34,7 @@ const navItems = [
   { href: "/contract-awards", label: "Contract Awards", icon: Award },
   { href: "/negotiations", label: "Negotiations", icon: Handshake },
   { href: "/my-bids", label: "My bids", icon: FileSpreadsheet },
+  { href: "/niche-directory", label: "Niche directory", icon: Tags },
   { href: "/agent-bid-data", label: "Agent Bid Data", icon: UserRoundSearch },
   { href: "/weekly-submissions", label: "Weekly submissions", icon: CalendarDays },
   { href: "/award-tracking", label: "Award Tracking", icon: Medal },

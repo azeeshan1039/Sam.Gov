@@ -19,6 +19,8 @@ export interface SamGovOpportunity {
    * The NAICS code for the opportunity.
    */
   ncode: string;
+  /** The NAICS industry description, when SAM.gov provides it. */
+  naicsDescription?: string;
   /**
    * The department issuing the opportunity.
    */

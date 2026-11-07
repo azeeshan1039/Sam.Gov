@@ -34,6 +34,8 @@ export default function UnclaimedBidsPage() {
               external_notice_id: item.id,
               solicitation_number: item.solicitationNumber || item.id,
               source: "SAM.GOV",
+              ncode: item.ncode,
+              naics_description: item.naicsDescription,
             })),
           }),
         });
@@ -77,6 +79,7 @@ export default function UnclaimedBidsPage() {
               <CardHeader><CardTitle className="text-base">{item.title}</CardTitle></CardHeader>
               <CardContent className="space-y-3 text-sm">
                 <p className="text-muted-foreground">{item.solicitationNumber || item.id}</p>
+                <p><span className="text-muted-foreground">NAICS</span> {item.ncode || "N/A"}{item.naicsDescription ? ` · ${item.naicsDescription}` : ""}</p>
                 <p>Due {new Date(item.closingDate).toLocaleDateString()}</p>
                 <Link className="font-medium text-blue-600 underline" href={`/sam-gov/${encodeURIComponent(item.id)}`}>Review and pick up</Link>
               </CardContent>

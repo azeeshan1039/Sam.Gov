@@ -201,6 +201,8 @@ export default function SamGovOpportunityPage() {
         external_notice_id: item.id,
         solicitation_number: item.solicitationNumber || item.id,
         source: 'SAM.GOV',
+        ncode: item.ncode,
+        naics_description: item.naicsDescription,
       }] }),
     });
     const data = await response.json().catch(() => ({}));
@@ -243,6 +245,8 @@ export default function SamGovOpportunityPage() {
           external_notice_id: opportunity.id,
           solicitation_number: opportunity.solicitationNumber || opportunity.id,
           title: opportunity.title,
+          ncode: opportunity.ncode,
+          naics_description: opportunity.naicsDescription,
           link: opportunity.link,
           response_deadline: opportunity.closingDate,
           expected_submitted_price: value,
@@ -314,6 +318,8 @@ export default function SamGovOpportunityPage() {
   const availabilityPresentation = availability
     ? presentOpportunityAvailability(availability)
     : null;
+  const niche = availability?.niche;
+  const nicheOwners = niche?.owners?.map((owner) => owner.full_name).filter(Boolean).join(', ');
 
   return (
     <main className="flex-1 p-6 bg-gradient-to-br from-secondary/30 to-background animate-fadeIn">
@@ -332,7 +338,7 @@ export default function SamGovOpportunityPage() {
             <div className="space-y-4">
               <div className="opacity-90 transition-opacity hover:opacity-100">
                 <Label className="font-semibold text-primary">NAICS Code</Label>
-                <p>{opportunity.ncode || 'N/A'}</p>
+                <p>{opportunity.ncode || 'N/A'}{opportunity.naicsDescription ? ` · ${opportunity.naicsDescription}` : ''}</p>
               </div>
               <div className="opacity-90 transition-opacity hover:opacity-100">
                 <Label className="font-semibold text-primary">Department</Label>
@@ -430,6 +436,16 @@ export default function SamGovOpportunityPage() {
 
             <div className="md:col-span-2 mt-6 rounded-lg border bg-slate-50 p-4">
               <h3 className="font-semibold">Company ownership</h3>
+              {niche?.naics_code && (
+                <div className="mt-3 rounded-md border border-blue-100 bg-blue-50 p-3 text-sm">
+                  <p className="font-medium">Niche {niche.naics_code}{niche.naics_description ? ` · ${niche.naics_description}` : ''}</p>
+                  <p className="mt-1 text-muted-foreground">
+                    {niche.active_bid_count > 0
+                      ? `${niche.active_bid_count} active bid${niche.active_bid_count === 1 ? '' : 's'} in this niche${nicheOwners ? ` owned by ${nicheOwners}` : ''}.`
+                      : 'No active company owner is currently working this niche.'}
+                  </p>
+                </div>
+              )}
               {!currentUser ? (
                 <p className="mt-2 text-sm text-muted-foreground">Sign in to pick up this opportunity.</p>
               ) : availabilityPresentation?.state === 'claimed' ? (

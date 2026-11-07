@@ -13,6 +13,12 @@ export interface OpportunityAvailability {
   available: boolean;
   tracked_opportunity_id?: number | null;
   assignee?: { id: number; full_name: string } | null;
+  niche?: {
+    naics_code: string;
+    naics_description?: string | null;
+    active_bid_count: number;
+    owners: Array<{ id: number; full_name: string }>;
+  } | null;
   availability_state?: OpportunityAvailabilityState;
   workflow_state?: OpportunityWorkflowState;
   last_assignee?: { id: number; full_name: string } | null;

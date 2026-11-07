@@ -44,6 +44,8 @@ export interface PipelineItem {
   agent_name: string | null;
   solicitation_number: string | null;
   title: string | null;
+  naics_code: string | null;
+  naics_description: string | null;
   manufacturer: string | null;
   portal: string | null;
   bid_url: string | null;
