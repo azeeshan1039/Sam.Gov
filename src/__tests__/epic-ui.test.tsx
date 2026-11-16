@@ -180,8 +180,8 @@ describe("KAN-18, KAN-19, and KAN-22 dashboard views", () => {
     expect(screen.getAllByText("This week").length).toBeGreaterThan(0);
     expect(screen.getAllByText("This month").length).toBeGreaterThan(0);
     expect(screen.getByRole("heading", { name: "Agent leaderboard" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "By submitted dollars" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "By bid count" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Bids vs. goal" })).toBeInTheDocument();
+    expect(screen.getByText("No submitted agent bids for this period.")).toBeInTheDocument();
     expect(screen.getByText("2")).toBeInTheDocument();
     expect(screen.getByText("1")).toBeInTheDocument();
     expect(screen.getByLabelText("Employee")).toHaveValue("2");

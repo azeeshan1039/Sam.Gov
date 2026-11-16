@@ -4,18 +4,18 @@ import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Calendar, ChevronDown, Download, TriangleAlert } from "lucide-react";
+import { ArrowRight, Award, Calendar, Check, ChevronDown, Clock, Download, TriangleAlert } from "lucide-react";
 import { getStoredUser, getUserDisplayName } from "@/lib/auth";
 import { formatMoney, type StatsPayload } from "@/lib/stats";
+import type { PipelineItem } from "@/lib/pipeline";
 
 const DashboardChart = dynamic(() => import("@/components/DashboardChart"), {
   ssr: false,
 });
 
-const DashboardChartTrend = dynamic(
-  () => import("@/components/DashboardChartTrend"),
-  { ssr: false }
-);
+const GoalPaceChart = dynamic(() => import("@/components/GoalPaceChart"), {
+  ssr: false,
+});
 
 const DashboardTable = dynamic(() => import("@/components/DashboardTable"), {
   ssr: false,
@@ -31,6 +31,105 @@ interface DashboardStats {
   suppliers_responded: number;
   total_savings: number;
   recent_activity: number;
+}
+
+function compactMoney(value: number) {
+  const abs = Math.abs(value);
+  const sign = value < 0 ? "-" : "";
+  if (abs >= 1000000) return `${sign}$${(abs / 1000000).toFixed(2).replace(/\.?0+$/, "")}M`;
+  if (abs >= 1000) return `${sign}$${(abs / 1000).toFixed(abs >= 100000 ? 0 : 1).replace(/\.0$/, "")}K`;
+  return formatMoney(value);
+}
+
+function priceMoney(value: number | null | undefined) {
+  if (value == null || Number.isNaN(Number(value))) return "—";
+  return Number(value).toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function inEasternMonth(value: string | null | undefined, year: number, month: number) {
+  if (!value) return false;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return false;
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric", month: "numeric" }).formatToParts(date);
+  const y = Number(parts.find((part) => part.type === "year")?.value);
+  const m = Number(parts.find((part) => part.type === "month")?.value);
+  return y === year && m === month;
+}
+
+function submittedStamp(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const day = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "America/New_York" }).format(date).toUpperCase();
+  const time = new Intl.DateTimeFormat("en-US", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/New_York" }).format(date);
+  return `${day} · ${time}`;
+}
+
+function sumNumbers(values: Array<number | null | undefined>) {
+  const present = values.filter((value): value is number => value != null && !Number.isNaN(Number(value)));
+  if (!present.length) return null;
+  return present.reduce((total, value) => total + Number(value), 0);
+}
+
+function PortalMix({
+  wide,
+  monthLabel,
+  rows,
+  max,
+  sizeKnown,
+  veryLargeKnown,
+  sizes,
+}: {
+  wide?: boolean;
+  monthLabel: string;
+  rows: Array<{ name: string; count: number; value: number | null }>;
+  max: number;
+  sizeKnown: boolean;
+  veryLargeKnown: boolean;
+  sizes: { Small: number; Medium: number; Large: number; "Very Large": number };
+}) {
+  const swatches = [
+    ["#A5F3FC", "Small <$50K", sizes.Small, true],
+    ["#06B6D4", "Medium", sizes.Medium, true],
+    ["#0E7490", "Large $100K+", sizes.Large, true],
+    ["#164E63", "Very large $500K+", veryLargeKnown ? sizes["Very Large"] : null, veryLargeKnown],
+  ] as const;
+  return (
+    <div className={wide ? "cf-card" : "cf-card cf-split-side"} style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 18 }}>
+      <div>
+        <h2 className="cf-h2">Submissions by portal</h2>
+        <p className="cf-sub">{monthLabel} · count and submitted value</p>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        {rows.length ? rows.map((row) => (
+          <div key={row.name} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 14 }}>
+              <span style={{ fontWeight: 500 }}>{row.name}</span>
+              <span className="cf-mono" style={{ fontSize: 13, color: "var(--cf-text-2)" }}>{row.count} · {row.value == null ? "—" : compactMoney(row.value)}</span>
+            </div>
+            <div className="cf-bar" style={{ height: 8 }}><span style={{ width: `${(row.count / max) * 100}%` }} /></div>
+          </div>
+        )) : <p className="cf-meta">No portal totals for this month.</p>}
+      </div>
+      <div style={{ borderTop: "1px solid var(--cf-line)", paddingTop: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+        <div className="cf-lbl">Bid size mix</div>
+        {sizeKnown ? (
+          <>
+            <div style={{ display: "flex", gap: 2, height: 14, borderRadius: 4, overflow: "hidden" }} role="img" aria-label={`Small ${sizes.Small}, Medium ${sizes.Medium}, Large ${sizes.Large}, Very large ${veryLargeKnown ? sizes["Very Large"] : "not split"}`}>
+              {swatches.map(([color, , count, known]) => known && Number(count) > 0 ? <div key={color} style={{ flex: Number(count), background: color }} /> : null)}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "6px 16px", fontSize: 13, color: "var(--cf-text-2)" }}>
+              {swatches.map(([color, label, count]) => (
+                <span key={label} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ width: 10, height: 10, borderRadius: 2, background: color, flex: "none" }} />
+                  {label} · {count == null ? "—" : count}
+                </span>
+              ))}
+            </div>
+          </>
+        ) : <p className="cf-meta">Size mix is not in this feed.</p>}
+      </div>
+    </div>
+  );
 }
 
 interface PulsePeriod {
@@ -64,6 +163,7 @@ export default function DashboardPage() {
   const [dashView, setDashView] = useState<"overview" | "agent" | "portal">("overview");
   const [myGoal, setMyGoal] = useState<{ achieved: number; monthly: number; left: number } | null>(null);
   const [myClaims, setMyClaims] = useState<Array<{ id: number; external_notice_id: string; solicitation_number?: string | null; title: string; expected_bid_value?: number | null; response_deadline?: string | null; state: string }>>([]);
+  const [pipelineItems, setPipelineItems] = useState<PipelineItem[]>([]);
 
   useEffect(() => {
     const user = getStoredUser();
@@ -141,6 +241,15 @@ export default function DashboardPage() {
             }
           } catch (err) {
             console.error("Failed to fetch award flags:", err);
+          }
+          try {
+            const pipelineResponse = await fetch(`/api/backend/pipeline?company_id=${companyId}&requester_user_id=${userId}`, { cache: "no-store" });
+            if (pipelineResponse.ok) {
+              const pipelineData = await pipelineResponse.json();
+              setPipelineItems(pipelineData.items || []);
+            }
+          } catch (err) {
+            console.error("Failed to fetch pipeline:", err);
           }
         }
       } catch (err) {
@@ -229,7 +338,23 @@ export default function DashboardPage() {
   const teamGoal = companyStats?.monthly_goal?.monthly || 100;
   const goalPct = teamGoal > 0 ? Math.min(100, Math.round((submittedMtd / teamGoal) * 100)) : 0;
   const monthLabel = companyStats?.month_label || new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "America/New_York" }).format(new Date());
-  const attentionCount = duplicateFlags.length + staleFlags.length + awardFlags.length;
+  const pace = (() => {
+    const parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric", month: "numeric", day: "numeric" }).formatToParts(new Date());
+    const year = Number(parts.find((part) => part.type === "year")?.value);
+    const month = Number(parts.find((part) => part.type === "month")?.value);
+    const day = Number(parts.find((part) => part.type === "day")?.value);
+    const days = new Date(year, month, 0).getDate();
+    const paceToday = Math.round(teamGoal * (day / days));
+    let weekdays = 0;
+    for (let cursor = day; cursor <= days; cursor += 1) {
+      const dow = new Date(year, month - 1, cursor).getDay();
+      if (dow !== 0 && dow !== 6) weekdays += 1;
+    }
+    return { behind: Math.max(paceToday - submittedMtd, 0), weekdays };
+  })();
+  const paceBehind = pace.behind;
+  const paceWeekdays = pace.weekdays;
+  const attentionCount = (paceBehind > 0 ? 1 : 0) + 2 + 1 + (duplicateFlags.length === 0 && staleFlags.length === 0 ? 1 : 0);
   const hour = Number(new Intl.DateTimeFormat("en-US", { hour: "numeric", hour12: false, timeZone: "America/New_York" }).format(new Date()));
   const dayPart = hour < 12 ? "morning" : hour < 17 ? "afternoon" : "evening";
   const firstName = getUserDisplayName(getStoredUser()).split(" ")[0] || "there";
@@ -346,8 +471,62 @@ export default function DashboardPage() {
     { key: "week" as const, label: "This week", date_from: "", date_to: "", picked_up: 0, submitted: 0 },
     { key: "month" as const, label: "This month", date_from: "", date_to: "", picked_up: 0, submitted: 0 },
   ];
-  const portalRows = companyStats?.bid_by_portal?.portals || [];
-  const portalMax = Math.max(1, ...portalRows.map((row) => row.count));
+  const reportParts = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric", month: "numeric" }).formatToParts(new Date());
+  const reportYear = companyStats?.year || Number(reportParts.find((part) => part.type === "year")?.value);
+  const reportMonth = companyStats?.month || Number(reportParts.find((part) => part.type === "month")?.value);
+  const monthSubmitted = pipelineItems.filter((item) => inEasternMonth(item.submitted_at, reportYear, reportMonth));
+  const finding = pipelineItems.filter((item) => item.internal_status === "Finding Supplier");
+  const waiting = pipelineItems.filter((item) => item.internal_status === "Waiting Approval");
+  const submittedNow = pipelineItems.filter((item) => item.internal_status === "Bid submitted");
+  const won = pipelineItems.filter((item) => item.award_outcome === "won");
+  const wonThisMonth = won.filter((item) => inEasternMonth(item.outcome_updated_at, reportYear, reportMonth));
+  const awardedRows = won.some((item) => item.outcome_updated_at) ? wonThisMonth : won;
+  const lostCount = pipelineItems.filter((item) => item.award_outcome === "lost").length;
+  const pendingCount = pipelineItems.filter((item) => item.award_outcome === "pending").length;
+  const findingValue = sumNumbers(finding.map((item) => item.expected_submitted_price ?? item.submitted_price));
+  const waitingValue = sumNumbers(waiting.map((item) => item.expected_submitted_price ?? item.submitted_price));
+  const dueSoonKnown = finding.some((item) => item.days_remaining != null);
+  const dueSoon = finding.filter((item) => item.days_remaining != null && item.days_remaining <= 2).length;
+  const monthSubmittedValue = sumNumbers(monthSubmitted.map((item) => item.submitted_price)) ?? (typeof companyStats?.total_submission_value === "number" ? companyStats.total_submission_value : null);
+  const monthProfit = sumNumbers(monthSubmitted.map((item) => item.gross_profit));
+  const monthCost = sumNumbers(monthSubmitted.map((item) => item.supplier_cost ?? item.cost));
+  const monthAwarded = sumNumbers(awardedRows.map((item) => item.awarded_amount));
+  const markups = monthSubmitted.map((item) => item.markup_percent).filter((value): value is number => value != null);
+  const avgMarkup = markups.length ? markups.reduce((total, value) => total + value, 0) / markups.length : null;
+  const sizes = { Small: 0, Medium: 0, Large: 0, "Very Large": 0 };
+  const veryLargeKnown = monthSubmitted.some((item) => item.size_bucket);
+  let sizeKnown = veryLargeKnown;
+  if (veryLargeKnown) {
+    for (const item of monthSubmitted) {
+      if (item.size_bucket && item.size_bucket in sizes) sizes[item.size_bucket] += 1;
+    }
+  } else if (companyStats?.thresholds) {
+    sizeKnown = true;
+    sizes.Small = companyStats.thresholds.lte_50k;
+    sizes.Large = companyStats.thresholds.gte_100k;
+    sizes.Medium = Math.max(0, companyStats.thresholds.gte_50k - companyStats.thresholds.gte_100k);
+  }
+  const valueByPortal = new Map<string, number>();
+  for (const item of monthSubmitted) {
+    const key = (item.portal || "Unknown").toLowerCase();
+    valueByPortal.set(key, (valueByPortal.get(key) || 0) + (item.submitted_price || 0));
+  }
+  const statPortals = companyStats?.bid_by_portal?.portals || [];
+  const portalDisplay = statPortals.length
+    ? statPortals.map((row) => ({ name: row.name, count: row.count, value: valueByPortal.has(row.name.toLowerCase()) ? valueByPortal.get(row.name.toLowerCase())! : null }))
+    : Array.from(monthSubmitted.reduce((map, item) => {
+        const name = item.portal || "Unknown";
+        const current = map.get(name) || { name, count: 0, value: 0 };
+        current.count += 1;
+        current.value += item.submitted_price || 0;
+        map.set(name, current);
+        return map;
+      }, new Map<string, { name: string; count: number; value: number }>()).values());
+  const portalMax = Math.max(1, ...portalDisplay.map((row) => row.count));
+  const latestSubmissions = [...pipelineItems].filter((item) => item.submitted_at).sort((left, right) => +new Date(right.submitted_at || 0) - +new Date(left.submitted_at || 0)).slice(0, 5);
+  const portalMix = (
+    <PortalMix wide={dashView === "portal"} monthLabel={monthLabel} rows={portalDisplay} max={portalMax} sizeKnown={sizeKnown} veryLargeKnown={veryLargeKnown} sizes={sizes} />
+  );
 
   return (
     <>
@@ -426,48 +605,125 @@ export default function DashboardPage() {
 
         {(dashView === "overview" || dashView === "agent") && (
           <section className="cf-split">
-            <div className="cf-card cf-split-main" style={{ padding: "20px 24px" }}>
-              <h2 className="cf-h2">Submissions vs. monthly goal</h2>
-              <p className="cf-sub">Existing submission chart for {monthLabel}</p>
-              <div style={{ marginTop: 16 }}><DashboardChart /></div>
+            <div className="cf-card cf-split-main" style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 16, overflow: "hidden" }}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "12px 24px", justifyContent: "space-between", alignItems: "flex-start" }}>
+                <div>
+                  <h2 className="cf-h2">Submissions vs. monthly goal</h2>
+                  <p className="cf-sub">Cumulative bids submitted in {monthLabel}, all agents</p>
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 16, fontSize: 13, color: "var(--cf-text-2)" }}>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><svg width="22" height="8" aria-hidden><line x1="1" y1="4" x2="21" y2="4" stroke="#0891B2" strokeWidth="2.5" strokeLinecap="round" /></svg>Actual</span>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><svg width="22" height="8" aria-hidden><line x1="1" y1="4" x2="21" y2="4" stroke="#7C3AED" strokeWidth="2" strokeDasharray="4 3" /></svg>Forecast</span>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><svg width="22" height="8" aria-hidden><line x1="1" y1="4" x2="21" y2="4" stroke="#94A3B8" strokeWidth="2" strokeDasharray="6 4" /></svg>Goal pace</span>
+                </div>
+              </div>
+              <GoalPaceChart submitted={submittedMtd} goal={teamGoal} monthLabel={monthLabel} />
             </div>
-            <aside className="cf-card cf-split-side" aria-labelledby="attn-h">
-              <div className="cf-card-hd">
+            <aside className="cf-card cf-split-side" aria-labelledby="attn-h" style={{ display: "flex", flexDirection: "column" }}>
+              <div className="cf-card-hd" style={{ paddingBottom: 8 }}>
                 <h2 id="attn-h" className="cf-h2">Needs attention</h2>
                 <span className="cf-mono" style={{ fontSize: 11, fontWeight: 500, color: "var(--cf-cyan-text)", background: "rgba(34,211,238,.1)", border: "1px solid rgba(34,211,238,.3)", padding: "3px 10px", borderRadius: 999 }}>{attentionCount} ITEMS</span>
               </div>
-              <div style={{ padding: "0 24px 16px", display: "flex", flexDirection: "column", gap: 12 }}>
-                <div>
-                  <p style={{ fontWeight: 500 }}>Duplicate flags</p>
-                  {duplicateFlags.length ? duplicateFlags.slice(0, 4).map((flag) => (
-                    <Link key={flag.id} href={`/work-management#duplicate-${flag.id}`} className="cf-link" style={{ display: "block", marginTop: 6 }}>
-                      {flag.solicitation_number}
-                    </Link>
-                  )) : <p className="cf-meta">No unresolved duplicate flags.</p>}
-                  <Link className="cf-link" href="/work-management#duplicates" style={{ marginTop: 6 }}>Review all</Link>
-                </div>
-                <div>
-                  <p style={{ fontWeight: 500, display: "flex", gap: 8, alignItems: "center" }}><TriangleAlert size={16} strokeWidth={1.75} /> Stale bids</p>
-                  {staleFlags.length ? staleFlags.slice(0, 4).map((flag) => (
-                    <Link key={flag.claim_id} href={flag.href || `/work-management#stale-${flag.claim_id}`} className="cf-link" style={{ display: "block", marginTop: 6 }}>
-                      {flag.solicitation_number || flag.title}
-                    </Link>
-                  )) : <p className="cf-meta">No stale bids.</p>}
-                  <Link className="cf-link" href="/work-management#stale-bids" style={{ marginTop: 6 }}>Review all</Link>
-                </div>
-                {awardFlags.length ? (
-                  <div>
-                    <p style={{ fontWeight: 500 }}>Award check overdue (90 days)</p>
-                    {awardFlags.slice(0, 4).map((flag) => (
-                      <Link key={flag.bid_id} href={flag.href} className="cf-link" style={{ display: "block", marginTop: 6 }}>{flag.solicitation_number || flag.display_bid_id}</Link>
-                    ))}
-                  </div>
+              <ul style={{ listStyle: "none", margin: 0, padding: "0 24px 12px" }}>
+                {paceBehind > 0 ? (
+                  <li className="cf-attn">
+                    <span className="cf-ico cf-ico-bad"><TriangleAlert size={18} strokeWidth={1.75} /></span>
+                    <div>
+                      <b>Team is {paceBehind} bids behind goal pace</b>
+                      <p>{Math.max(teamGoal - submittedMtd, 0)} more needed in {paceWeekdays} working days.</p>
+                      <Link className="cf-link" href="/agent-bid-data">See by agent</Link>
+                    </div>
+                  </li>
                 ) : null}
-                {attentionCount === 0 ? <p className="cf-meta">No stale bids or duplicate flags.</p> : null}
-              </div>
+                <li className="cf-attn">
+                  <span className="cf-ico cf-ico-bad"><TriangleAlert size={18} strokeWidth={1.75} /></span>
+                  <div>
+                    <b>{duplicateFlags.length ? `${duplicateFlags.length} unresolved duplicate flag${duplicateFlags.length === 1 ? "" : "s"}` : "No unresolved duplicate flags"}</b>
+                    <p>
+                      {duplicateFlags.slice(0, 3).map((flag) => (
+                        <Link key={flag.id} href={`/work-management#duplicate-${flag.id}`} className="cf-link" style={{ marginRight: 8 }}>{flag.solicitation_number}</Link>
+                      ))}
+                      {duplicateFlags.length ? `${duplicateFlags[0].attempted_by?.full_name || "Someone"} attempted work owned by ${duplicateFlags[0].existing_agent?.full_name || "another agent"}` : "Checked with the latest sync"}
+                    </p>
+                    <Link className="cf-link" href="/work-management#duplicates">Review all</Link>
+                  </div>
+                </li>
+                <li className="cf-attn">
+                  <span className="cf-ico cf-ico-warn"><Clock size={18} strokeWidth={1.75} /></span>
+                  <div>
+                    <b>{staleFlags.length ? `${staleFlags.length} stale bid${staleFlags.length === 1 ? "" : "s"}` : "No stale bids"}</b>
+                    <p>
+                      {staleFlags.slice(0, 3).map((flag) => (
+                        <Link key={flag.claim_id} href={flag.href || `/work-management#stale-${flag.claim_id}`} className="cf-link" style={{ marginRight: 8 }}>{flag.solicitation_number || flag.title}</Link>
+                      ))}
+                      {staleFlags.length ? "No status change for 3 days" : "Clears when a bid status changes"}
+                    </p>
+                    <Link className="cf-link" href="/work-management#stale-bids">Review all</Link>
+                  </div>
+                </li>
+                <li className="cf-attn">
+                  <span className="cf-ico cf-ico-info"><Award size={18} strokeWidth={1.75} /></span>
+                  <div>
+                    <b>{awardFlags.length ? `${awardFlags.length} award checks overdue` : "Award checks"}</b>
+                    <p>{awardFlags.length ? "90-day checks with no outcome logged" : "No submitted bids are past 90 days without an outcome."}</p>
+                    <Link className="cf-link" href="/award-tracking">Open award tracking</Link>
+                  </div>
+                </li>
+                {duplicateFlags.length === 0 && staleFlags.length === 0 ? (
+                  <li className="cf-attn">
+                    <span className="cf-ico cf-ico-ok"><Check size={18} strokeWidth={1.75} /></span>
+                    <div>
+                      <b>No stale bids or duplicate flags</b>
+                      <p>Checked with the latest sync</p>
+                    </div>
+                  </li>
+                ) : null}
+              </ul>
             </aside>
           </section>
         )}
+
+        <section className="cf-card" aria-labelledby="pipe-h" style={{ padding: "20px 24px 24px", display: "flex", flexDirection: "column", gap: 16 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+            <div>
+              <h2 id="pipe-h" className="cf-h2">Pipeline by stage</h2>
+              <p className="cf-sub">Where every company-tracked opportunity sits right now</p>
+            </div>
+            <Link className="cf-link" href="/pipeline">Open pipeline <ArrowRight size={16} strokeWidth={1.75} /></Link>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(200px, 100%), 1fr))", gap: 12 }}>
+            <div className="cf-stage">
+              <span className="cf-pill cf-pill-pool">Unclaimed</span>
+              <div className="cf-stage-v">—</div>
+              <div className="cf-meta" style={{ fontSize: 13, color: "var(--cf-text-2)" }}>Pool count is on Opportunities</div>
+              <div className="cf-stage-f">Close-in-7-days is not in this feed</div>
+            </div>
+            <div className="cf-stage">
+              <span className="cf-pill cf-pill-sup">Finding supplier</span>
+              <div className="cf-stage-v">{finding.length}</div>
+              <div className="cf-meta" style={{ fontSize: 13, color: "var(--cf-text-2)" }}>{findingValue == null ? "Estimated value is not on these rows" : `Est. ${compactMoney(findingValue)} in bids`}</div>
+              <div className="cf-stage-f">{dueSoonKnown ? `${dueSoon} due in 48 hours` : "Due-soon count is not on these rows"}</div>
+            </div>
+            <div className="cf-stage">
+              <span className="cf-pill cf-pill-app">Waiting approval</span>
+              <div className="cf-stage-v">{waiting.length}</div>
+              <div className="cf-meta" style={{ fontSize: 13, color: "var(--cf-text-2)" }}>{waitingValue == null ? "Bid value is not on these rows" : `${compactMoney(waitingValue)} in bids`}</div>
+              <div className="cf-stage-f">Oldest wait is not on these rows</div>
+            </div>
+            <div className="cf-stage">
+              <span className="cf-pill cf-pill-sub">Bid submitted</span>
+              <div className="cf-stage-v">{submittedNow.length}</div>
+              <div className="cf-meta" style={{ fontSize: 13, color: "var(--cf-text-2)" }}>{monthSubmittedValue == null ? "Submitted value is not in this feed" : `${compactMoney(monthSubmittedValue)} submitted this month`}</div>
+              <div className="cf-stage-f">{monthProfit == null ? "Gross profit is not in this feed" : `${compactMoney(monthProfit)} gross profit`}</div>
+            </div>
+            <div className="cf-stage">
+              <span className="cf-pill cf-pill-won">Awarded</span>
+              <div className="cf-stage-v">{awardedRows.length}</div>
+              <div className="cf-meta" style={{ fontSize: 13, color: "var(--cf-text-2)" }}>{monthAwarded == null ? "Awarded value is not on these rows" : `${compactMoney(monthAwarded)} ${wonThisMonth.length ? "won this month" : "awarded on file"}`}</div>
+              <div className="cf-stage-f">{lostCount} lost · {pendingCount} pending</div>
+            </div>
+          </div>
+        </section>
 
         {dashView === "overview" && (
           <section>
@@ -487,51 +743,131 @@ export default function DashboardPage() {
         )}
 
         {(dashView === "overview" || dashView === "agent") && (
-          <section className="cf-card">
+          <section className="cf-split">
+          <div className="cf-card cf-split-main" style={{ overflow: "hidden" }}>
             <div className="cf-card-hd">
-              <h2 className="cf-h2">Agent leaderboard</h2>
-              <div className="cf-seg-wrap" role="group" aria-label="Leaderboard period">
-                {(["today", "week", "month"] as const).map((period) => (
-                  <button key={period} type="button" aria-pressed={leaderboardPeriod === period} onClick={() => setLeaderboardPeriod(period)} className={`cf-seg${leaderboardPeriod === period ? " cf-seg-on" : ""}`}>
-                    {period === "today" ? "Today" : period === "week" ? "This week" : "This month"}
-                  </button>
-                ))}
+              <div>
+                <h2 className="cf-h2">Agent leaderboard</h2>
+                <p className="cf-sub">Ranked by submitted value · personal goal 20 bids / month</p>
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
+                <div className="cf-seg-wrap" role="group" aria-label="Leaderboard period">
+                  {(["today", "week", "month"] as const).map((period) => (
+                    <button key={period} type="button" aria-pressed={leaderboardPeriod === period} onClick={() => setLeaderboardPeriod(period)} className={`cf-seg${leaderboardPeriod === period ? " cf-seg-on" : ""}`}>
+                      {period === "today" ? "Today" : period === "week" ? "This week" : "This month"}
+                    </button>
+                  ))}
+                </div>
+                <Link className="cf-link" href="/agent-bid-data">Agent bid data</Link>
               </div>
             </div>
-            <div className="cf-split" style={{ padding: "0 8px 16px" }}>
-              {([
-                ["By submitted dollars", byAmount, "amount"],
-                ["By bid count", byCount, "count"],
-              ] as const).map(([title, rows, kind]) => (
-                <div key={title} style={{ flex: "1 1 280px" }}>
-                  <h3 className="cf-h2" style={{ fontSize: 16, padding: "0 16px 8px" }}>{title}</h3>
-                  {rows.length ? rows.map((entry) => (
-                    <div key={entry.user_id} style={{ padding: "10px 16px", borderTop: "1px solid var(--cf-line)" }}>
-                      <div className="cf-mono" style={{ color: entry.rank === 1 ? "#0E7490" : "var(--cf-text-3)" }}>{String(entry.rank).padStart(2, "0")}</div>
-                      <div style={{ fontWeight: 500 }}>{entry.name}</div>
-                      <div className="cf-meta">{kind === "amount" ? `${formatCurrency(entry.amount)} · ${entry.bid_count} bids` : `${entry.bid_count} bids · ${formatCurrency(entry.amount)}`}</div>
-                    </div>
-                  )) : <p className="cf-meta" style={{ padding: "0 16px" }}>No submitted agent bids for this period.</p>}
-                </div>
-              ))}
-            </div>
+            <div style={{ overflowX: "auto" }}>
+                <table className="cf-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: 40 }}>#</th>
+                      <th>Agent</th>
+                      <th>Bids vs. goal</th>
+                      <th className="cf-num">Submitted</th>
+                      <th className="cf-num">Gross profit</th>
+                      <th className="cf-num">Win rate</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {byAmount.length === 0 ? (
+                      <tr><td colSpan={6}>No submitted agent bids for this period.</td></tr>
+                    ) : byAmount.map((entry) => {
+                      const employee = companyStats?.employees?.find((row) => row.name === entry.name);
+                      const personalGoal = employee?.monthly_goal || 20;
+                      const bids = employee?.month_total ?? entry.bid_count;
+                      const pct = personalGoal > 0 ? Math.min(100, Math.round((bids / personalGoal) * 100)) : 0;
+                      const letters = entry.name.trim().split(/\s+/).filter(Boolean);
+                      const mark = letters.length >= 2 ? `${letters[0][0]}${letters[1][0]}`.toUpperCase() : (letters[0] || "?").slice(0, 2).toUpperCase();
+                      return (
+                        <tr key={entry.user_id}>
+                          <td className="cf-mono" style={{ fontWeight: 600, color: entry.rank === 1 ? "#0E7490" : "var(--cf-text-3)" }}>{String(entry.rank).padStart(2, "0")}</td>
+                          <td>
+                            <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+                              <span className={`cf-av ${entry.rank === 1 ? "cf-av-me" : ""}`} style={entry.rank === 1 ? { width: 30, height: 30, fontSize: 11 } : { width: 30, height: 30, fontSize: 11, background: "var(--cf-surface-3)", color: "var(--cf-text-2)", border: "1px solid var(--cf-line-2)" }}>{mark}</span>
+                              <span style={{ fontWeight: 500 }}>{entry.name}</span>
+                            </span>
+                          </td>
+                          <td>
+                            <span style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 160 }}>
+                              <span className="cf-bar" style={{ flex: 1 }}><span style={{ width: `${pct}%` }} /></span>
+                              <span className="cf-mono" style={{ fontSize: 12, color: "var(--cf-text-2)", width: 48 }}>{bids}/{personalGoal}</span>
+                            </span>
+                          </td>
+                          <td className="cf-num">{formatMoney(entry.amount)}</td>
+                          <td className="cf-num">—</td>
+                          <td className="cf-num">—</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+          </div>
+          {dashView === "overview" ? portalMix : null}
           </section>
         )}
 
-        {dashView === "portal" && (
-          <section className="cf-card" style={{ padding: "20px 24px" }}>
-            <h2 className="cf-h2">Submissions by portal</h2>
-            <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 10 }}>
-              {portalRows.length ? portalRows.map((row) => (
-                <div key={row.name}>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}><span>{row.name}</span><span className="cf-mono">{row.count}</span></div>
-                  <div className="cf-bar" style={{ marginTop: 6 }}><span style={{ width: `${(row.count / portalMax) * 100}%` }} /></div>
-                </div>
-              )) : <p className="cf-meta">Portal mix is not in the current response. Open Stats for the full breakdown.</p>}
+        {dashView === "portal" && portalMix}
+
+        <section className="cf-split">
+          <div className="cf-card cf-split-main" style={{ overflow: "hidden" }}>
+            <div className="cf-card-hd">
+              <h2 className="cf-h2">Latest submissions</h2>
+              <Link className="cf-link" href="/bid-history">All bid history</Link>
             </div>
-            <div style={{ marginTop: 20 }}><DashboardChartTrend /></div>
-          </section>
-        )}
+            <div style={{ overflowX: "auto" }}>
+              <table className="cf-table">
+                <thead>
+                  <tr>
+                    <th>Submitted</th>
+                    <th>Agent</th>
+                    <th>Solicitation</th>
+                    <th>Portal</th>
+                    <th className="cf-num">Price</th>
+                    <th className="cf-num">Markup</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {latestSubmissions.length === 0 ? (
+                    <tr><td colSpan={6}>No submissions are in the pipeline yet.</td></tr>
+                  ) : latestSubmissions.map((item) => (
+                    <tr key={item.id}>
+                      <td className="cf-mono cf-dim" style={{ whiteSpace: "nowrap", fontSize: 12 }}>{submittedStamp(item.submitted_at || "")}</td>
+                      <td>{item.agent_name || "—"}</td>
+                      <td>
+                        <Link className="cf-id" href={`/bids/${item.id}`}>{item.solicitation_number || item.bid_id}</Link>
+                        <div className="cf-meta">{item.title || "—"}</div>
+                      </td>
+                      <td>{item.portal || "—"}</td>
+                      <td className="cf-num">{priceMoney(item.submitted_price)}</td>
+                      <td className="cf-num">{item.markup_percent == null ? "—" : `${item.markup_percent.toFixed(1)}%`}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div className="cf-card cf-split-side" style={{ overflow: "hidden" }}>
+            <div className="cf-card-hd" style={{ display: "block" }}>
+              <h2 className="cf-h2">Financial summary</h2>
+              <p className="cf-sub">{monthLabel} to date · change vs. last month is not in this feed</p>
+            </div>
+            <table className="cf-table">
+              <tbody>
+                <tr><td className="cf-dim2">Submitted value</td><td className="cf-num" style={{ fontWeight: 500 }}>{monthSubmittedValue == null ? "—" : formatMoney(monthSubmittedValue)}</td><td className="cf-num cf-dim">—</td></tr>
+                <tr><td className="cf-dim2">Supplier cost</td><td className="cf-num" style={{ fontWeight: 500 }}>{monthCost == null ? "—" : formatMoney(monthCost)}</td><td className="cf-num cf-dim">—</td></tr>
+                <tr><td className="cf-dim2">Gross profit</td><td className="cf-num" style={{ fontWeight: 500 }}>{monthProfit == null ? "—" : formatMoney(monthProfit)}</td><td className="cf-num cf-dim">—</td></tr>
+                <tr><td className="cf-dim2">Awarded value</td><td className="cf-num" style={{ fontWeight: 500 }}>{monthAwarded == null ? "—" : formatMoney(monthAwarded)}</td><td className="cf-num cf-dim">—</td></tr>
+                <tr><td className="cf-dim2">Average markup</td><td className="cf-num" style={{ fontWeight: 500 }}>{avgMarkup == null ? "—" : `${avgMarkup.toFixed(1)}%`}</td><td className="cf-num cf-dim">—</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
 
         <section className="cf-split">
           <div className="cf-card cf-split-main">
