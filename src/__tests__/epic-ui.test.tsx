@@ -122,6 +122,7 @@ describe("KAN-18, KAN-19, and KAN-22 dashboard views", () => {
       const url = urlOf(input);
       if (url.includes("dashboard-stats")) return response({ stats: {} });
       if (url.includes("stats/leaderboard")) return response({ leaderboard: [] });
+      if (url.includes("/api/backend/stats?")) return response({});
       if (url.includes("opportunities/duplicates")) {
         return response({
           incidents: [{
@@ -171,7 +172,7 @@ describe("KAN-18, KAN-19, and KAN-22 dashboard views", () => {
 
     render(<DashboardPage />);
 
-    expect(await screen.findByRole("heading", { name: "Company dashboard" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Bid performance" })).toBeInTheDocument();
     expect(await screen.findByText("SOL-100")).toBeInTheDocument();
     expect(screen.getByText("3 active bids · $250.0K")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Company pulse" })).toBeInTheDocument();
@@ -201,17 +202,20 @@ describe("KAN-18, KAN-19, and KAN-22 dashboard views", () => {
     const fetchMock = jest.fn((input: RequestInfo | URL) => {
       const url = urlOf(input);
       if (url.includes("dashboard-stats")) return response({ stats: {} });
+      if (url.includes("stats/my-goal")) return response({ achieved: 1, monthly: 5, left: 4 });
+      if (url.includes("opportunities/mine")) return response({ opportunities: [] });
       throw new Error(`Admin endpoint requested by agent dashboard: ${url}`);
     });
     global.fetch = fetchMock as jest.Mock;
 
     render(<DashboardPage />);
 
-    expect(await screen.findByRole("heading", { name: "My dashboard" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /Good (morning|afternoon|evening),/ })).toBeInTheDocument();
     expect(screen.queryByText("Duplicate flags")).not.toBeInTheDocument();
     expect(screen.queryByText("Pickup rules")).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Agent leaderboard" })).not.toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const urls = fetchMock.mock.calls.map((call) => urlOf(call[0] as RequestInfo | URL));
+    expect(urls.some((url) => /duplicates|leaderboard|auth\/team|dashboard-pulse/.test(url))).toBe(false);
   });
 });
 

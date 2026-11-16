@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle, ClipboardCheck } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import { getStoredUser } from '@/lib/auth';
+import { AdminTabs, PageBand, PageMain } from '@/components/design/PageFrame';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -169,10 +170,21 @@ export default function WorkManagementPage() {
     await load();
   };
 
-  if (loading) return <div className="space-y-5 p-6 lg:p-8"><Skeleton className="h-9 w-64" /><Skeleton className="h-80 w-full" /></div>;
+  if (loading) return <PageMain><Skeleton className="h-9 w-64" /><Skeleton className="h-80 w-full" /></PageMain>;
 
-  return <div className="space-y-6 p-6 lg:p-8">
-    <div><h1 className="flex items-center gap-2 text-2xl font-bold"><ClipboardCheck className="h-6 w-6" />Work management</h1><p className="mt-1 text-muted-foreground">Company-wide ownership, reassignment, pool returns, duplicate resolution, and stale bids.</p></div>
+  const activeCount = opportunities.filter((item) => item.state === 'assigned').length;
+
+  return <>
+    <PageBand eyebrow="ADMIN" title="Work management" lead="Company-wide ownership, reassignment, pool returns, duplicate resolution, and stale bids." />
+    <AdminTabs current="/work-management" />
+    <PageMain>
+    <p className="cf-lbl">SAM.gov stays the source catalog — this ledger keeps only your workflow state and an unchangeable assignment history.</p>
+    <section className="cf-grid-kpi" aria-label="Work summary">
+      <div className="cf-card cf-kpi cf-kpi-hero"><div className="cf-lbl" style={{ color: "#0E7490" }}>Assigned and active</div><div className="cf-kpi-v">{activeCount}</div></div>
+      <a className="cf-card cf-kpi" href="#stale-bids" style={{ textDecoration: "none", borderColor: "rgba(251,191,36,.45)" }}><div className="cf-lbl" style={{ color: "#B45309" }}>Stale</div><div className="cf-kpi-v">{staleBids.length}</div></a>
+      <a className="cf-card cf-kpi" href="#duplicates" style={{ textDecoration: "none", borderColor: "rgba(251,113,133,.45)" }}><div className="cf-lbl" style={{ color: "#BE123C" }}>Duplicate pickup flags</div><div className="cf-kpi-v">{incidents.length}</div></a>
+      <div className="cf-card cf-kpi"><div className="cf-lbl">Returned to pool this week</div><div className="cf-kpi-v">—</div><div className="cf-meta">Not separated in the current ledger</div></div>
+    </section>
     {error && <div className="rounded border border-destructive bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
     <Card><CardHeader><CardTitle>Tracked opportunities</CardTitle><CardDescription>SAM.gov stays the source catalog; this ledger stores only company workflow state and immutable assignment history.</CardDescription></CardHeader><CardContent className="overflow-x-auto">
       <Table><TableHeader><TableRow><TableHead>Opportunity</TableHead><TableHead>Value</TableHead><TableHead>State</TableHead><TableHead>Owner</TableHead><TableHead>Manager action</TableHead></TableRow></TableHeader>
@@ -196,6 +208,7 @@ export default function WorkManagementPage() {
 
     <Card id="stale-bids"><CardHeader><CardTitle className="flex items-center gap-2"><AlertTriangle className="h-5 w-5" />Stale bids</CardTitle><CardDescription>Assigned bids with no status change for 3 days. The list clears when the internal status changes.</CardDescription></CardHeader><CardContent className="space-y-3">{staleBids.length ? staleBids.map((bid) => <div key={bid.claim_id} id={`stale-${bid.claim_id}`} className="rounded border p-3"><p className="font-medium">{bid.solicitation_number || bid.title}</p><p className="text-sm text-muted-foreground">{bid.title}</p><p className="text-xs text-muted-foreground">{bid.assignee?.full_name || 'Unknown'} · no status change since {bid.last_status_at ? new Date(bid.last_status_at).toLocaleString() : 'pickup'}</p>{bid.href && <Link href={bid.href} className="mt-2 inline-block text-sm font-medium text-primary hover:underline">Open bid</Link>}</div>) : <p className="text-sm text-muted-foreground">No stale bids.</p>}</CardContent></Card>
 
-    <Card id="duplicates"><CardHeader><CardTitle className="flex items-center gap-2"><AlertTriangle className="h-5 w-5" />Unresolved duplicate flags</CardTitle><CardDescription>Every blocked pickup is retained for manager review. Resolved items leave this panel.</CardDescription></CardHeader><CardContent className="space-y-3">{incidents.length ? incidents.map((incident) => <div key={incident.id} id={`duplicate-${incident.id}`} className="rounded border p-3"><div className="flex flex-wrap justify-between gap-2"><div><p className="font-medium">Solicitation {incident.solicitation_number}</p><p className="text-sm text-muted-foreground">Attempted by {incident.attempted_by?.full_name || 'Unknown'}; owned by {incident.existing_agent?.full_name || 'Unknown'}</p><p className="text-xs text-muted-foreground">Detected {new Date(incident.detected_at || incident.created_at).toLocaleString()}</p></div><span className="text-sm capitalize">{incident.status}</span></div><div className="mt-3 flex gap-2"><Input placeholder="Resolution note" value={resolutionByIncident[incident.id] || ''} onChange={(event) => setResolutionByIncident({ ...resolutionByIncident, [incident.id]: event.target.value })} /><Button onClick={() => resolveIncident(incident)}>Resolve</Button></div></div>) : <p className="text-sm text-muted-foreground">No unresolved duplicate flags.</p>}</CardContent></Card>
-  </div>;
+    <Card id="duplicates"><CardHeader><CardTitle className="flex items-center gap-2"><AlertTriangle className="h-5 w-5" />Unresolved duplicate flags</CardTitle><CardDescription>Every blocked pickup is retained for manager review. Resolved items leave this panel.</CardDescription></CardHeader><CardContent className="space-y-3">{incidents.length ? incidents.map((incident) => <div key={incident.id} id={`duplicate-${incident.id}`} className="rounded border p-3"><div className="flex flex-wrap justify-between gap-2"><div><p className="font-medium">Solicitation {incident.solicitation_number}</p><p className="text-sm text-muted-foreground">Attempted by {incident.attempted_by?.full_name || 'Unknown'}; owned by {incident.existing_agent?.full_name || 'Unknown'}</p><p className="text-xs text-muted-foreground">Detected {new Date(incident.detected_at || incident.created_at).toLocaleString()}</p></div><span className="text-sm capitalize">{incident.status}</span></div><div className="mt-3 flex gap-2"><Input placeholder="Resolution note" value={resolutionByIncident[incident.id] || ''} onChange={(event) => setResolutionByIncident({ ...resolutionByIncident, [incident.id]: event.target.value })} /><Button onClick={() => resolveIncident(incident)}>Resolve</Button></div></div>) : <p className="text-sm text-muted-foreground">No unresolved duplicate flags.</p>}    </CardContent></Card>
+    </PageMain>
+  </>;
 }

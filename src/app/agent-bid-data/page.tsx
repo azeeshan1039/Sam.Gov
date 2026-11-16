@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getStoredUser, type AuthUser } from "@/lib/auth";
+import { PageBand, PageMain, ReportTabs } from "@/components/design/PageFrame";
 import { formatMoney, type PipelineItem } from "@/lib/pipeline";
 import { PipelineTable } from "@/components/pipeline/PipelineTable";
 import { Button } from "@/components/ui/button";
@@ -86,8 +87,10 @@ export default function AgentBidDataPage() {
   const companyMode = agentId === ALL_AGENTS;
 
   return (
-    <div className="space-y-6 p-6 lg:p-8">
-      <div><h1 className="text-2xl font-bold">Agent Bid Data</h1><p className="text-muted-foreground">Complete bid history and submitted-price reporting.</p></div>
+    <>
+      <PageBand eyebrow="REPORTS" title="Bid data" lead="Complete bid history and submitted-price reporting." />
+      <ReportTabs current="/agent-bid-data" />
+      <PageMain>
       <Card><CardContent className="flex flex-wrap items-end gap-3 pt-6">
         {user?.role === "admin" && <label className="grid gap-1 text-sm">Agent<select className="h-10 rounded-md border px-3" value={agentId} onChange={(e) => { setAgentId(e.target.value); load(e.target.value); }}><option value={ALL_AGENTS}>All agents (company)</option>{employees.map((employee) => <option key={employee.user_id} value={employee.user_id}>{employee.name}{employee.is_active ? "" : " (inactive)"}</option>)}</select></label>}
         <div className="flex gap-2"><Button variant="outline" onClick={() => preset("today")}>Today</Button><Button variant="outline" onClick={() => preset("week")}>This week</Button><Button variant="outline" onClick={() => preset("month")}>This month</Button></div>
@@ -107,6 +110,7 @@ export default function AgentBidDataPage() {
         <Card><CardHeader><CardTitle>Historical / released / reassigned</CardTitle></CardHeader><CardContent><PipelineTable items={historical} variant="person" empty="No released or reassigned bids." /></CardContent></Card>
         <Card><CardHeader><CardTitle>Completed bids</CardTitle></CardHeader><CardContent><PipelineTable items={completed} variant="history" empty="No completed bids." /></CardContent></Card>
       </>}
-    </div>
+      </PageMain>
+    </>
   );
 }

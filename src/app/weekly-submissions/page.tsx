@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getStoredUser, type AuthUser } from "@/lib/auth";
+import { PageBand, PageMain, ReportTabs } from "@/components/design/PageFrame";
 import { formatMoney } from "@/lib/pipeline";
 import { dateOnly, easternTodayUtc, formatUtcDateRange } from "@/lib/eastern-date";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,11 +37,14 @@ export default function WeeklySubmissionsPage() {
   }, [weekStart]);
   useEffect(() => { if (user) load(); }, [load, user]);
 
-  return <div className="space-y-6 p-6 lg:p-8">
-    <div><h1 className="text-2xl font-bold">Weekly Submissions</h1><p className="text-muted-foreground">Monday–Sunday reporting in Eastern Time using actual submitted prices.</p></div>
+  return <>
+    <PageBand eyebrow="REPORTS" title="Weekly submissions" lead="Monday–Sunday reporting in Eastern Time using actual submitted prices." />
+    <ReportTabs current="/weekly-submissions" />
+    <PageMain>
     <label className="grid max-w-sm gap-1 text-sm">Week<select className="h-10 rounded-md border px-3" value={weekStart} onChange={(e) => setWeekStart(e.target.value)}>{weeks.map((week) => <option key={week.value} value={week.value}>{week.label}</option>)}</select></label>
     {error && <div className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
     <div className="grid gap-4 sm:grid-cols-3"><Card><CardHeader><CardTitle className="text-sm">Submitted count</CardTitle></CardHeader><CardContent className="text-2xl font-bold">{data?.company_totals.submitted_count ?? "—"}</CardContent></Card><Card><CardHeader><CardTitle className="text-sm">Submitted price</CardTitle></CardHeader><CardContent className="text-2xl font-bold">{formatMoney(data?.company_totals.total_submitted_price)}</CardContent></Card><Card><CardHeader><CardTitle className="text-sm">Gross profit</CardTitle></CardHeader><CardContent className="text-2xl font-bold">{formatMoney(data?.company_totals.total_gross_profit)}</CardContent></Card></div>
-    <Card><CardHeader><CardTitle>{user?.role === "admin" ? "Company agents" : "My submissions"}</CardTitle></CardHeader><CardContent><Table><TableHeader><TableRow><TableHead>Agent</TableHead><TableHead>Submitted</TableHead><TableHead>Submitted price</TableHead><TableHead>Gross profit</TableHead></TableRow></TableHeader><TableBody>{(data?.rows || []).map((row) => <TableRow key={row.agent_user_id}><TableCell>{row.agent_name}{row.is_active ? "" : " (inactive)"}</TableCell><TableCell>{row.submitted_count}</TableCell><TableCell>{formatMoney(row.total_submitted_price)}</TableCell><TableCell>{formatMoney(row.total_gross_profit)}</TableCell></TableRow>)}</TableBody></Table></CardContent></Card>
-  </div>;
+    <Card><CardHeader><CardTitle>{user?.role === "admin" ? "Company agents" : "My submissions"}</CardTitle></CardHeader><CardContent><Table><TableHeader><TableRow><TableHead>Agent</TableHead><TableHead>Submitted</TableHead><TableHead>Submitted price</TableHead><TableHead>Gross profit</TableHead></TableRow></TableHeader><TableBody>{(data?.rows || []).map((row) => <TableRow key={row.agent_user_id}><TableCell>{row.agent_name}{row.is_active ? "" : " (inactive)"}</TableCell><TableCell>{row.submitted_count}</TableCell><TableCell>{formatMoney(row.total_submitted_price)}</TableCell><TableCell>{formatMoney(row.total_gross_profit)}</TableCell></TableRow>)}</TableBody></Table></CardContent>    </Card>
+    </PageMain>
+  </>;
 }

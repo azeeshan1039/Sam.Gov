@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { getStoredUser, type AuthUser } from "@/lib/auth";
+import { BidStepper, PageBand, PageMain } from "@/components/design/PageFrame";
 import {
   BID_STATUSES,
   formatDate,
@@ -287,18 +288,18 @@ export default function BidDetailPage() {
   }
 
   return (
-    <div className="space-y-6 p-6 lg:p-8">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">{bid.title || bid.bid_id}</h1>
-          <p className="text-slate-600">{bid.solicitation_number || bid.bid_id}</p>
-        </div>
-        {workspace.rfq_href && (
-          <Button asChild variant="outline">
-            <Link href={workspace.rfq_href}>Open RFQ negotiation</Link>
-          </Button>
-        )}
+    <>
+      <PageBand
+        eyebrow={`MY BIDS / ${bid.solicitation_number || bid.bid_id}`}
+        title={bid.title || bid.bid_id}
+        lead={`${bid.solicitation_number || bid.bid_id} · ${bid.portal || "SAM.GOV"} · DUE ${formatDate(bid.due_date)}`}
+        actions={workspace.rfq_href ? <Link className="cf-btn cf-btn-secondary" href={workspace.rfq_href}>Open RFQ negotiation</Link> : bid.bid_url ? <a className="cf-btn cf-btn-secondary" href={bid.bid_url} target="_blank" rel="noreferrer">View on SAM.gov</a> : null}
+      />
+      <PageMain>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
+        <span className="cf-chip">{bid.internal_status}</span>
       </div>
+      <BidStepper status={bid.internal_status} />
 
       <nav aria-label="On this page" className="flex flex-wrap items-center gap-2 text-sm">
         <span className="text-slate-600">On this page:</span>
@@ -663,6 +664,7 @@ export default function BidDetailPage() {
           </CardContent>
         </Card>
       </div>
-    </div>
+      </PageMain>
+    </>
   );
 }

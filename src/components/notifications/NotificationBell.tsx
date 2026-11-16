@@ -52,11 +52,11 @@ export default function NotificationBell() {
         aria-label={unreadCount ? `Alerts, ${unreadCount} unread` : "Alerts"}
         aria-expanded={open}
         onClick={() => setOpen((current) => !current)}
-        className="relative flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50"
+        className="cf-icon-btn"
       >
-        <Bell className="h-4 w-4" />
+        <Bell size={20} strokeWidth={1.75} />
         {unreadCount > 0 && (
-          <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-semibold text-white">
+          <span className="cf-badge">
             {countLabel}
           </span>
         )}

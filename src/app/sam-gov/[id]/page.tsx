@@ -16,6 +16,7 @@ import Link from 'next/link';
 import { FileText } from 'lucide-react';
 import DOMPurify from 'dompurify';
 import { getStoredUser, type AuthUser } from '@/lib/auth';
+import { PageBand, PageMain } from '@/components/design/PageFrame';
 import {
   presentOpportunityAvailability,
   type OpportunityAvailability,
@@ -322,18 +323,18 @@ export default function SamGovOpportunityPage() {
   const nicheOwners = niche?.owners?.map((owner) => owner.full_name).filter(Boolean).join(', ');
 
   return (
-    <main className="flex-1 p-6 bg-gradient-to-br from-secondary/30 to-background animate-fadeIn">
-      <div className="container mx-auto max-w-4xl">
-        <Button onClick={() => router.back()} variant="outline" className="mb-6 group transition-transform hover:-translate-x-1">
-          <Icons.arrowRight className="mr-2 h-4 w-4 transform rotate-180 group-hover:animate-pulse" />
-          Back to Listings
-        </Button>
-
-        <Card className="shadow-xl hover:shadow-2xl transition-shadow duration-300 rounded-lg overflow-hidden border-primary/20 animate-slideUp">
-          <CardHeader className="bg-primary/10 p-6 border-b border-primary/20">
-            <CardTitle className="text-2xl font-bold text-primary line-clamp-3">{opportunity.title || 'N/A'}</CardTitle>
-            <CardDescription className="text-sm text-muted-foreground pt-2">Notice ID: {opportunity.id}</CardDescription>
-          </CardHeader>
+    <>
+      <PageBand
+        eyebrow={`OPPORTUNITIES / ${opportunity.solicitationNumber || opportunity.id}`}
+        title={opportunity.title || 'Untitled opportunity'}
+        lead={`${opportunity.solicitationNumber || opportunity.id} · ${opportunity.office || opportunity.department || 'SAM.gov'} · SAM.GOV`}
+        actions={opportunity.link && opportunity.link !== '#' ? <a className="cf-btn cf-btn-secondary" href={opportunity.link} target="_blank" rel="noreferrer">View on SAM.gov</a> : <button type="button" className="cf-btn cf-btn-secondary" onClick={() => router.back()}>Back</button>}
+      />
+      <PageMain>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
+          <span className="cf-chip">{availabilityPresentation?.label || 'Unclaimed'}</span>
+        </div>
+        <Card className="cf-card border-0 shadow-none">
           <CardContent className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-4">
               <div className="opacity-90 transition-opacity hover:opacity-100">
@@ -472,25 +473,7 @@ export default function SamGovOpportunityPage() {
             </div>
           </CardContent>
         </Card>
-      </div>
-
-      <style jsx global>{`
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        .animate-fadeIn {
-          animation: fadeIn 0.5s ease-out forwards;
-        }
-
-        @keyframes slideUp {
-          from { transform: translateY(20px); opacity: 0; }
-          to { transform: translateY(0); opacity: 1; }
-        }
-        .animate-slideUp {
-          animation: slideUp 0.5s ease-out forwards;
-        }
-      `}</style>
-    </main>
+      </PageMain>
+    </>
   );
 }

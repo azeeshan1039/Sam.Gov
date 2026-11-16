@@ -2,8 +2,9 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowDown, ArrowUp, ArrowUpDown, Medal } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import { getStoredUser, type AuthUser } from "@/lib/auth";
+import { PageBand, PageMain } from "@/components/design/PageFrame";
 import { formatDate, formatMoney, requesterQuery } from "@/lib/pipeline";
 import {
   AWARD_OUTCOMES,
@@ -139,13 +140,13 @@ function AwardTracking() {
   }
 
   return (
-    <div className="space-y-6 p-6 lg:p-8">
-      <div>
-        <h1 className="flex items-center gap-2 text-2xl font-bold"><Medal className="h-6 w-6" />Award Tracking</h1>
-        <p className="mt-1 text-slate-600">
-          {isAdmin ? "Every submitted bid's award outcome and its 30/45/60/90-day checkpoints." : "Award outcomes and checkpoints for the bids you submitted."}
-        </p>
-      </div>
+    <>
+      <PageBand
+        eyebrow="CHECKPOINTS · 30 / 45 / 60 / 90 DAYS"
+        title="Award tracking"
+        lead={isAdmin ? "Every submitted bid's award outcome and its 30/45/60/90-day checkpoints." : "Award outcomes and checkpoints for the bids you submitted."}
+      />
+      <PageMain>
 
       {!isAdmin && summary && summary.due + summary.flagged > 0 && (
         <div role="status" className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
@@ -156,18 +157,18 @@ function AwardTracking() {
 
       {error && <div className="rounded border border-destructive bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5" aria-label="Award summary">
+      <section className="cf-grid-kpi" aria-label="Award summary">
         {[
-          ["Submitted bids", summary ? String(summary.count) : "—"],
-          ["Won / Lost", summary ? `${summary.outcomes.won} / ${summary.outcomes.lost}` : "—"],
-          ["Win rate", summary?.win_rate != null ? `${summary.win_rate}%` : "—"],
-          ["Pending / Unknown", summary ? `${summary.outcomes.pending} / ${summary.outcomes.unknown}` : "—"],
-          ["90-day flags", summary ? String(summary.flagged) : "—"],
-        ].map(([label, value]) => (
-          <Card key={label}>
-            <CardHeader className="pb-2"><CardTitle className="text-sm text-slate-600">{label}</CardTitle></CardHeader>
-            <CardContent className="text-2xl font-bold">{loading && !data ? "—" : value}</CardContent>
-          </Card>
+          ["Submitted bids", summary ? String(summary.count) : "—", false],
+          ["Won / lost", summary ? `${summary.outcomes.won} / ${summary.outcomes.lost}` : "—", false],
+          ["Win rate", summary?.win_rate != null ? `${summary.win_rate}%` : "—", false],
+          ["Pending / unknown", summary ? `${summary.outcomes.pending} / ${summary.outcomes.unknown}` : "—", false],
+          ["90-day flags", summary ? String(summary.flagged) : "—", true],
+        ].map(([label, value, flagged]) => (
+          <div key={String(label)} className={`cf-card cf-kpi${label === "Submitted bids" ? " cf-kpi-hero" : ""}`} style={flagged ? { borderColor: "rgba(251,113,133,.45)" } : undefined}>
+            <div className="cf-lbl" style={flagged ? { color: "#BE123C" } : undefined}>{label}</div>
+            <div className="cf-kpi-v">{loading && !data ? "—" : value}</div>
+          </div>
         ))}
       </section>
 
@@ -301,7 +302,8 @@ function AwardTracking() {
         onOpenChange={(open) => { if (!open) setSelected(null); }}
         onSaved={() => load()}
       />
-    </div>
+      </PageMain>
+    </>
   );
 }
 

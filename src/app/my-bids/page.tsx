@@ -3,10 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowRight, FileSpreadsheet } from "lucide-react";
 import { getStoredUser, getUserDisplayName, type AuthUser } from "@/lib/auth";
 import MyBidsAlerts from "@/components/notifications/MyBidsAlerts";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageBand, PageMain } from "@/components/design/PageFrame";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PipelineTable } from "@/components/pipeline/PipelineTable";
 import { requesterQuery, type PipelineItem } from "@/lib/pipeline";
@@ -110,121 +109,105 @@ export default function MyBidsPage() {
 
   if (!user) {
     return (
-      <div className="space-y-6 p-6 lg:p-8">
+      <PageMain>
         <Skeleton className="h-8 w-48" />
         <Skeleton className="h-64 w-full" />
-      </div>
+      </PageMain>
     );
   }
 
+  const goalPct = goal && goal.monthly > 0 ? Math.min(100, Math.round((goal.achieved / goal.monthly) * 100)) : 0;
+
   return (
-    <div className="space-y-6 p-6 lg:p-8">
-      <div>
-        <h1 className="flex items-center gap-2 text-2xl font-bold">
-          <FileSpreadsheet className="h-6 w-6" />
-          My bids
-        </h1>
-        <p className="mt-1 text-muted-foreground">Your assigned solicitations.</p>
-      </div>
-      <MyBidsAlerts />
-      {error && (
-        <div className="rounded border border-destructive bg-destructive/10 p-3 text-sm text-destructive">
-          {error}
-        </div>
-      )}
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Achieved</CardDescription>
-            <CardTitle className="text-3xl">{loading ? "—" : goal ? goal.achieved : "—"}</CardTitle>
-          </CardHeader>
-          <CardContent className="text-sm text-muted-foreground">Submitted bids this month (ET)</CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Monthly</CardDescription>
-            <CardTitle className="text-3xl">{loading ? "—" : goal ? goal.monthly : "—"}</CardTitle>
-          </CardHeader>
-          <CardContent className="text-sm text-muted-foreground">Your standing monthly goal</CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Left</CardDescription>
-            <CardTitle className="text-3xl">{loading ? "—" : goal ? goal.left : "—"}</CardTitle>
-          </CardHeader>
-          <CardContent className="text-sm text-muted-foreground">Remaining to hit this month</CardContent>
-        </Card>
-      </div>
-      <Card>
-        <CardHeader>
-          <CardTitle>Active picked-up bids</CardTitle>
-          <CardDescription>
-            Work currently reserved for you, including bids that have not entered negotiation yet.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <Skeleton className="h-28 w-full" />
-          ) : activeClaims.length ? (
-            <div className="divide-y rounded-md border">
-              {activeClaims.map((claim) => (
-                <Link
-                  key={claim.id}
-                  href={`/sam-gov/${encodeURIComponent(claim.external_notice_id)}`}
-                  className="flex items-center justify-between gap-4 p-4 hover:bg-muted/50"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate font-medium">{claim.title}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {claim.solicitation_number || claim.external_notice_id}
-                      {claim.response_deadline
-                        ? ` · Due ${new Date(claim.response_deadline).toLocaleDateString()}`
-                        : ""}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-3 text-sm">
-                    {claim.stale && (
-                      <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
-                        Stale
-                      </span>
-                    )}
-                    <span className="font-medium">
-                      {claim.expected_bid_value == null
-                        ? "Value not set"
-                        : claim.expected_bid_value.toLocaleString("en-US", {
-                            style: "currency",
-                            currency: "USD",
-                            maximumFractionDigits: 0,
-                          })}
-                    </span>
-                    <ArrowRight className="h-4 w-4" />
-                  </div>
-                </Link>
-              ))}
+    <>
+      <PageBand
+        eyebrow={`${items.length} BIDS · ${activeClaims.length} ACTIVE`}
+        title="My bids"
+        lead="Your assigned solicitations."
+        actions={<Link className="cf-btn cf-btn-primary" href="/opportunities">Find opportunities</Link>}
+      />
+      <PageMain>
+        <MyBidsAlerts />
+        {error && (
+          <div role="alert" style={{ border: "1px solid rgba(251,113,133,.45)", background: "rgba(251,113,133,.1)", color: "#BE123C", borderRadius: 12, padding: "12px 16px" }}>
+            {error}
+          </div>
+        )}
+        <section className="cf-split">
+          <div className="cf-card cf-split-main" style={{ padding: "20px 24px" }}>
+            <div className="cf-lbl">Submitted</div>
+            <div className="cf-kpi-v" style={{ fontSize: 34, marginTop: 6 }}>{loading ? "—" : goal ? goal.achieved : "—"}</div>
+            <div className="cf-bar" style={{ marginTop: 12 }}><span style={{ width: `${goalPct}%` }} /></div>
+            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }} className="cf-mono">
+              <span>{goalPct}% done</span>
+              <span>Monthly goal {loading ? "—" : goal ? goal.monthly : "—"} · Still to go {loading ? "—" : goal ? goal.left : "—"}</span>
             </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">No active bids are assigned to you.</p>
-          )}
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle>{getUserDisplayName(user)}</CardTitle>
-          <CardDescription>{loading ? "Loading…" : `${items.length} row(s)`}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <Skeleton className="h-40 w-full" />
-          ) : (
-            <PipelineTable
-              items={items}
-              variant="my-bids"
-              empty="No bids assigned to you yet."
-              highlightId={highlightId}
-            />
-          )}
-        </CardContent>
-      </Card>
-    </div>
+          </div>
+          <aside className="cf-card cf-split-side" style={{ padding: "20px 24px", borderColor: "rgba(251,191,36,.45)" }}>
+            <h2 className="cf-h2">Award checks</h2>
+            <p className="cf-sub">Open award tracking to record outcomes. This feed does not include a personal due count.</p>
+            <Link className="cf-link" href="/award-tracking" style={{ marginTop: 12 }}>Record outcomes</Link>
+          </aside>
+        </section>
+        <section className="cf-card">
+          <div className="cf-card-hd">
+            <div>
+              <h2 className="cf-h2">Active picked-up bids</h2>
+              <p className="cf-sub">Work currently reserved for you, including bids that have not entered negotiation yet.</p>
+            </div>
+          </div>
+          <div style={{ padding: "0 24px 16px" }}>
+            {loading ? (
+              <Skeleton className="h-28 w-full" />
+            ) : activeClaims.length ? (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(280px, 100%), 1fr))", gap: 16 }}>
+                {activeClaims.map((claim) => (
+                  <Link
+                    key={claim.id}
+                    href={`/sam-gov/${encodeURIComponent(claim.external_notice_id)}`}
+                    className="cf-card"
+                    style={{ padding: 16, textDecoration: "none", color: "inherit" }}
+                  >
+                    <div className="cf-mono" style={{ fontSize: 12 }}>{claim.solicitation_number || claim.external_notice_id}</div>
+                    <p style={{ font: "500 19px/1.3 var(--cf-display)", marginTop: 6 }}>{claim.title}</p>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginTop: 12 }}>
+                      <span className="cf-meta">{claim.response_deadline ? `Due ${new Date(claim.response_deadline).toLocaleDateString()}` : "No due date"}</span>
+                      <span className="cf-mono">
+                        {claim.expected_bid_value == null
+                          ? "Value not set"
+                          : claim.expected_bid_value.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 })}
+                      </span>
+                    </div>
+                    {claim.stale ? <span className="cf-chip" style={{ marginTop: 8 }}>Stale</span> : null}
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <p className="cf-meta">No active bids are assigned to you.</p>
+            )}
+          </div>
+        </section>
+        <section className="cf-card">
+          <div className="cf-card-hd">
+            <div>
+              <h2 className="cf-h2">{getUserDisplayName(user)}</h2>
+              <p className="cf-sub">{loading ? "Loading…" : `${items.length} row(s)`}</p>
+            </div>
+          </div>
+          <div style={{ padding: "0 16px 16px", overflowX: "auto" }}>
+            {loading ? (
+              <Skeleton className="h-40 w-full" />
+            ) : (
+              <PipelineTable
+                items={items}
+                variant="my-bids"
+                empty="No bids assigned to you yet."
+                highlightId={highlightId}
+              />
+            )}
+          </div>
+        </section>
+      </PageMain>
+    </>
   );
 }

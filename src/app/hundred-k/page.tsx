@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { DollarSign } from "lucide-react";
 import { getStoredUser, type AuthUser } from "@/lib/auth";
+import { AdminTabs, PageBand, PageMain } from "@/components/design/PageFrame";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -74,16 +74,10 @@ export default function HundredKPage() {
   }
 
   return (
-    <div className="space-y-6 p-6 lg:p-8">
-      <div>
-        <h1 className="flex items-center gap-2 text-2xl font-bold">
-          <DollarSign className="h-6 w-6" />
-          100k Bids
-        </h1>
-        <p className="mt-1 text-muted-foreground">
-          Opportunities with gross sales ≥ {formatMoney(HUNDRED_K_THRESHOLD)}, grouped by employee.
-        </p>
-      </div>
+    <>
+      <PageBand title="$100K+ bids" lead={`Opportunities with gross sales ≥ ${formatMoney(HUNDRED_K_THRESHOLD)}, grouped by employee.`} />
+      <AdminTabs current="/hundred-k" />
+      <PageMain>
       {error && (
         <div className="rounded border border-destructive bg-destructive/10 p-3 text-sm text-destructive">
           {error}
@@ -127,6 +121,7 @@ export default function HundredKPage() {
           ))}
         </Tabs>
       )}
-    </div>
+      </PageMain>
+    </>
   );
 }

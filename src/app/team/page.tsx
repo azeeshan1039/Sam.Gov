@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Users, UserPlus } from 'lucide-react';
 import { getStoredUser, type AuthUser } from '@/lib/auth';
+import { AdminTabs, PageBand, PageMain } from '@/components/design/PageFrame';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -129,8 +130,10 @@ export default function TeamPage() {
   if (!user || loading) return <div className="space-y-5 p-6 lg:p-8"><Skeleton className="h-9 w-52" /><Skeleton className="h-48 w-full" /><Skeleton className="h-72 w-full" /></div>;
 
   return (
-    <div className="space-y-6 p-6 lg:p-8">
-      <div><h1 className="flex items-center gap-2 text-2xl font-bold"><Users className="h-6 w-6" />Team & access</h1><p className="mt-1 text-muted-foreground">Manage admins, agents, workload limits, and employment lifecycle.</p></div>
+    <>
+      <PageBand eyebrow="ADMIN" title="Team & access" lead="Manage admins, agents, workload limits, and employment lifecycle." />
+      <AdminTabs current="/team" />
+      <PageMain>
       {error && <div className="rounded border border-destructive bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
       {notice && <div className="rounded border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</div>}
 
@@ -171,6 +174,7 @@ export default function TeamPage() {
       </Card>
 
       <Card><CardHeader><CardTitle>Pending invites</CardTitle></CardHeader><CardContent>{team.pending_invites.length ? team.pending_invites.map((item) => <div key={item.id} className="border-b py-2 text-sm"><span className="font-medium">{item.full_name || item.email}</span> · {item.email} <span className="text-muted-foreground">({item.role})</span></div>) : <p className="text-sm text-muted-foreground">No pending invites.</p>}</CardContent></Card>
-    </div>
+      </PageMain>
+    </>
   );
 }

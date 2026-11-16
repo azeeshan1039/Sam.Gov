@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckSquare } from "lucide-react";
 import { getStoredUser, type AuthUser } from "@/lib/auth";
+import { AdminTabs, PageBand, PageMain } from "@/components/design/PageFrame";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PipelineTable } from "@/components/pipeline/PipelineTable";
@@ -67,16 +67,14 @@ export default function ApprovalsPage() {
   }
 
   return (
-    <div className="space-y-6 p-6 lg:p-8">
-      <div>
-        <h1 className="flex items-center gap-2 text-2xl font-bold">
-          <CheckSquare className="h-6 w-6" />
-          Approvals
-        </h1>
-        <p className="mt-1 text-muted-foreground">
-          Two queues from the same pipeline: waiting on a manager, and still needing a supplier quote.
-        </p>
-      </div>
+    <>
+      <PageBand
+        eyebrow={`ADMIN · ${awaitingApproval.length} WAITING`}
+        title="Approvals"
+        lead="Check the supplier quote and price, then approve or send it back. The queues below are the live pipeline."
+      />
+      <AdminTabs current="/approvals" />
+      <PageMain>
       {error && (
         <div className="rounded border border-destructive bg-destructive/10 p-3 text-sm text-destructive">
           {error}
@@ -112,6 +110,7 @@ export default function ApprovalsPage() {
           )}
         </CardContent>
       </Card>
-    </div>
+      </PageMain>
+    </>
   );
 }

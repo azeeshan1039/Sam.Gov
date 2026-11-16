@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { History } from "lucide-react";
+import Link from "next/link";
 import { getStoredUser, type AuthUser } from "@/lib/auth";
+import { AdminTabs, PageBand, PageMain } from "@/components/design/PageFrame";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
@@ -117,15 +118,20 @@ export default function BidHistoryPage() {
   }
 
   return (
-    <div className="space-y-6 p-6 lg:p-8">
-      <div>
-        <h1 className="flex items-center gap-2 text-2xl font-bold">
-          <History className="h-6 w-6" />
-          Bid history
-        </h1>
-        <p className="mt-1 text-muted-foreground">
-          Every bid logged for this company. Search and filter the full record.
-        </p>
+    <>
+      <PageBand
+        eyebrow={`ADMIN · ${items.length} BIDS LOGGED`}
+        title="Bid history & pipeline"
+        lead="$100K+, approvals and by-person are views of this one list."
+        actions={<Link className="cf-btn cf-btn-secondary" href="/pipeline">Open pipeline</Link>}
+      />
+      <AdminTabs current="/bid-history" />
+      <PageMain>
+      <div className="cf-seg-wrap" role="group" aria-label="Bid history view">
+        <Link className="cf-seg cf-seg-on" href="/bid-history">All bids</Link>
+        <Link className="cf-seg" href="/hundred-k">$100K+</Link>
+        <Link className="cf-seg" href="/approvals">Approvals</Link>
+        <Link className="cf-seg" href="/agent-bid-data">By person</Link>
       </div>
       {error && (
         <div className="rounded border border-destructive bg-destructive/10 p-3 text-sm text-destructive">
@@ -228,7 +234,8 @@ export default function BidHistoryPage() {
           )}
         </CardContent>
       </Card>
-    </div>
+      </PageMain>
+    </>
   );
 }
 
