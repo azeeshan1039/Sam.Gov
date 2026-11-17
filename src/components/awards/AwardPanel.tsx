@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CheckCircle2, CircleDashed, Clock3, Search, XCircle } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { formatMoney } from "@/lib/pipeline";
@@ -10,7 +9,6 @@ import {
   AWARD_OUTCOMES,
   formatCheckpoint,
   formatOutcomeLabel,
-  outcomeBadgeClass,
   type AwardCheckpoint,
   type AwardDetail,
   type AwardOutcome,
@@ -57,6 +55,7 @@ export function AwardPanel({
   const [saving, setSaving] = useState(false);
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lookupFault, setLookupFault] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<AwardOutcome>("pending");
   const [awardedTo, setAwardedTo] = useState("");
@@ -125,6 +124,7 @@ export function AwardPanel({
     }
     setSaving(true);
     setError(null);
+    setLookupFault(null);
     setNotice(null);
     const url = target === NO_CHECKPOINT
       ? `/api/backend/pipeline/bids/${bidId}/award-outcome`
@@ -157,6 +157,7 @@ export function AwardPanel({
   async function checkSam() {
     setChecking(true);
     setError(null);
+    setLookupFault(null);
     setNotice(null);
     try {
       const response = await fetch(`/api/backend/pipeline/bids/${bidId}/award-lookup`, { method: "POST" });
@@ -165,12 +166,16 @@ export function AwardPanel({
       setAward(data.award);
       const info = data.award.sam_info;
       if (info?.result === "error" || info?.result === "deferred") {
-        setError(info.message || "SAM.gov lookup did not complete. Manual entry still works.");
+        const message = info.message || "SAM.gov lookup did not complete. Manual entry still works.";
+        setLookupFault(message);
+        setError(message);
       } else {
         setNotice(info?.result === "found" ? "SAM.gov award information found." : "No published award found on SAM.gov yet.");
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "SAM.gov lookup failed.");
+      const message = err instanceof Error ? err.message : "SAM.gov lookup failed.";
+      setLookupFault(message);
+      setError(message);
     } finally {
       setChecking(false);
     }
@@ -192,146 +197,163 @@ export function AwardPanel({
 
   const info = award.sam_info;
   const canRecord = award.can_record !== false;
+  const lookupLine = award.lookup.eligible
+    ? `${award.lookup.remaining_today} of ${award.lookup.daily_budget} SAM.gov requests left today.`
+    : award.lookup.reason;
+  const limitReached = award.lookup.eligible && award.lookup.remaining_today <= 0;
+  const lostError = Boolean(error && outcome === "lost");
+  const submittedLabel = award.submitted_on
+    ? new Date(`${award.submitted_on}T00:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }).toUpperCase()
+    : null;
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-center gap-3">
-        <span className={`rounded-full border px-3 py-1 text-sm font-semibold ${outcomeBadgeClass(award.award_outcome)}`}>
-          {formatOutcomeLabel(award.award_outcome)}
+    <section className="cf-card" aria-labelledby="award-h" style={{ padding: "22px 24px 24px", display: "flex", flexDirection: "column", gap: 20 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+        <h2 id="award-h" className="cf-h2" style={{ fontSize: 20 }}>Award tracking</h2>
+        <span className="cf-mono cf-meta">
+          {submittedLabel ? `SUBMITTED ${submittedLabel} · ` : ""}{award.checkpoints_completed} OF {award.checkpoints_total || 4} CHECKS RECORDED
         </span>
-        {award.award_outcome === "lost" && (award.awarded_to || award.awarded_amount != null) && (
-          <span className="text-sm">Awarded to <strong>{award.awarded_to || "—"}</strong> for <strong>{formatMoney(award.awarded_amount)}</strong></span>
-        )}
-        {award.award_outcome === "won" && award.awarded_amount != null && (
-          <span className="text-sm">Award amount <strong>{formatMoney(award.awarded_amount)}</strong></span>
-        )}
-        <span className="text-sm text-slate-600">{formatCheckpoint(award)}</span>
       </div>
+      <span className="sr-only">{formatCheckpoint(award)}</span>
 
       {award.flagged && (
-        <div role="alert" className="rounded-md border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800">
-          90 days since submission with no award outcome logged. Record the 90-day check.
+        <div role="alert" className="cf-note cf-note-bad">
+          <span style={{ fontWeight: 500, color: "#BE123C" }}>90 days since submission with no award outcome logged. Record the 90-day check.</span>
         </div>
       )}
 
       {award.tracked ? (
-        <ol className="grid gap-2 sm:grid-cols-4" aria-label="Award checkpoints">
-          {award.checkpoints.map((cp) => (
-            <li key={cp.id} className="rounded-md border p-3 text-sm" data-state={cp.state}>
-              <div className="flex items-center gap-2 font-medium">{checkpointIcon(cp)}{cp.checkpoint_days}-day check</div>
-              <p className="mt-1 text-xs text-slate-600">{checkpointStateLabel(cp)}</p>
-              {cp.award_status && <p className="mt-1 text-xs">Recorded: {formatOutcomeLabel(cp.award_status)}</p>}
-            </li>
-          ))}
+        <ol aria-label="Award checkpoints" style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(150px, 100%), 1fr))", gap: 12 }}>
+          {award.checkpoints.map((cp) => {
+            const due = cp.state === "due" || cp.state === "missed";
+            return (
+              <li key={cp.id} className={`cf-cp${due ? " cf-cp-due" : ""}`} data-state={cp.state}>
+                <span style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 500 }}>
+                  {checkpointIcon(cp)}{cp.checkpoint_days}-day check
+                </span>
+                <span className="cf-mono cf-meta" style={due ? { fontWeight: 500, color: "#B45309", textTransform: "uppercase" } : undefined}>{checkpointStateLabel(cp)}</span>
+                {cp.award_status ? <span className="cf-meta">Recorded: {formatOutcomeLabel(cp.award_status)}</span> : null}
+              </li>
+            );
+          })}
         </ol>
       ) : (
-        <p className="text-sm text-slate-600">
-          Submitted before checkpoint tracking started ({award.tracking_start_date}). The outcome can still be recorded.
-        </p>
+        <p className="cf-sub">Submitted before checkpoint tracking started ({award.tracking_start_date}). The outcome can still be recorded.</p>
       )}
 
-      <div className="rounded-md border bg-slate-50 p-3 text-sm">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="font-medium">SAM.gov award information</p>
-          {canRecord && (
-            <Button type="button" size="sm" variant="outline" onClick={checkSam}
-              disabled={checking || !award.lookup.eligible || award.lookup.remaining_today <= 0}>
-              <Search className="mr-1 h-4 w-4" />{checking ? "Checking…" : "Check SAM.gov now"}
-            </Button>
+      <div className={`cf-note ${info?.result === "found" ? "cf-note-ok" : limitReached ? "cf-note-warn" : lookupFault ? "cf-note-bad" : "cf-note-plain"}`}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          {info?.result === "found" ? (
+            <span style={{ fontWeight: 500, color: "#047857" }}>Award found on SAM.gov</span>
+          ) : info?.result === "not_found" ? (
+            <span style={{ fontWeight: 500 }}>No award posted yet on SAM.gov</span>
+          ) : limitReached ? (
+            <span style={{ fontWeight: 500, color: "#B45309" }}>Daily SAM.gov lookup limit reached</span>
+          ) : lookupFault ? (
+            <span style={{ fontWeight: 500, color: "#BE123C" }}>SAM.gov didn&apos;t respond</span>
+          ) : (
+            <span style={{ fontWeight: 500 }}>Look up the award on SAM.gov</span>
           )}
+          <span className="cf-meta" style={{ fontSize: 13 }}>{lookupFault || lookupLine}</span>
         </div>
-        <p className="mt-1 text-xs text-slate-600">
-          {award.lookup.eligible
-            ? `${award.lookup.remaining_today} of ${award.lookup.daily_budget} SAM.gov requests left today.`
-            : award.lookup.reason}
-        </p>
-        {info?.result === "found" && (
-          <div className="mt-2 space-y-1" data-testid="sam-award-info">
-            <p>Awarded to <strong>{info.awardee_name || "—"}</strong>{info.awardee_uei ? ` (UEI ${info.awardee_uei})` : ""} for <strong>{formatMoney(info.amount)}</strong></p>
-            <p className="text-xs text-slate-600">Signed {info.date_signed || "—"} · PIID {info.piid || "—"} · source {info.api === "opportunities" ? "award notice" : "Contract Awards"}</p>
-            {info.message && (
-              <div role="note" className="rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
-                <p>{info.message}</p>
-                <ul className="mt-1 list-disc pl-4">
-                  {info.candidates.slice(0, 5).map((c, index) => (
-                    <li key={`${c.piid}-${index}`}>{c.awardee_name || "—"} · {formatMoney(c.amount)} · {c.date_signed?.slice(0, 10) || "—"} · PIID {c.piid || "—"}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {canRecord && (
-              <Button type="button" size="sm" variant="secondary" onClick={useSamValues}>Use these values</Button>
-            )}
-          </div>
-        )}
-        {info && info.result !== "found" && (
-          <p className="mt-2 text-xs">Last check: {info.result === "not_found" ? "no published award yet" : info.message}</p>
-        )}
+        {canRecord ? (
+          <button type="button" className="cf-btn cf-btn-secondary" onClick={checkSam}
+            disabled={checking || !award.lookup.eligible || award.lookup.remaining_today <= 0}>
+            <Search size={16} />{checking ? "Checking…" : "Check SAM.gov now"}
+          </button>
+        ) : null}
       </div>
 
+      {info?.result === "found" && (
+        <div data-testid="sam-award-info" className="cf-note cf-note-ok" style={{ alignItems: "flex-start" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <p>Awarded to <strong>{info.awardee_name || "—"}</strong>{info.awardee_uei ? ` (UEI ${info.awardee_uei})` : ""} for <strong>{formatMoney(info.amount)}</strong></p>
+            <p className="cf-meta">Signed {info.date_signed || "—"} · PIID {info.piid || "—"} · source {info.api === "opportunities" ? "award notice" : "Contract Awards"}</p>
+            {info.message && (
+              <div role="note" className="cf-note cf-note-warn" style={{ marginTop: 8 }}>
+                <div>
+                  <p>{info.message}</p>
+                  <ul className="mt-1 list-disc pl-4">
+                    {info.candidates.slice(0, 5).map((c, index) => (
+                      <li key={`${c.piid}-${index}`}>{c.awardee_name || "—"} · {formatMoney(c.amount)} · {c.date_signed?.slice(0, 10) || "—"} · PIID {c.piid || "—"}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            )}
+          </div>
+          {canRecord ? <button type="button" className="cf-btn cf-btn-primary" onClick={useSamValues}>Use these values</button> : null}
+        </div>
+      )}
+      {info && info.result !== "found" && info.result !== "not_found" ? (
+        <p className="cf-meta">Last check: {info.message}</p>
+      ) : null}
+
+      {award.award_outcome === "lost" && (award.awarded_to || award.awarded_amount != null) && (
+        <p className="cf-sub">Awarded to <strong>{award.awarded_to || "—"}</strong> for <strong>{formatMoney(award.awarded_amount)}</strong></p>
+      )}
+
       {canRecord ? (
-        <form
-          noValidate
-          className="grid gap-3 md:grid-cols-2"
-          onSubmit={(event) => { event.preventDefault(); save(); }}
-          aria-label="Record award outcome"
-        >
-          <fieldset className="md:col-span-2">
-            <legend className="mb-1 text-sm font-medium">Was the bid awarded?</legend>
-            <p className="mb-2 text-xs text-slate-600">
-              AMAFHH customer award only. Accepting a supplier quote does not set Won, Lost, Pending, or Unknown.
-            </p>
-            <div className="flex flex-wrap gap-2">
+        <form noValidate style={{ display: "flex", flexDirection: "column", gap: 18 }} onSubmit={(event) => { event.preventDefault(); save(); }} aria-label="Record award outcome">
+          <fieldset style={{ border: 0, margin: 0, padding: 0 }}>
+            <legend style={{ fontSize: 14, fontWeight: 500, padding: 0, marginBottom: 10 }}>Was the bid awarded?</legend>
+            <p className="cf-meta" style={{ marginBottom: 10 }}>AMAFHH customer award only. Accepting a supplier quote does not set Won, Lost, Pending, or Unknown.</p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
               {AWARD_OUTCOMES.map((value) => (
-                <label key={value} className={`flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm ${outcome === value ? outcomeBadgeClass(value) : ""}`}>
-                  <input type="radio" name={`outcome-${bidId}`} value={value} checked={outcome === value}
-                    onChange={() => setOutcome(value)} />
+                <label key={value} className={`cf-choice${outcome === value ? " cf-choice-on" : ""}`}>
+                  <input type="radio" name={`outcome-${bidId}`} value={value} checked={outcome === value} onChange={() => setOutcome(value)} />
                   {formatOutcomeLabel(value)}
                 </label>
               ))}
             </div>
           </fieldset>
-          {showWinner && (
-            <label className="grid gap-1 text-sm">Awarded to
-              <Input value={awardedTo} onChange={(e) => setAwardedTo(e.target.value)} placeholder="Winning company" maxLength={255} />
-            </label>
+          {(showWinner || showAmount) && (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(240px, 100%), 1fr))", gap: 16, padding: 16, borderRadius: 12, border: `1px solid ${lostError ? "rgba(251,113,133,.3)" : outcome === "won" ? "rgba(52,211,153,.3)" : "var(--cf-line)"}`, background: lostError ? "rgba(251,113,133,.04)" : outcome === "won" ? "rgba(52,211,153,.04)" : "transparent" }}>
+              {showWinner && (
+                <label className="cf-field">Awarded to
+                  <Input value={awardedTo} onChange={(e) => setAwardedTo(e.target.value)} placeholder="Winning company" maxLength={255} />
+                </label>
+              )}
+              {showAmount && (
+                <label className="cf-field">{outcome === "lost" ? "Winning amount" : "Award amount (optional)"}
+                  <Input type="number" min="0" step="0.01" value={awardedAmount} onChange={(e) => setAwardedAmount(e.target.value)} />
+                </label>
+              )}
+            </div>
           )}
-          {showAmount && (
-            <label className="grid gap-1 text-sm">{outcome === "lost" ? "Winning amount" : "Award amount (optional)"}
-              <Input type="number" min="0" step="0.01" value={awardedAmount} onChange={(e) => setAwardedAmount(e.target.value)} />
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(240px, 100%), 1fr))", gap: 16 }}>
+            <label className="cf-field">Checkpoint
+              <select aria-label="Checkpoint" className="cf-select" value={target} onChange={(e) => setTarget(e.target.value)}>
+                <option value={NO_CHECKPOINT}>Update outcome only</option>
+                {dueCheckpoints.map((cp) => (
+                  <option key={cp.id} value={String(cp.checkpoint_days)}>{cp.checkpoint_days}-day check</option>
+                ))}
+              </select>
             </label>
-          )}
-          <label className="grid gap-1 text-sm">Checkpoint
-            <select aria-label="Checkpoint" className="h-10 rounded-md border bg-background px-3" value={target}
-              onChange={(e) => setTarget(e.target.value)}>
-              <option value={NO_CHECKPOINT}>Update outcome only</option>
-              {dueCheckpoints.map((cp) => (
-                <option key={cp.id} value={String(cp.checkpoint_days)}>{cp.checkpoint_days}-day check</option>
-              ))}
-            </select>
+            <label className="cf-field">Checked on
+              <Input type="date" value={checkedOn} max={todayEastern()} onChange={(e) => setCheckedOn(e.target.value)} />
+            </label>
+          </div>
+          <label className="cf-field">Notes
+            <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} placeholder="What did you find? e.g. no award posted yet on SAM.gov" />
           </label>
-          <label className="grid gap-1 text-sm">Checked on
-            <Input type="date" value={checkedOn} max={todayEastern()} onChange={(e) => setCheckedOn(e.target.value)} />
-          </label>
-          <label className="grid gap-1 text-sm md:col-span-2">Notes
-            <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
-          </label>
-          {error && <p role="alert" className="text-sm text-destructive md:col-span-2">{error}</p>}
-          {notice && <p role="status" className="text-sm text-emerald-700 md:col-span-2">{notice}</p>}
-          <div className="md:col-span-2">
-            <Button type="submit" disabled={saving}>{saving ? "Saving…" : "Save outcome"}</Button>
+          {error && <p role="alert" className="cf-err">{error}</p>}
+          {notice && <p role="status" style={{ display: "inline-flex", alignItems: "center", gap: 8, fontWeight: 500, color: "#047857" }}>{notice}</p>}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
+            <button type="submit" className="cf-btn cf-btn-primary" disabled={saving}>{saving ? "Saving…" : "Save outcome"}</button>
+            <a className="cf-btn cf-btn-secondary" href="/my-bids">Cancel</a>
           </div>
         </form>
       ) : (
         <>
-          {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-          <p className="text-sm text-slate-600">Only the bid owner or a manager can record the outcome.</p>
+          {error && <p role="alert" className="cf-err">{error}</p>}
+          <p className="cf-sub">Only the bid owner or a manager can record the outcome.</p>
         </>
       )}
 
       {award.history.length > 0 && (
         <div>
-          <h3 className="mb-2 text-sm font-semibold">Outcome history</h3>
+          <h3 className="cf-h3">Outcome history</h3>
           <ol className="space-y-2 text-sm">
             {award.history.map((entry) => (
               <li key={entry.id} className="border-l-2 pl-3">
@@ -342,7 +364,7 @@ export function AwardPanel({
                   {entry.awarded_amount != null ? ` · ${formatMoney(entry.awarded_amount)}` : ""}
                   {entry.source === "sam_values" ? " · from SAM.gov" : ""}
                 </p>
-                <p className="text-xs text-slate-600">
+                <p className="cf-meta">
                   {entry.changed_by_name || "Unknown"} · {new Date(entry.changed_at).toLocaleString("en-US", { timeZone: "America/New_York" })}
                   {entry.notes ? ` · ${entry.notes}` : ""}
                 </p>
@@ -351,6 +373,6 @@ export function AwardPanel({
           </ol>
         </div>
       )}
-    </div>
+    </section>
   );
 }

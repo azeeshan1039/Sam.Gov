@@ -3,10 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { Download } from "lucide-react";
 import { getStoredUser, type AuthUser } from "@/lib/auth";
 import { AdminTabs, PageBand, PageMain } from "@/components/design/PageFrame";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -123,120 +122,81 @@ export default function BidHistoryPage() {
         eyebrow={`ADMIN · ${items.length} BIDS LOGGED`}
         title="Bid history & pipeline"
         lead="$100K+, approvals and by-person are views of this one list."
-        actions={<Link className="cf-btn cf-btn-secondary" href="/pipeline">Open pipeline</Link>}
+        actions={(
+          <button type="button" className="cf-btn cf-btn-secondary" onClick={() => exportHistory(items)}>
+            <Download size={16} strokeWidth={1.75} />Export CSV
+          </button>
+        )}
       />
       <AdminTabs current="/bid-history" />
       <PageMain>
-      <div className="cf-seg-wrap" role="group" aria-label="Bid history view">
-        <Link className="cf-seg cf-seg-on" href="/bid-history">All bids</Link>
-        <Link className="cf-seg" href="/hundred-k">$100K+</Link>
-        <Link className="cf-seg" href="/approvals">Approvals</Link>
-        <Link className="cf-seg" href="/agent-bid-data">By person</Link>
-      </div>
-      {error && (
-        <div className="rounded border border-destructive bg-destructive/10 p-3 text-sm text-destructive">
-          {error}
-        </div>
-      )}
-      <Card>
-        <CardHeader>
-          <CardTitle>All logged bids</CardTitle>
-          <CardDescription>{loading ? "Loading…" : `${items.length} bid(s)`}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap">
-            <Input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search solicitation, title, or agent"
-              className="lg:max-w-sm"
-              aria-label="Search bids"
-            />
-            <FilterSelect
-              label="Portal"
-              value={portal}
-              onChange={setPortal}
-              options={[
-                { value: ALL, label: "All portals" },
-                ...portals.map((name) => ({ value: name, label: name })),
-              ]}
-            />
-            <FilterSelect
-              label="Agent"
-              value={agent}
-              onChange={setAgent}
-              options={[
-                { value: ALL, label: "All agents" },
-                ...agents.map((person) => ({ value: String(person.user_id), label: person.name })),
-              ]}
-            />
-            <FilterSelect
-              label="Status"
-              value={status}
-              onChange={setStatus}
-              options={[
-                { value: ALL, label: "All statuses" },
-                ...statuses.map((name) => ({ value: name, label: formatStatus(name) })),
-              ]}
-            />
-            <FilterSelect
-              label="Outcome"
-              value={outcome}
-              onChange={setOutcome}
-              options={[
-                { value: ALL, label: "All outcomes" },
-                { value: "won", label: formatOutcome("won") },
-                { value: "no_quote", label: formatOutcome("no_quote") },
-              ]}
-            />
-            <FilterSelect
-              label="Size"
-              value={size}
-              onChange={setSize}
-              options={[
-                { value: ALL, label: "All sizes" },
-                { value: "lte_50k", label: "≤ $50k" },
-                { value: "gte_50k", label: "≥ $50k" },
-                { value: "gte_100k", label: "≥ $100k" },
-              ]}
-            />
-            <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-              Assign from
-              <Input
-                type="date"
-                value={dateFrom}
-                onChange={(event) => setDateFrom(event.target.value)}
-                className="lg:w-[160px]"
-                aria-label="Assign from"
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-              Assign to
-              <Input
-                type="date"
-                value={dateTo}
-                onChange={(event) => setDateTo(event.target.value)}
-                className="lg:w-[160px]"
-                aria-label="Assign to"
-              />
-            </label>
+      {error && <div role="alert" className="cf-banner cf-banner-bad">{error}</div>}
+      {items.some((item) => item.internal_status === "Waiting Approval") ? (
+        <section className="cf-card" aria-labelledby="appr-h" style={{ borderColor: "rgba(251,191,36,.4)", background: "linear-gradient(180deg, rgba(251,191,36,.05), transparent 50%), var(--cf-surface)" }}>
+          <div style={{ padding: "16px 24px 8px", display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+            <h2 id="appr-h" className="cf-h2">{items.filter((item) => item.internal_status === "Waiting Approval").length} bids waiting for your approval</h2>
           </div>
-          {loading ? (
-            <Skeleton className="h-40 w-full" />
-          ) : (
-            <div className="overflow-x-auto">
-              <PipelineTable
-                items={items}
-                variant="history"
-                empty={filtersActive ? "No bids match these filters." : "No bids have been logged yet."}
-              />
+          <ul style={{ listStyle: "none", margin: 0, padding: "0 24px 8px" }}>
+            {items.filter((item) => item.internal_status === "Waiting Approval").slice(0, 4).map((item) => (
+              <li key={item.id} style={{ display: "flex", flexWrap: "wrap", gap: "12px 24px", alignItems: "center", padding: "14px 0", borderTop: "1px solid var(--cf-line)" }}>
+                <div style={{ flex: "1 1 260px", minWidth: 0 }}>
+                  <div style={{ font: "500 16px var(--cf-display)" }}>{item.title || item.bid_id}{(item.expected_submitted_price || 0) >= 500000 ? <span className="cf-tag" style={{ marginLeft: 8 }}> $500K+</span> : null}</div>
+                  <div className="cf-mono cf-meta" style={{ marginTop: 4 }}>{item.solicitation_number || item.bid_id} · {(item.portal || "—").toUpperCase()} · {item.agent_name || "—"}</div>
+                </div>
+                <Link className="cf-btn cf-btn-primary cf-btn-sm" href={`/approvals?bid=${item.id}`}>Review & approve</Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+      <section className="cf-card" aria-labelledby="all-h" style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        <div style={{ padding: "18px 24px", display: "flex", flexDirection: "column", gap: 14, borderBottom: "1px solid var(--cf-line)" }}>
+          <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+            <div>
+              <h2 id="all-h" className="cf-h2">All logged bids</h2>
+              <p className="cf-sub">{loading ? "Loading…" : `${items.length} bids · most recent first`}</p>
             </div>
-          )}
-        </CardContent>
-      </Card>
+            <div className="cf-seg-wrap" role="group" aria-label="Bid history view">
+              <Link className="cf-seg cf-seg-on" href="/bid-history">All bids</Link>
+              <Link className="cf-seg" href="/hundred-k">$100K+</Link>
+              <Link className="cf-seg" href="/approvals">Approvals</Link>
+              <Link className="cf-seg" href="/agent-bid-data">By person</Link>
+            </div>
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-end" }}>
+            <div className="cf-flt" style={{ flex: "2 1 240px" }}>
+              <label htmlFor="bh-q">Search</label>
+              <input id="bh-q" className="cf-input" type="search" aria-label="Search bids" placeholder="Solicitation, title or agent" value={search} onChange={(event) => setSearch(event.target.value)} />
+            </div>
+            <FilterSelect label="Portal" value={portal} onChange={setPortal} options={[{ value: ALL, label: "All portals" }, ...portals.map((name) => ({ value: name, label: name }))]} />
+            <FilterSelect label="Agent" value={agent} onChange={setAgent} options={[{ value: ALL, label: "All agents" }, ...agents.map((person) => ({ value: String(person.user_id), label: person.name }))]} />
+            <FilterSelect label="Status" value={status} onChange={setStatus} options={[{ value: ALL, label: "All statuses" }, ...statuses.map((name) => ({ value: name, label: formatStatus(name) }))]} />
+            <FilterSelect label="Outcome" value={outcome} onChange={setOutcome} options={[{ value: ALL, label: "All outcomes" }, { value: "won", label: formatOutcome("won") }, { value: "lost", label: formatOutcome("lost") }, { value: "pending", label: formatOutcome("pending") }, { value: "no_quote", label: "No quote" }]} />
+            <FilterSelect label="Size" value={size} onChange={setSize} options={[{ value: ALL, label: "All sizes" }, { value: "lte_50k", label: "≤ $50k" }, { value: "gte_50k", label: "≥ $50k" }, { value: "gte_100k", label: "≥ $100k" }]} />
+            <div className="cf-flt" style={{ flex: "1 1 150px" }}><label htmlFor="bh-f">Assigned from</label><input id="bh-f" className="cf-date" type="date" aria-label="Assign from" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} /></div>
+            <div className="cf-flt" style={{ flex: "1 1 150px" }}><label htmlFor="bh-t">Assigned to</label><input id="bh-t" className="cf-date" type="date" aria-label="Assign to" value={dateTo} onChange={(event) => setDateTo(event.target.value)} /></div>
+          </div>
+        </div>
+        {loading ? <Skeleton className="h-40 w-full" /> : (
+          <PipelineTable items={items} variant="ledger" empty={filtersActive ? "No bids match these filters." : "No bids have been logged yet."} />
+        )}
+      </section>
       </PageMain>
     </>
   );
+}
+
+function exportHistory(items: PipelineItem[]) {
+  const header = ["Solicitation", "Title", "Portal", "Agent", "Status", "Cost", "Price", "Gross profit", "Assigned", "Due", "Outcome"];
+  const lines = items.map((item) => [item.solicitation_number || item.bid_id, item.title || "", item.portal || "", item.agent_name || "", item.internal_status, item.supplier_cost ?? "", item.submitted_price ?? item.expected_submitted_price ?? "", item.gross_profit ?? "", item.assign_date || "", item.due_date || "", item.award_outcome || item.outcome || ""]);
+  const csv = [header, ...lines].map((row) => row.map((cell) => `"${String(cell).replace(/"/g, "\"\"")}"`).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "bid-history.csv";
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 function FilterSelect({
@@ -251,10 +211,10 @@ function FilterSelect({
   options: { value: string; label: string }[];
 }) {
   return (
-    <Select value={value} onValueChange={onChange}>
-      <SelectTrigger className="w-full lg:w-[180px]" aria-label={label}>
-        <SelectValue />
-      </SelectTrigger>
+    <div className="cf-flt" style={{ flex: "1 1 140px" }}>
+      <span>{label}</span>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger className="cf-select w-full" aria-label={label}><SelectValue /></SelectTrigger>
       <SelectContent>
         {options.map((option) => (
           <SelectItem key={option.value} value={option.value}>
@@ -262,6 +222,7 @@ function FilterSelect({
           </SelectItem>
         ))}
       </SelectContent>
-    </Select>
+      </Select>
+    </div>
   );
 }

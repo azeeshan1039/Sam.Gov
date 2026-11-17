@@ -230,6 +230,7 @@ describe("KAN-19 active personal work", () => {
       const url = urlOf(input);
       if (url.includes("pipeline/my-bids")) return response({ items: [] });
       if (url.includes("stats/my-goal")) return response({ achieved: 1, monthly: 5, left: 4 });
+      if (url.includes("award-tracking")) return response({ items: [], summary: null });
       if (url.includes("opportunities/mine")) {
         return response({
           opportunities: [{
@@ -254,7 +255,8 @@ describe("KAN-19 active personal work", () => {
       "href",
       "/sam-gov/NOTICE-8"
     );
-    expect(screen.getByTestId("pipeline-table")).toHaveTextContent("0 pipeline rows");
+    expect(screen.getByRole("heading", { name: "All my bids" })).toBeInTheDocument();
+    expect(screen.getByText("No bids assigned to you yet.")).toBeInTheDocument();
   });
 });
 

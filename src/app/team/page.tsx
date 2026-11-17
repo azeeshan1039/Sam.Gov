@@ -2,15 +2,12 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Users, UserPlus } from 'lucide-react';
+import { UserPlus } from 'lucide-react';
 import { getStoredUser, type AuthUser } from '@/lib/auth';
 import { AdminTabs, PageBand, PageMain } from '@/components/design/PageFrame';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 type Role = 'admin' | 'agent';
 
@@ -131,49 +128,58 @@ export default function TeamPage() {
 
   return (
     <>
-      <PageBand eyebrow="ADMIN" title="Team & access" lead="Manage admins, agents, workload limits, and employment lifecycle." />
+      <PageBand eyebrow="ADMIN" title="Team & access" lead="Admins, agents, workload limits, and who can pick up work." />
       <AdminTabs current="/team" />
       <PageMain>
-      {error && <div className="rounded border border-destructive bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
-      {notice && <div className="rounded border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</div>}
+      {error && <div role="alert" className="cf-banner cf-banner-bad">{error}</div>}
+      {notice && <div role="status" className="cf-banner cf-banner-ok">{notice}</div>}
 
-      <Card>
-        <CardHeader><CardTitle>Invite a teammate</CardTitle><CardDescription>{team.slots_remaining} of {team.max_team_members} agent slots remaining. Admins do not consume agent slots.</CardDescription></CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-7 md:items-end">
-          <div><Label htmlFor="invite-full-name">Full name</Label><Input id="invite-full-name" value={invite.full_name} onChange={(e) => setInvite({ ...invite, full_name: e.target.value })} placeholder="Employee name" /></div>
-          <div className="md:col-span-2"><Label htmlFor="invite-email">Email</Label><Input id="invite-email" type="email" value={invite.email} onChange={(e) => setInvite({ ...invite, email: e.target.value })} placeholder="teammate@company.com" /></div>
-          <div><Label htmlFor="invite-role">Role</Label><select id="invite-role" className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={invite.role} onChange={(e) => setInvite({ ...invite, role: e.target.value as Role })}><option value="agent">Agent</option><option value="admin">Admin</option></select></div>
-          <div><Label htmlFor="invite-start-date">Start date</Label><Input id="invite-start-date" type="date" value={invite.employment_start_date} onChange={(e) => setInvite({ ...invite, employment_start_date: e.target.value })} /></div>
-          <div><Label htmlFor="invite-active-bid-limit">Active-bid limit</Label><Input id="invite-active-bid-limit" type="number" min="0" value={invite.active_bid_limit} onChange={(e) => setInvite({ ...invite, active_bid_limit: e.target.value })} disabled={invite.role === 'admin'} /></div>
-          <div><Label htmlFor="invite-dollar-ceiling">Dollar ceiling</Label><Input id="invite-dollar-ceiling" type="number" min="0" value={invite.dollar_ceiling} onChange={(e) => setInvite({ ...invite, dollar_ceiling: e.target.value })} disabled={invite.role === 'admin'} /></div>
-          <Button className="md:col-span-7 md:w-fit" onClick={sendInvite} disabled={!invite.full_name.trim() || !invite.email.trim() || (invite.role === 'agent' && team.slots_remaining < 1)}><UserPlus className="mr-2 h-4 w-4" />Send invite</Button>
-        </CardContent>
-      </Card>
+      <section className="cf-card" aria-labelledby="invite-h">
+        <div style={{ padding: "20px 24px 0" }}>
+          <h2 id="invite-h" className="cf-h2">Invite a teammate</h2>
+          <p className="cf-sub">{team.slots_remaining} of {team.max_team_members} agent slots remaining. Admins do not consume agent slots.</p>
+        </div>
+        <div style={{ padding: "16px 24px 24px", display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-end" }}>
+          <div className="cf-flt" style={{ flex: "1 1 160px" }}><Label htmlFor="invite-full-name">Full name</Label><Input id="invite-full-name" className="cf-input" value={invite.full_name} onChange={(e) => setInvite({ ...invite, full_name: e.target.value })} placeholder="Employee name" /></div>
+          <div className="cf-flt" style={{ flex: "2 1 220px" }}><Label htmlFor="invite-email">Email</Label><Input id="invite-email" className="cf-input" type="email" value={invite.email} onChange={(e) => setInvite({ ...invite, email: e.target.value })} placeholder="teammate@company.com" /></div>
+          <div className="cf-flt" style={{ flex: "1 1 120px" }}><Label htmlFor="invite-role">Role</Label><select id="invite-role" className="cf-select" value={invite.role} onChange={(e) => setInvite({ ...invite, role: e.target.value as Role })}><option value="agent">Agent</option><option value="admin">Admin</option></select></div>
+          <div className="cf-flt" style={{ flex: "1 1 140px" }}><Label htmlFor="invite-start-date">Start date</Label><Input id="invite-start-date" className="cf-date" type="date" value={invite.employment_start_date} onChange={(e) => setInvite({ ...invite, employment_start_date: e.target.value })} /></div>
+          <div className="cf-flt" style={{ flex: "1 1 120px" }}><Label htmlFor="invite-active-bid-limit">Active-bid limit</Label><Input id="invite-active-bid-limit" className="cf-input" type="number" min="0" value={invite.active_bid_limit} onChange={(e) => setInvite({ ...invite, active_bid_limit: e.target.value })} disabled={invite.role === 'admin'} /></div>
+          <div className="cf-flt" style={{ flex: "1 1 140px" }}><Label htmlFor="invite-dollar-ceiling">Dollar ceiling</Label><Input id="invite-dollar-ceiling" className="cf-input" type="number" min="0" value={invite.dollar_ceiling} onChange={(e) => setInvite({ ...invite, dollar_ceiling: e.target.value })} disabled={invite.role === 'admin'} /></div>
+          <button type="button" className="cf-btn cf-btn-primary" onClick={sendInvite} disabled={!invite.full_name.trim() || !invite.email.trim() || (invite.role === 'agent' && team.slots_remaining < 1)}><UserPlus size={16} />Send invite</button>
+        </div>
+      </section>
 
-      <Card>
-        <CardHeader><CardTitle>Roster</CardTitle><CardDescription>Company monthly goal: {team.company_monthly_goal}. Deactivation automatically returns active bids to the pool.</CardDescription></CardHeader>
-        <CardContent className="overflow-x-auto">
-          <Table>
-            <TableHeader><TableRow><TableHead>Person</TableHead><TableHead>Role</TableHead><TableHead>Title / start</TableHead><TableHead>Monthly goal</TableHead><TableHead>Active bids</TableHead><TableHead>Dollar ceiling</TableHead><TableHead>Status</TableHead><TableHead /></TableRow></TableHeader>
-            <TableBody>{team.members.map((member) => {
+      <section className="cf-card" aria-labelledby="roster-h" style={{ overflow: "hidden" }}>
+        <div style={{ padding: "20px 24px 12px" }}>
+          <h2 id="roster-h" className="cf-h2">Roster</h2>
+          <p className="cf-sub">Company monthly goal: {team.company_monthly_goal}. Deactivation returns active bids to the pool.</p>
+        </div>
+        <div style={{ overflowX: "auto" }}>
+          <table className="cf-table">
+            <thead><tr><th>Person</th><th>Role</th><th>Title / start</th><th>Monthly goal</th><th>Active bids</th><th>Dollar ceiling</th><th>Status</th><th></th></tr></thead>
+            <tbody>{team.members.map((member) => {
               const draft = drafts[member.id];
               if (!draft) return null;
-              return <TableRow key={member.id} className={!member.is_active ? 'opacity-60' : ''}>
-                <TableCell><div className="font-medium">{member.full_name}</div><div className="text-xs text-muted-foreground">{member.email}</div></TableCell>
-                <TableCell><select aria-label={`Role for ${member.full_name}`} className="h-9 rounded-md border bg-background px-2 text-sm" value={draft.role} onChange={(e) => setDrafts({ ...drafts, [member.id]: { ...draft, role: e.target.value as Role } })}><option value="agent">Agent</option><option value="admin">Admin</option></select></TableCell>
-                <TableCell className="min-w-44 space-y-2"><Input aria-label={`Job title for ${member.full_name}`} value={draft.job_title || ''} onChange={(e) => setDrafts({ ...drafts, [member.id]: { ...draft, job_title: e.target.value } })} placeholder="Job title" /><Input aria-label={`Start date for ${member.full_name}`} type="date" value={draft.employment_start_date || ''} onChange={(e) => setDrafts({ ...drafts, [member.id]: { ...draft, employment_start_date: e.target.value } })} /></TableCell>
-                <TableCell><Input aria-label={`Monthly goal for ${member.full_name}`} className="w-24" type="number" min="0" value={draft.monthly_goal} disabled={draft.role === 'admin'} onChange={(e) => setDrafts({ ...drafts, [member.id]: { ...draft, monthly_goal: Number(e.target.value) } })} /></TableCell>
-                <TableCell><Input aria-label={`Active-bid limit for ${member.full_name}`} className="w-24" type="number" min="0" value={draft.active_bid_limit} disabled={draft.role === 'admin'} onChange={(e) => setDrafts({ ...drafts, [member.id]: { ...draft, active_bid_limit: Number(e.target.value) } })} /></TableCell>
-                <TableCell><Input aria-label={`Dollar ceiling for ${member.full_name}`} className="w-32" type="number" min="0" value={draft.dollar_ceiling} disabled={draft.role === 'admin'} onChange={(e) => setDrafts({ ...drafts, [member.id]: { ...draft, dollar_ceiling: Number(e.target.value) } })} /></TableCell>
-                <TableCell>{member.is_active ? <span className="text-emerald-700">Active</span> : <span>Inactive</span>}</TableCell>
-                <TableCell className="space-y-2"><Button aria-label={`Save ${member.full_name}`} size="sm" onClick={() => updateMember(member)} disabled={savingId === member.id}>Save</Button><Button aria-label={`${member.is_active ? 'Deactivate' : 'Reactivate'} ${member.full_name}`} size="sm" variant="outline" onClick={() => updateMember(member, !member.is_active)} disabled={savingId === member.id}>{member.is_active ? 'Deactivate' : 'Reactivate'}</Button></TableCell>
-              </TableRow>;
-            })}</TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+              return <tr key={member.id} style={member.is_active ? undefined : { opacity: 0.6 }}>
+                <td><div style={{ fontWeight: 500 }}>{member.full_name}</div><div className="cf-meta">{member.email}</div></td>
+                <td><select aria-label={`Role for ${member.full_name}`} className="cf-select" value={draft.role} onChange={(e) => setDrafts({ ...drafts, [member.id]: { ...draft, role: e.target.value as Role } })}><option value="agent">Agent</option><option value="admin">Admin</option></select></td>
+                <td><div style={{ display: "flex", flexDirection: "column", gap: 8, minWidth: 160 }}><Input aria-label={`Job title for ${member.full_name}`} className="cf-input" value={draft.job_title || ''} onChange={(e) => setDrafts({ ...drafts, [member.id]: { ...draft, job_title: e.target.value } })} placeholder="Job title" /><Input aria-label={`Start date for ${member.full_name}`} className="cf-date" type="date" value={draft.employment_start_date || ''} onChange={(e) => setDrafts({ ...drafts, [member.id]: { ...draft, employment_start_date: e.target.value } })} /></div></td>
+                <td><Input aria-label={`Monthly goal for ${member.full_name}`} className="cf-input" style={{ width: 96 }} type="number" min="0" value={draft.monthly_goal} disabled={draft.role === 'admin'} onChange={(e) => setDrafts({ ...drafts, [member.id]: { ...draft, monthly_goal: Number(e.target.value) } })} /></td>
+                <td><Input aria-label={`Active-bid limit for ${member.full_name}`} className="cf-input" style={{ width: 96 }} type="number" min="0" value={draft.active_bid_limit} disabled={draft.role === 'admin'} onChange={(e) => setDrafts({ ...drafts, [member.id]: { ...draft, active_bid_limit: Number(e.target.value) } })} /></td>
+                <td><Input aria-label={`Dollar ceiling for ${member.full_name}`} className="cf-input" style={{ width: 128 }} type="number" min="0" value={draft.dollar_ceiling} disabled={draft.role === 'admin'} onChange={(e) => setDrafts({ ...drafts, [member.id]: { ...draft, dollar_ceiling: Number(e.target.value) } })} /></td>
+                <td>{member.is_active ? <span className="cf-pill cf-pill-sub">Active</span> : <span className="cf-pill">Inactive</span>}</td>
+                <td><div style={{ display: "flex", gap: 8 }}><button type="button" className="cf-btn cf-btn-primary cf-btn-sm" aria-label={`Save ${member.full_name}`} onClick={() => updateMember(member)} disabled={savingId === member.id}>Save</button><button type="button" className="cf-btn cf-btn-secondary cf-btn-sm" aria-label={`${member.is_active ? 'Deactivate' : 'Reactivate'} ${member.full_name}`} onClick={() => updateMember(member, !member.is_active)} disabled={savingId === member.id}>{member.is_active ? 'Deactivate' : 'Reactivate'}</button></div></td>
+              </tr>;
+            })}</tbody>
+          </table>
+        </div>
+      </section>
 
-      <Card><CardHeader><CardTitle>Pending invites</CardTitle></CardHeader><CardContent>{team.pending_invites.length ? team.pending_invites.map((item) => <div key={item.id} className="border-b py-2 text-sm"><span className="font-medium">{item.full_name || item.email}</span> · {item.email} <span className="text-muted-foreground">({item.role})</span></div>) : <p className="text-sm text-muted-foreground">No pending invites.</p>}</CardContent></Card>
+      <section className="cf-card" aria-labelledby="pending-h">
+        <div style={{ padding: "20px 24px 12px" }}><h2 id="pending-h" className="cf-h2">Pending invites</h2></div>
+        <div style={{ padding: "0 24px 20px" }}>{team.pending_invites.length ? team.pending_invites.map((item) => <div key={item.id} style={{ borderTop: "1px solid var(--cf-line)", padding: "10px 0", fontSize: 14 }}><span style={{ fontWeight: 500 }}>{item.full_name || item.email}</span> · {item.email} <span className="cf-meta">({item.role})</span></div>) : <p className="cf-meta">No pending invites.</p>}</div>
+      </section>
       </PageMain>
     </>
   );

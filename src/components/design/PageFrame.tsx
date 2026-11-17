@@ -37,18 +37,21 @@ const ADMIN_TABS = [
   { href: "/team", label: "Team" },
 ];
 
-export function AdminTabs({ current }: { current: string }) {
+export function AdminTabs({ current, approvalCount }: { current: string; approvalCount?: number }) {
   return (
-    <nav aria-label="Admin" className="cf-wrap" style={{ display: "flex", flexWrap: "wrap", gap: 28, borderBottom: "1px solid var(--cf-line)" }}>
-      {ADMIN_TABS.map((tab) => {
-        const on = current === tab.href || (tab.href === "/bid-history" && (current === "/pipeline" || current === "/hundred-k"));
-        return (
-          <Link key={tab.href} href={tab.href} className={`cf-tab${on ? " cf-tab-on" : ""}`} aria-current={on ? "page" : undefined}>
-            {tab.label}
-          </Link>
-        );
-      })}
-    </nav>
+    <div style={{ borderBottom: "1px solid var(--cf-line)" }}>
+      <nav aria-label="Admin" className="cf-wrap" style={{ display: "flex", flexWrap: "wrap", gap: 28 }}>
+        {ADMIN_TABS.map((tab) => {
+          const on = current === tab.href || (tab.href === "/bid-history" && (current === "/pipeline" || current === "/hundred-k"));
+          return (
+            <Link key={tab.href} href={tab.href} className={`cf-tab${on ? " cf-tab-on" : ""}`} aria-current={on ? "page" : undefined}>
+              {tab.label}
+              {tab.href === "/approvals" && approvalCount ? <span className="cf-cnt">{approvalCount}</span> : null}
+            </Link>
+          );
+        })}
+      </nav>
+    </div>
   );
 }
 
@@ -59,21 +62,26 @@ const REPORT_TABS = [
 
 export function ReportTabs({ current }: { current: string }) {
   return (
-    <nav aria-label="Reports" className="cf-wrap" style={{ display: "flex", flexWrap: "wrap", gap: 28, borderBottom: "1px solid var(--cf-line)" }}>
-      {REPORT_TABS.map((tab) => {
-        const on = current === tab.href;
-        return (
-          <Link key={tab.href} href={tab.href} className={`cf-tab${on ? " cf-tab-on" : ""}`} aria-current={on ? "page" : undefined}>
-            {tab.label}
-          </Link>
-        );
-      })}
-    </nav>
+    <div style={{ borderBottom: "1px solid var(--cf-line)" }}>
+      <nav aria-label="Reports" className="cf-wrap" style={{ display: "flex", flexWrap: "wrap", gap: 28 }}>
+        {REPORT_TABS.map((tab) => {
+          const on = current === tab.href;
+          return (
+            <Link key={tab.href} href={tab.href} className={`cf-tab${on ? " cf-tab-on" : ""}`} aria-current={on ? "page" : undefined}>
+              {tab.label}
+            </Link>
+          );
+        })}
+      </nav>
+    </div>
   );
 }
 
-export function BidStepper({ status }: { status?: string | null }) {
-  const steps = ["Picked up", "Supplier quote", "Manager approval", "Submit on portal", "Award tracking"];
+export function BidStepper({ status, captions }: { status?: string | null; captions?: string[] }) {
+  const award = status === "Bid submitted";
+  const steps = award
+    ? ["Picked up", "Supplier found", "Approved", "Bid submitted", "Award decision"]
+    : ["Picked up", "Supplier quote", "Manager approval", "Submit on portal", "Award tracking"];
   const current = status === "Bid submitted"
     ? 4
     : status === "Approved for Submission"
@@ -83,17 +91,25 @@ export function BidStepper({ status }: { status?: string | null }) {
         : status === "Finding Supplier" || status === "Couldnt get quote"
           ? 1
           : 0;
+  const notes = ["YOU", "IN PROGRESS", "NEXT", "AFTER APPROVAL", "30/45/60/90 DAYS"];
   return (
-    <ol className="cf-card" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", listStyle: "none", margin: 0, padding: 8 }}>
-      {steps.map((label, index) => {
-        const state = index < current ? "done" : index === current ? "current" : "later";
-        return (
-          <li key={label} style={{ padding: "12px 14px", borderRight: index < steps.length - 1 ? "1px solid var(--cf-line)" : undefined }}>
-            <div className="cf-lbl" style={{ color: state === "later" ? "var(--cf-text-3)" : "#0E7490" }}>{String(index + 1).padStart(2, "0")}</div>
-            <div style={{ marginTop: 4, fontWeight: 500, color: state === "later" ? "var(--cf-text-3)" : "var(--cf-text)" }}>{label}</div>
-          </li>
-        );
-      })}
-    </ol>
+    <section className="cf-card" aria-label="Bid progress" style={{ padding: "22px 24px" }}>
+      <ol style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(150px, 100%), 1fr))", gap: 16 }}>
+        {steps.map((label, index) => {
+          const state = index < current ? "done" : index === current ? "now" : "todo";
+          const caption = captions?.[index] || (state === "done" ? "DONE" : notes[index]);
+          return (
+            <li key={label} className="cf-step" aria-current={state === "now" ? "step" : undefined}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span className={`cf-dot ${state === "done" ? "cf-dot-done" : state === "now" ? "cf-dot-now" : "cf-dot-todo"}`}>{state === "done" ? "✓" : String(index + 1).padStart(2, "0")}</span>
+                {index < steps.length - 1 ? <span className={state === "done" ? "cf-step-ln cf-step-ln-on" : "cf-step-ln"} /> : null}
+              </div>
+              <span style={{ fontWeight: 500, color: state === "todo" ? "#64748B" : "#0B1220" }}>{label}</span>
+              <span className="cf-mono cf-meta" style={state === "now" && award ? { color: "#B45309", fontWeight: 500 } : undefined}>{caption}</span>
+            </li>
+          );
+        })}
+      </ol>
+    </section>
   );
 }

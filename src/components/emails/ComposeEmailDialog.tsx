@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Loader2, Send } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -179,9 +178,9 @@ export function ComposeEmailDialog({
               <div className="flex flex-wrap items-center gap-2 text-sm" role="group" aria-label="Vendors on this bid">
                 <span className="text-slate-600">Vendors on this bid:</span>
                 {vendorChoices.map((vendor) => (
-                  <Button key={vendor.id} type="button" size="sm" variant="outline" onClick={() => addRecipient(vendor.email)}>
+                  <button key={vendor.id} type="button" className="cf-btn cf-btn-secondary" onClick={() => addRecipient(vendor.email)}>
                     Add {vendor.company_name || vendor.email}
-                  </Button>
+                  </button>
                 ))}
               </div>
             )}
@@ -206,17 +205,17 @@ export function ComposeEmailDialog({
         )}
 
         <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <button type="button" className="cf-btn cf-btn-secondary" onClick={() => onOpenChange(false)}>Cancel</button>
           {connected && (
             <>
-              <Button variant="secondary" onClick={runCheck} disabled={busy !== null}>
-                {busy === "check" && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />}
+              <button type="button" className="cf-btn cf-btn-secondary" onClick={runCheck} disabled={busy !== null}>
+                {busy === "check" && <Loader2 className="animate-spin" size={16} aria-hidden />}
                 {check ? "Re-check spam risk" : "Check spam risk"}
-              </Button>
-              <Button onClick={send} disabled={busy !== null || (needsAck && !acknowledged)}>
-                {busy === "send" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden /> : <Send className="mr-2 h-4 w-4" aria-hidden />}
+              </button>
+              <button type="button" className="cf-btn cf-btn-primary" onClick={send} disabled={busy !== null || (needsAck && !acknowledged)}>
+                {busy === "send" ? <Loader2 className="animate-spin" size={16} aria-hidden /> : <Send size={16} aria-hidden />}
                 {willHold ? "Submit for review" : "Send"}
-              </Button>
+              </button>
             </>
           )}
         </DialogFooter>

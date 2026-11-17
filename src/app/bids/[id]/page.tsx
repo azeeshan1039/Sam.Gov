@@ -4,12 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { getStoredUser, type AuthUser } from "@/lib/auth";
-import { BidStepper, PageBand, PageMain } from "@/components/design/PageFrame";
+import { BidStepper, PageMain } from "@/components/design/PageFrame";
 import {
   BID_STATUSES,
-  formatDate,
   formatMoney,
-  statusStyle,
   type BidConversationEvent,
   type BidStatus,
   type BidVendor,
@@ -19,7 +17,6 @@ import {
 } from "@/lib/pipeline";
 import { AwardPanel } from "@/components/awards/AwardPanel";
 import { BidEmailsPanel, type ComposeRequest } from "@/components/emails/BidEmailsPanel";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -36,14 +33,6 @@ const ROUND_LABEL: Record<string, string> = {
   stopped: "Stopped",
 };
 
-const SECTIONS = [
-  ["vendors", "Vendors"],
-  ["negotiation", "Negotiation"],
-  ["bid-emails", "Emails"],
-  ["notes", "Remarks & notes"],
-  ["history", "History"],
-] as const;
-
 function outreachClass(state: OutreachState) {
   if (state === "responded") return "bg-emerald-100 text-emerald-800";
   if (state === "contacted") return "bg-amber-100 text-amber-900";
@@ -58,6 +47,16 @@ function outreachLabel(vendor: BidVendor) {
 
 function easternTime(value: string | null | undefined) {
   return value ? new Date(value).toLocaleString("en-US", { timeZone: "America/New_York" }) : "—";
+}
+
+function dueStamp(value: string | null | undefined, days: number | null | undefined) {
+  let when = "—";
+  if (value) {
+    const date = new Date(value.includes("T") ? value : `${value}T12:00:00Z`);
+    when = Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "America/New_York" }).format(date).toUpperCase();
+  }
+  if (days == null) return when;
+  return `${when} · ${days} DAY${days === 1 ? "" : "S"}`;
 }
 
 function roundHeading(round: number | null | undefined) {
@@ -287,104 +286,228 @@ export default function BidDetailPage() {
     historyByVendor.set(event.supplier_id, group);
   }
 
+  const daysLeft = bid.days_remaining;
+  const deadlinePassed = daysLeft != null && daysLeft < 0 && bid.internal_status !== "Bid submitted" && bid.internal_status !== "Bid got removed";
+  const sentBack = bid.internal_status === "Bid No Approved";
+  const waiting = bid.internal_status === "Waiting Approval";
+  const approved = bid.internal_status === "Approved for Submission";
+  const submitted = bid.internal_status === "Bid submitted";
+  const released = bid.internal_status === "Bid got removed";
+  const priceShown = bid.submitted_price ?? bid.expected_submitted_price;
+  const typedPrice = Number(submittedPrice);
+  const approvedPrice = bid.expected_submitted_price;
+  const priceDiffers = approved && approvedPrice != null && Number.isFinite(typedPrice) && submittedPrice.trim() !== "" && Math.abs(typedPrice - approvedPrice) > 0.009;
+  const dueText = dueStamp(bid.due_date, daysLeft);
+  const pillClass = waiting || sentBack ? "cf-pill-app" : submitted ? "cf-pill-sub" : released ? "cf-pill-lost" : "cf-pill-sup";
+  const quoteStep = !waiting && !approved && !submitted && !released;
+  const stepWhen = (next: string) => {
+    const hit = (bid.status_history || []).find((event) => event.new_status === next);
+    return hit ? `${hit.changed_by_name || "—"} · ${hit.changed_at_eastern}` : "—";
+  };
+  const awardCaptions = submitted ? [
+    stepWhen("Finding Supplier"),
+    bid.supplier_cost != null ? `${formatMoney(bid.supplier_cost)} · ${stepWhen("Waiting Approval")}` : stepWhen("Waiting Approval"),
+    bid.approved_by_name ? stepWhen("Approved for Submission") : "—",
+    `${formatMoney(bid.submitted_price)} · ${bid.submitted_at || "—"}`,
+    "WAITING",
+  ] : undefined;
+
   return (
     <>
-      <PageBand
-        eyebrow={`MY BIDS / ${bid.solicitation_number || bid.bid_id}`}
-        title={bid.title || bid.bid_id}
-        lead={`${bid.solicitation_number || bid.bid_id} · ${bid.portal || "SAM.GOV"} · DUE ${formatDate(bid.due_date)}`}
-        actions={workspace.rfq_href ? <Link className="cf-btn cf-btn-secondary" href={workspace.rfq_href}>Open RFQ negotiation</Link> : bid.bid_url ? <a className="cf-btn cf-btn-secondary" href={bid.bid_url} target="_blank" rel="noreferrer">View on SAM.gov</a> : null}
-      />
+      <section className="cf-band">
+        <div className="cf-wrap cf-band-in">
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, flex: "1 1 320px", minWidth: 0 }}>
+            <nav aria-label="Breadcrumb" className="cf-mono" style={{ fontSize: 12, color: "var(--cf-text-3)", display: "flex", gap: 8, letterSpacing: "0.04em" }}>
+              <Link href="/my-bids">MY BIDS</Link>
+              <span aria-hidden="true">/</span>
+              <span>{bid.solicitation_number || bid.bid_id}</span>
+            </nav>
+            <h1 className="cf-h1" style={{ overflowWrap: "anywhere" }}>{bid.title || bid.bid_id}</h1>
+            <div className="cf-mono" style={{ fontSize: 12, color: "var(--cf-text-2)", letterSpacing: "0.03em", overflowWrap: "anywhere" }}>
+              {submitted
+                ? `${bid.solicitation_number || bid.bid_id} · ${(bid.portal || "SAM.GOV").toUpperCase()}${bid.naics_code ? ` · NAICS ${bid.naics_code}` : ""}`
+                : `${bid.solicitation_number || bid.bid_id} · ${(bid.portal || "SAM.GOV").toUpperCase()} · QTY — · DUE ${dueText}`}
+            </div>
+          </div>
+          <div style={{ display: "flex", flexWrap: "nowrap", gap: 12, alignItems: "center", flex: "none", alignSelf: "flex-end", marginLeft: "auto" }}>
+            <span className={`cf-pill ${pillClass}`} style={{ alignSelf: "center" }}>{bid.internal_status}</span>
+            {bid.bid_url ? <a className="cf-btn cf-btn-secondary" href={bid.bid_url} target="_blank" rel="noreferrer" style={{ minHeight: 40 }}>View on SAM.gov ↗</a> : null}
+          </div>
+        </div>
+      </section>
       <PageMain>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
-        <span className="cf-chip">{bid.internal_status}</span>
-      </div>
-      <BidStepper status={bid.internal_status} />
+      <BidStepper status={bid.internal_status} captions={awardCaptions} />
 
-      <nav aria-label="On this page" className="flex flex-wrap items-center gap-2 text-sm">
-        <span className="text-slate-600">On this page:</span>
-        {SECTIONS.map(([id, label]) => (
-          <a key={id} href={`#${id}`} className="rounded-full border px-3 py-1 font-medium hover:bg-slate-50">{label}</a>
-        ))}
-      </nav>
-
-      {message && <div className="rounded border bg-slate-50 p-3 text-sm">{message}</div>}
-      {!canEdit && (
-        <div role="note" className="rounded border border-slate-300 bg-slate-50 p-3 text-sm">
+      {deadlinePassed ? (
+        <div className="cf-banner cf-banner-bad" role="alert">
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 500, color: "#BE123C" }}>The response deadline has passed</div>
+            <div style={{ color: "var(--cf-text-2)" }}>This bid can&apos;t be sent for approval anymore. Ask whether the agency extended the deadline before changing it.</div>
+          </div>
+        </div>
+      ) : null}
+      {sentBack ? (
+        <div className="cf-banner cf-banner-warn" role="status">
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 500, color: "#B45309" }}>Sent back{bid.approved_by_name ? ` by ${bid.approved_by_name}` : ""}</div>
+            <div style={{ color: "var(--cf-text-2)" }}>{bid.bid_remarks || "Update the quote and send it back for approval."}</div>
+          </div>
+        </div>
+      ) : null}
+      {message ? <div className="cf-err" role="alert">{message}</div> : null}
+      {!canEdit ? (
+        <div role="note" className="cf-banner" style={{ border: "1px solid var(--cf-line)", background: "var(--cf-surface-2)" }}>
           Read only: this bid now belongs to {bid.agent_name || "another employee"}. You can view it; only its current owner or an admin can change vendors, notes or emails.
         </div>
-      )}
-      {bid.negative_profit_warning && (
-        <div role="alert" className="rounded border border-red-500 bg-red-50 p-3 font-semibold text-red-800">
-          Warning: submitted price is below supplier cost, so this bid has negative gross profit.
+      ) : null}
+
+      {submitted ? (
+        <section aria-label="Financials" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(200px, 100%), 1fr))", gap: 16 }}>
+          <div className="cf-card cf-fin"><div className="cf-lbl">Expected submitted</div><div className="cf-fin-v">{formatMoney(bid.expected_submitted_price)}</div></div>
+          <div className="cf-card cf-fin"><div className="cf-lbl">Supplier cost</div><div className="cf-fin-v">{formatMoney(bid.supplier_cost)}</div></div>
+          <div className="cf-card cf-fin cf-kpi-hero"><div className="cf-lbl" style={{ color: "#0E7490" }}>Submitted price</div><div className="cf-fin-v">{formatMoney(bid.submitted_price)}</div></div>
+          <div className="cf-card cf-fin"><div className="cf-lbl">Gross profit</div><div className="cf-fin-v" style={{ color: bid.negative_profit_warning ? "#BE123C" : "#047857" }}>{formatMoney(bid.gross_profit)}</div></div>
+          <div className="cf-card cf-fin"><div className="cf-lbl">Markup</div><div className="cf-fin-v">{bid.markup_percent == null ? "—" : `${bid.markup_percent.toFixed(2)}%`}</div></div>
+        </section>
+      ) : null}
+
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 24, alignItems: "flex-start" }}>
+        <div style={{ flex: "2 1 640px", minWidth: 0, display: "flex", flexDirection: "column", gap: 24 }}>
+          {submitted ? <AwardPanel bidId={bid.id} onSaved={() => load()} /> : null}
+          {released ? (
+            <section className="cf-card" role="status" style={{ padding: "28px 24px", display: "flex", flexDirection: "column", gap: 14, alignItems: "flex-start" }}>
+              <span className="cf-lbl">Released</span>
+              <h2 className="cf-h2">Back in the pool</h2>
+              <p className="cf-sub">{bid.title || bid.bid_id} is no longer an active bid on your list.</p>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <Link className="cf-btn cf-btn-primary" href="/opportunities">Find another opportunity</Link>
+                <Link className="cf-btn cf-btn-secondary" href="/my-bids">My bids</Link>
+              </div>
+            </section>
+          ) : null}
+          {waiting ? (
+            <section className="cf-card" aria-labelledby="ap-h" style={{ padding: 24, display: "flex", flexDirection: "column", gap: 18, borderColor: "rgba(251,191,36,.4)" }}>
+              <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
+                <h2 id="ap-h" className="cf-h2">Waiting for approval</h2>
+                <span className="cf-lbl" style={{ color: "#B45309" }}>Step 3 of 5</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", borderRadius: 12, background: "var(--cf-surface-2)", border: "1px solid var(--cf-line)" }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 500 }}>{bid.approved_by_name ? `${bid.approved_by_name} will review this` : "A manager will review this"}</div>
+                  <div className="cf-meta">You&apos;ll get an alert when it&apos;s approved or sent back.</div>
+                </div>
+              </div>
+              {user?.role === "admin" ? <Link className="cf-link" href="/approvals">See the manager&apos;s view →</Link> : null}
+            </section>
+          ) : null}
+          {approved ? (
+            <section className="cf-card" aria-labelledby="sb-h" style={{ padding: 24, display: "flex", flexDirection: "column", gap: 18, borderColor: "rgba(52,211,153,.4)" }}>
+              <div className="cf-banner cf-banner-ok" style={{ padding: "12px 14px" }}>
+                <span><strong style={{ fontWeight: 500, color: "#047857" }}>Approved{bid.approved_by_name ? ` by ${bid.approved_by_name}` : ""}</strong> — submit it on the portal, then record the price here.</span>
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
+                <h2 id="sb-h" className="cf-h2">Record your portal submission</h2>
+                <span className="cf-lbl" style={{ color: "#047857" }}>Step 4 of 5</span>
+              </div>
+              {priceDiffers ? <div className="cf-banner cf-banner-warn" role="status">Differs from the approved {formatMoney(approvedPrice)}. The recorded price is the one you save below.</div> : null}
+            </section>
+          ) : null}
+          {quoteStep ? (
+            <section className="cf-card" aria-labelledby="q-h" style={{ padding: 24, display: "flex", flexDirection: "column", gap: 20 }}>
+              <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
+                <h2 id="q-h" className="cf-h2">Supplier quote</h2>
+                <span className="cf-lbl">Step 2 of 5</span>
+              </div>
+              <p className="cf-sub">Supplier, freight and lead time stay on the vendor and notes sections below. This card keeps the status and price fields the bid already stores.</p>
+            </section>
+          ) : null}
+
+          <section className="cf-card" style={{ padding: 24, display: "flex", flexDirection: "column", gap: 16 }}>
+            <h2 className="cf-h3">Current status</h2>
+            <span className={`cf-pill ${pillClass}`} style={{ alignSelf: "flex-start" }}>{bid.internal_status}</span>
+            {agentCanEdit ? (
+              <div className="cf-grid2">
+                <label className="cf-field">New status
+                  <select aria-label="New status" className="cf-select" value={status} onChange={(e) => setStatus(e.target.value as BidStatus)}>
+                    {Object.keys(BID_STATUSES).map((label) => <option key={label}>{label}</option>)}
+                  </select>
+                </label>
+                {status === "Bid submitted" ? (
+                  <>
+                    <label className="cf-field">Supplier cost
+                      <Input aria-label="Supplier cost" type="number" min="0" step="0.01" value={supplierCost} onChange={(e) => setSupplierCost(e.target.value)} />
+                    </label>
+                    <label className="cf-field">Submitted price
+                      <Input aria-label="Submitted price" type="number" min="0" step="0.01" value={submittedPrice} onChange={(e) => setSubmittedPrice(e.target.value)} />
+                    </label>
+                  </>
+                ) : null}
+                <div style={{ display: "flex", alignItems: "flex-end" }}>
+                  <button type="button" className="cf-btn cf-btn-primary" onClick={saveStatus}>Update status</button>
+                </div>
+              </div>
+            ) : null}
+          </section>
         </div>
-      )}
 
-      <div className="grid gap-4 md:grid-cols-4">
-        {[
-          ["Portal", bid.portal || "—"],
-          ["Agent", bid.agent_name || "—"],
-          ["Due", formatDate(bid.due_date)],
-          ["Size", bid.size_bucket || "—"],
-        ].map(([label, value]) => (
-          <Card key={label}>
-            <CardHeader className="pb-2"><CardTitle className="text-sm">{label}</CardTitle></CardHeader>
-            <CardContent className="font-semibold">{value}</CardContent>
-          </Card>
-        ))}
-      </div>
-      {bid.bid_url && (
-        <p className="text-sm">
-          <a className="text-blue-600 underline" href={bid.bid_url} target="_blank" rel="noreferrer">Source listing</a>
-        </p>
-      )}
-
-      <Card>
-        <CardHeader><CardTitle>Current status</CardTitle></CardHeader>
-        <CardContent className="space-y-4">
-          <span className="inline-flex rounded-full px-3 py-1 text-sm font-semibold" style={statusStyle(bid.internal_status)}>{bid.internal_status}</span>
-          {agentCanEdit && (
-            <div className="flex flex-wrap items-end gap-3">
-              <label className="grid gap-1 text-sm">
-                New status
-                <select aria-label="New status" className="h-10 rounded-md border px-3" value={status} onChange={(e) => setStatus(e.target.value as BidStatus)}>
-                  {Object.keys(BID_STATUSES).map((label) => <option key={label}>{label}</option>)}
-                </select>
-              </label>
-              {status === "Bid submitted" && (
-                <>
-                  <label className="grid gap-1 text-sm">
-                    Supplier cost
-                    <Input aria-label="Supplier cost" type="number" min="0" step="0.01" value={supplierCost} onChange={(e) => setSupplierCost(e.target.value)} />
-                  </label>
-                  <label className="grid gap-1 text-sm">
-                    Submitted price
-                    <Input aria-label="Submitted price" type="number" min="0" step="0.01" value={submittedPrice} onChange={(e) => setSubmittedPrice(e.target.value)} />
-                  </label>
-                </>
-              )}
-              <Button onClick={saveStatus}>Update status</Button>
+        <aside style={{ flex: "1 1 340px", minWidth: 0, display: "flex", flexDirection: "column", gap: 20 }}>
+          {submitted ? null : (
+          <section className="cf-card" aria-labelledby="pr-h" style={{ padding: 22, display: "flex", flexDirection: "column", gap: 16, borderColor: "rgba(34,211,238,.4)", boxShadow: "0 14px 40px -24px rgba(34,211,238,.6)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+              <h2 id="pr-h" className="cf-lbl" style={{ margin: 0, color: "#0E7490" }}>Your bid price</h2>
+              <span className="cf-mono cf-meta">{(bid.size_bucket || "—").toUpperCase()}</span>
             </div>
+            <div className="cf-mono" style={{ fontWeight: 500, fontSize: 40, lineHeight: 1, letterSpacing: "-0.03em" }}>{formatMoney(priceShown)}</div>
+            <div className="cf-sum">
+              <span>Supplier cost</span><span>{formatMoney(bid.supplier_cost)}</span>
+              <span>Markup</span><span>{bid.markup_percent == null ? "—" : `${bid.markup_percent.toFixed(1)}%`}</span>
+              <span>Gross profit</span><span style={{ color: bid.negative_profit_warning ? "#BE123C" : "#047857" }}>{formatMoney(bid.gross_profit)}</span>
+            </div>
+            {bid.negative_profit_warning ? <div className="cf-err" role="alert">Submitted price is below supplier cost.</div> : null}
+            <div style={{ borderTop: "1px solid var(--cf-line)", paddingTop: 14, fontSize: 13, color: "var(--cf-text-2)" }}>Approver · <strong style={{ color: "var(--cf-text)", fontWeight: 500 }}>{bid.approved_by_name || "—"}</strong></div>
+          </section>
           )}
-        </CardContent>
-      </Card>
-
-      <div className="grid gap-4 md:grid-cols-5">
-        {[
-          ["Expected submitted", bid.expected_submitted_price],
-          ["Supplier cost", bid.supplier_cost],
-          ["Submitted price", bid.submitted_price],
-          ["Gross profit", bid.gross_profit],
-          ["Markup", bid.markup_percent == null ? null : `${bid.markup_percent.toFixed(2)}%`],
-        ].map(([label, value]) => (
-          <Card key={String(label)} className={label === "Gross profit" && bid.negative_profit_warning ? "border-red-500 bg-red-50" : ""}>
-            <CardHeader className="pb-2"><CardTitle className="text-sm">{label}</CardTitle></CardHeader>
-            <CardContent className="font-semibold">{typeof value === "string" ? value : formatMoney(value as number | null)}</CardContent>
-          </Card>
-        ))}
+          <section className="cf-card" aria-labelledby="info-h" style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 14 }}>
+            <h2 id="info-h" className="cf-h2">Solicitation</h2>
+            {submitted ? (
+              <dl className="cf-dl">
+                <dt>NAICS</dt><dd>{bid.naics_code || "—"}</dd>
+                <dt>Assigned</dt><dd className="cf-mono">{bid.assign_date || "—"}</dd>
+                <dt>Response due</dt><dd className="cf-mono">{bid.due_date || "—"}</dd>
+                <dt>Submitted</dt><dd className="cf-mono">{bid.submitted_at || "—"}</dd>
+                <dt>Manufacturer</dt><dd style={{ color: bid.manufacturer ? undefined : "var(--cf-text-3)", fontWeight: bid.manufacturer ? 500 : 400 }}>{bid.manufacturer || "Not recorded"}</dd>
+              </dl>
+            ) : (
+            <div className="cf-sum" style={{ fontSize: 13 }}>
+              <span>Response due</span><span style={{ color: daysLeft != null && daysLeft <= 11 ? "#BE123C" : undefined }}>{dueText}</span>
+              <span>Quantity</span><span>—</span>
+              <span>Delivery</span><span>{bid.delivery_address || "—"}</span>
+              <span>Set-aside</span><span>—</span>
+            </div>
+            )}
+          </section>
+          <section className="cf-card" style={{ padding: "20px 22px", display: "flex", flexDirection: "column", gap: 12 }}>
+            <h2 className="cf-h3">Activity</h2>
+            {(bid.status_history || []).length === 0 ? <p className="cf-meta">No status changes are recorded yet.</p> : (
+              <ol aria-label="Status change events" style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 12 }}>
+                {(bid.status_history || []).map((event) => (
+                  <li key={event.id}>
+                    <div style={{ fontWeight: 500 }}>{event.old_status} → {event.new_status}</div>
+                    <div className="cf-mono cf-meta">{event.changed_by_name || "—"} · {event.changed_at_eastern}</div>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </section>
+          <section className="cf-card" aria-labelledby="own-h" style={{ padding: "20px 24px", display: submitted ? "flex" : "none", flexDirection: "column", gap: 12 }}>
+            <h2 id="own-h" className="cf-h2">Ownership</h2>
+            <div style={{ fontWeight: 500 }}>{bid.agent_name || "—"}</div>
+            <div className="cf-meta">{(bid.ownership_history || [])[0]?.action || "Assigned"}{bid.assign_date ? ` · ${bid.assign_date}` : ""}</div>
+          </section>
+        </aside>
       </div>
 
-      <Card id="vendors" className="scroll-mt-6">
+      <Card id="vendors" className="cf-card scroll-mt-6 border-0 shadow-none">
         <CardHeader>
           <CardTitle>Vendors</CardTitle>
           <CardDescription className="text-slate-600">Add a vendor, keep a note for this bid, and mark an email preferred for the next RFQ.</CardDescription>
@@ -403,10 +526,10 @@ export default function BidDetailPage() {
                   <Input aria-label="Vendor note" value={vendorNote} onChange={(event) => setVendorNote(event.target.value)} />
                 </label>
                 <div className="flex flex-wrap gap-2 md:col-span-4">
-                  <Button type="submit" disabled={savingVendor}>{savingVendor ? "Adding…" : "Add vendor"}</Button>
-                  <Button type="button" variant="outline" disabled={suggesting} onClick={suggestVendors}>
+                  <button type="submit" className="cf-btn cf-btn-primary" disabled={savingVendor}>{savingVendor ? "Adding…" : "Add vendor"}</button>
+                  <button type="button" className="cf-btn cf-btn-secondary" disabled={suggesting} onClick={suggestVendors}>
                     {suggesting ? "Asking AI…" : "Suggest vendors with AI"}
-                  </Button>
+                  </button>
                 </div>
               </form>
               {suggestions && (
@@ -418,10 +541,10 @@ export default function BidDetailPage() {
                       {suggestions.map((item) => (
                         <li key={item.email} className="flex flex-wrap items-center justify-between gap-2 text-sm">
                           <span><strong>{item.company_name}</strong> · {item.email}</span>
-                          <Button type="button" size="sm" variant="outline" disabled={savingVendor}
+                          <button type="button" className="cf-btn cf-btn-secondary" disabled={savingVendor}
                             onClick={() => addVendor({ company_name: item.company_name, email: item.email, source: "ai_suggested" })}>
                             Add {item.company_name}
-                          </Button>
+                          </button>
                         </li>
                       ))}
                     </ul>
@@ -433,10 +556,10 @@ export default function BidDetailPage() {
                   <p className="mb-2 text-sm font-medium">Preferred vendors</p>
                   <div className="flex flex-wrap gap-2">
                     {reusable.map((vendor) => (
-                      <Button key={vendor.email} type="button" variant="outline" size="sm" disabled={savingVendor}
+                      <button key={vendor.email} type="button" className="cf-btn cf-btn-secondary" disabled={savingVendor}
                         onClick={() => addVendor({ company_name: vendor.company_name, email: vendor.email, source: "manual" })}>
                         Add {vendor.company_name}
-                      </Button>
+                      </button>
                     ))}
                   </div>
                 </div>
@@ -475,10 +598,10 @@ export default function BidDetailPage() {
                           ))}
                           <div className="mt-2 flex flex-wrap gap-2">
                             {canEdit && negotiationOpen && vendor.outreach_state !== "suggested" && (
-                              <Button type="button" variant="outline" size="sm" onClick={() => stopVendor(vendor)}>Stop negotiation</Button>
+                              <button type="button" className="cf-btn cf-btn-secondary" onClick={() => stopVendor(vendor)}>Stop negotiation</button>
                             )}
                             {canEdit && vendor.email && (
-                              <Button type="button" variant="outline" size="sm" aria-label={`Email ${vendor.company_name || vendor.email}`} onClick={() => emailVendor(vendor)}>Email</Button>
+                              <button type="button" className="cf-btn cf-btn-secondary" aria-label={`Email ${vendor.company_name || vendor.email}`} onClick={() => emailVendor(vendor)}>Email</button>
                             )}
                           </div>
                         </td>
@@ -496,7 +619,7 @@ export default function BidDetailPage() {
                               value={noteDrafts[vendor.id] ?? vendor.notes ?? ""}
                               onChange={(event) => setNoteDrafts((current) => ({ ...current, [vendor.id]: event.target.value }))} />
                             {canEdit && (
-                              <Button type="button" variant="outline" size="sm" onClick={() => updateVendor(vendor, { notes: noteDrafts[vendor.id] ?? "" })}>Save</Button>
+                              <button type="button" className="cf-btn cf-btn-secondary" onClick={() => updateVendor(vendor, { notes: noteDrafts[vendor.id] ?? "" })}>Save</button>
                             )}
                           </div>
                         </td>
@@ -598,7 +721,7 @@ export default function BidDetailPage() {
         </Card>
       </div>
 
-      <Card id="bid-emails" className="scroll-mt-6">
+      <Card id="bid-emails" className="cf-card scroll-mt-6 border-0 shadow-none">
         <CardHeader>
           <CardTitle>Emails</CardTitle>
           <CardDescription className="text-slate-600">Gmail conversations from connected mailboxes. Send from your own Gmail and review vendor replies here.</CardDescription>
@@ -606,7 +729,7 @@ export default function BidDetailPage() {
         <CardContent><BidEmailsPanel bidId={bid.id} composeRequest={composeRequest} readOnly={!canEdit} /></CardContent>
       </Card>
 
-      <Card id="notes" className="scroll-mt-6">
+      <Card id="notes" className="cf-card scroll-mt-6 border-0 shadow-none">
         <CardHeader>
           <CardTitle>Remarks and research notes</CardTitle>
           <CardDescription className="text-slate-600">Saved on this bid and shown again the next time you open it.</CardDescription>
@@ -622,19 +745,12 @@ export default function BidDetailPage() {
           </label>
           {canEdit && (
             <div className="flex flex-wrap items-center gap-3">
-              <Button onClick={saveNotes} disabled={savingNotes}>{savingNotes ? "Saving…" : "Save notes"}</Button>
+              <button type="button" className="cf-btn cf-btn-primary" onClick={saveNotes} disabled={savingNotes}>{savingNotes ? "Saving…" : "Save notes"}</button>
               {notesUnsaved && <span className="text-sm text-amber-800">Unsaved changes</span>}
             </div>
           )}
         </CardContent>
       </Card>
-
-      {bid.internal_status === "Bid submitted" && (
-        <Card>
-          <CardHeader><CardTitle>Award tracking</CardTitle></CardHeader>
-          <CardContent><AwardPanel bidId={bid.id} onSaved={() => load()} /></CardContent>
-        </Card>
-      )}
 
       <div id="history" className="grid scroll-mt-6 gap-6 lg:grid-cols-2">
         <Card>

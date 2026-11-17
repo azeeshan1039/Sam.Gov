@@ -32,10 +32,36 @@ function SheetLink({ href }: { href: string | null | undefined }) {
 const sheetHead = "whitespace-nowrap";
 const sheetCell = "whitespace-nowrap";
 
-type Variant = "full" | "hundred-k" | "person" | "my-bids" | "history";
+type Variant = "full" | "hundred-k" | "person" | "my-bids" | "history" | "ledger";
 
-function bidPrice(row: PipelineItem) {
-  return row.submitted_price ?? row.expected_submitted_price;
+function statusLabel(status: string) {
+  if (status === "Finding Supplier") return "Finding supplier";
+  if (status === "Waiting Approval") return "Waiting approval";
+  if (status === "Approved for Submission") return "Approved for submission";
+  if (status === "Bid No Approved") return "Bid not approved";
+  return status || "—";
+}
+
+function statusPill(status: string) {
+  if (status === "Waiting Approval" || status === "Approved for Submission") return "cf-pill-app";
+  if (status === "Bid submitted") return "cf-pill-sub";
+  if (status === "Bid No Approved" || status === "Bid got removed" || status === "Couldnt get quote") return "cf-pill-lost";
+  return "cf-pill-sup";
+}
+
+function outcomePill(outcome: string | null | undefined) {
+  if (outcome === "won") return "cf-pill-won";
+  if (outcome === "lost") return "cf-pill-lost";
+  if (outcome === "pending") return "cf-pill-app";
+  if (outcome === "unknown") return "cf-pill-pool";
+  return "";
+}
+
+function shortDate(value: string | null | undefined) {
+  if (!value) return "—";
+  const date = new Date(value.includes("T") ? value : `${value}T12:00:00Z`);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "America/New_York" }).format(date);
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -198,38 +224,93 @@ export function PipelineTable({
 
   if (variant === "history") {
     return (
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Solicitation #</TableHead>
-            <TableHead>Title</TableHead>
-            <TableHead>Portal</TableHead>
-            <TableHead>Agent</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Price</TableHead>
-            <TableHead>Assign date</TableHead>
-            <TableHead>Due date</TableHead>
-            <TableHead>Outcome</TableHead>
-            <TableHead>History</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {items.map((row) => (
-            <TableRow key={row.id}>
-              <TableCell className="whitespace-nowrap font-medium">{dash(row.solicitation_number)}</TableCell>
-              <TableCell className="min-w-[12rem]">{dash(row.title)}</TableCell>
-              <TableCell className="whitespace-nowrap">{dash(row.portal)}</TableCell>
-              <TableCell className="whitespace-nowrap">{dash(row.agent_name)}</TableCell>
-              <TableCell className="whitespace-nowrap"><StatusBadge status={row.internal_status} /></TableCell>
-              <TableCell className="whitespace-nowrap">{formatMoney(bidPrice(row))}</TableCell>
-              <TableCell className="whitespace-nowrap">{formatDate(row.assign_date)}</TableCell>
-              <TableCell className="whitespace-nowrap">{formatDate(row.due_date)}</TableCell>
-              <TableCell className="whitespace-nowrap">{formatOutcome(row.outcome)}</TableCell>
-              <TableCell className="whitespace-nowrap"><Link className="text-blue-600 underline" href={`/bids/${row.id}`}>View bid history</Link></TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+      <div style={{ overflowX: "auto" }}>
+        <table className="cf-table">
+          <thead>
+            <tr>
+              <th>Status</th>
+              <th>Solicitation</th>
+              <th>Portal</th>
+              <th>Assigned</th>
+              <th>Due</th>
+              <th className="cf-num">Price</th>
+              <th className="cf-num">Gross profit</th>
+              <th>Outcome</th>
+              <th><span className="sr-only">History</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((row) => {
+              const outcome = row.award_outcome || row.outcome;
+              const price = row.submitted_price ?? row.expected_submitted_price;
+              const dueUrgent = row.days_remaining != null && row.days_remaining <= 11;
+              return (
+                <tr key={row.id}>
+                  <td><span className={`cf-pill ${statusPill(row.internal_status)}`}>{statusLabel(row.internal_status)}</span></td>
+                  <td>
+                    <Link className="cf-id" href={`/bids/${row.id}`}>{row.solicitation_number || row.bid_id}</Link>
+                    <div className="cf-meta">{row.title || "—"}</div>
+                  </td>
+                  <td>{row.portal || "—"}</td>
+                  <td>{shortDate(row.assign_date)}</td>
+                  <td style={{ color: dueUrgent ? "#BE123C" : undefined, fontWeight: dueUrgent ? 500 : undefined }}>{shortDate(row.due_date)}</td>
+                  <td className="cf-num" style={{ color: price == null ? "var(--cf-text-3)" : undefined }}>{formatMoney(price)}</td>
+                  <td className="cf-num" style={{ color: row.gross_profit == null ? "var(--cf-text-3)" : row.gross_profit < 0 ? "#BE123C" : "#047857" }}>{formatMoney(row.gross_profit)}</td>
+                  <td>{outcome && outcome !== "unknown" ? <span className={`cf-pill ${outcomePill(outcome)}`}>{formatOutcome(outcome)}</span> : <span style={{ color: "var(--cf-text-3)" }}>{formatOutcome(outcome)}</span>}</td>
+                  <td><Link className="cf-link" href={`/bids/${row.id}`}>View bid history</Link></td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
+  if (variant === "ledger") {
+    return (
+      <div style={{ overflowX: "auto" }}>
+        <table className="cf-table">
+          <thead>
+            <tr>
+              <th>Solicitation</th>
+              <th>Portal</th>
+              <th>Agent</th>
+              <th>Status</th>
+              <th className="cf-num">Cost</th>
+              <th className="cf-num">Price</th>
+              <th className="cf-num">Gross profit</th>
+              <th>Assigned</th>
+              <th>Due</th>
+              <th>Outcome</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((row) => {
+              const outcome = row.award_outcome || row.outcome;
+              const price = row.submitted_price ?? row.expected_submitted_price;
+              const dueUrgent = row.days_remaining != null && row.days_remaining <= 11;
+              return (
+                <tr key={row.id}>
+                  <td>
+                    <Link className="cf-id" href={`/bids/${row.id}`}>{row.solicitation_number || row.bid_id}</Link>
+                    <div className="cf-meta">{row.title || "—"}</div>
+                  </td>
+                  <td>{row.portal || "—"}</td>
+                  <td>{row.agent_name || "—"}</td>
+                  <td><span className={`cf-pill ${statusPill(row.internal_status)}`}>{statusLabel(row.internal_status)}</span></td>
+                  <td className="cf-num" style={{ color: row.supplier_cost == null ? "var(--cf-text-3)" : undefined }}>{formatMoney(row.supplier_cost)}</td>
+                  <td className="cf-num" style={{ color: price == null ? "var(--cf-text-3)" : undefined }}>{formatMoney(price)}</td>
+                  <td className="cf-num" style={{ color: row.gross_profit == null ? "var(--cf-text-3)" : row.gross_profit < 0 ? "#BE123C" : "#047857" }}>{formatMoney(row.gross_profit)}</td>
+                  <td className="cf-mono" style={{ fontSize: 12, letterSpacing: "0.04em", textTransform: "uppercase" }}>{shortDate(row.assign_date)}</td>
+                  <td className="cf-mono" style={{ fontSize: 12, letterSpacing: "0.04em", textTransform: "uppercase", color: dueUrgent ? "#BE123C" : undefined, fontWeight: dueUrgent ? 500 : undefined }}>{shortDate(row.due_date)}</td>
+                  <td>{outcome && outcome !== "unknown" ? <span className={`cf-pill ${outcomePill(outcome)}`}>{formatOutcome(outcome)}</span> : <span style={{ color: "var(--cf-text-3)" }}>{formatOutcome(outcome)}</span>}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     );
   }
 

@@ -1,14 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getStoredUser, type AuthUser } from "@/lib/auth";
 import { PageBand, PageMain, ReportTabs } from "@/components/design/PageFrame";
 import { formatMoney, type PipelineItem } from "@/lib/pipeline";
 import { PipelineTable } from "@/components/pipeline/PipelineTable";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { easternReportingRange, type ReportingPreset } from "@/lib/eastern-date";
 import { BidSizeSection, type SizeReport } from "@/components/bid-size/BidSizeSection";
 
@@ -21,6 +19,24 @@ interface Metrics {
 }
 
 const ALL_AGENTS = "all";
+const PRESETS: { kind: ReportingPreset; label: string }[] = [
+  { kind: "today", label: "Today" },
+  { kind: "week", label: "This week" },
+  { kind: "month", label: "This month" },
+];
+
+function rangeStamp(from: string, to: string) {
+  const stamp = (iso: string) => {
+    const [year, month, day] = iso.split("-").map(Number);
+    if (!year || !month || !day) return "";
+    return new Date(Date.UTC(year, month - 1, day)).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+  };
+  const start = stamp(from);
+  const end = stamp(to);
+  if (!start || !end) return "Reports";
+  const sameYear = from.slice(0, 4) === to.slice(0, 4);
+  return `Reports · ${sameYear ? start.replace(/, \d{4}$/, "") : start} – ${end}`;
+}
 
 export default function AgentBidDataPage() {
   const router = useRouter();
@@ -39,8 +55,6 @@ export default function AgentBidDataPage() {
   const [dateTo, setDateTo] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // Only the latest request may update the page; a slower earlier response must not
-  // switch the agent selector back (e.g. picking "All agents" during the first load).
   const latestRequest = useRef(0);
 
   useEffect(() => {
@@ -85,30 +99,93 @@ export default function AgentBidDataPage() {
   };
   const changeInterval = (next: "week" | "month") => { setTrendInterval(next); load(agentId, dateFrom, dateTo, next); };
   const companyMode = agentId === ALL_AGENTS;
+  const pressed = PRESETS.find((item) => {
+    const range = easternReportingRange(item.kind);
+    return range.from === dateFrom && range.to === dateTo;
+  })?.kind;
+
+  const kpis: Array<[string, string, boolean]> = [
+    ["Submitted bids", metrics ? String(metrics.submitted_bid_count) : "—", true],
+    ["Submitted price", metrics ? formatMoney(metrics.total_submitted_price) : "—", false],
+    ["Gross profit", metrics ? formatMoney(metrics.total_gross_profit) : "—", false],
+    ["Biggest bid", metrics ? formatMoney(metrics.biggest_submitted_bid) : "—", false],
+  ];
 
   return (
     <>
-      <PageBand eyebrow="REPORTS" title="Bid data" lead="Complete bid history and submitted-price reporting." />
+      <PageBand
+        eyebrow={rangeStamp(dateFrom, dateTo)}
+        title="Bid data"
+        lead="Submitted prices and bid sizes"
+        actions={(
+          <form style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-end" }} onSubmit={(event) => { event.preventDefault(); load(); }}>
+            {user?.role === "admin" && (
+              <div className="cf-flt" style={{ flex: "1 1 200px" }}>
+                <label htmlFor="rep-agent">Agent</label>
+                <select id="rep-agent" className="cf-select" aria-label="Agent" value={agentId} onChange={(event) => { setAgentId(event.target.value); load(event.target.value); }}>
+                  <option value={ALL_AGENTS}>All agents (company)</option>
+                  {employees.map((employee) => <option key={employee.user_id} value={employee.user_id}>{employee.name}{employee.is_active ? "" : " (inactive)"}</option>)}
+                </select>
+              </div>
+            )}
+            <div className="cf-seg-wrap" role="group" aria-label="Quick range">
+              {PRESETS.map((item) => (
+                <button key={item.kind} className={`cf-seg${pressed === item.kind ? " cf-seg-on" : ""}`} type="button" aria-pressed={pressed === item.kind} onClick={() => preset(item.kind)}>{item.label}</button>
+              ))}
+            </div>
+            <div className="cf-flt">
+              <label htmlFor="rep-from">From</label>
+              <input id="rep-from" className="cf-date" type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
+            </div>
+            <div className="cf-flt">
+              <label htmlFor="rep-to">To</label>
+              <input id="rep-to" className="cf-date" type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
+            </div>
+            <button className="cf-btn cf-btn-primary" type="submit" style={{ minHeight: 36 }}>Apply</button>
+          </form>
+        )}
+      />
       <ReportTabs current="/agent-bid-data" />
       <PageMain>
-      <Card><CardContent className="flex flex-wrap items-end gap-3 pt-6">
-        {user?.role === "admin" && <label className="grid gap-1 text-sm">Agent<select className="h-10 rounded-md border px-3" value={agentId} onChange={(e) => { setAgentId(e.target.value); load(e.target.value); }}><option value={ALL_AGENTS}>All agents (company)</option>{employees.map((employee) => <option key={employee.user_id} value={employee.user_id}>{employee.name}{employee.is_active ? "" : " (inactive)"}</option>)}</select></label>}
-        <div className="flex gap-2"><Button variant="outline" onClick={() => preset("today")}>Today</Button><Button variant="outline" onClick={() => preset("week")}>This week</Button><Button variant="outline" onClick={() => preset("month")}>This month</Button></div>
-        <label className="grid gap-1 text-sm">From<Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} /></label>
-        <label className="grid gap-1 text-sm">To<Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} /></label>
-        <Button onClick={() => load()}>Apply custom range</Button>
-      </CardContent></Card>
-      {error && <div className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
-      <div className="grid gap-4 md:grid-cols-4">
-        {[["Submitted bids", metrics?.submitted_bid_count ?? 0], ["Submitted price", formatMoney(metrics?.total_submitted_price)], ["Gross profit", formatMoney(metrics?.total_gross_profit)], ["Biggest bid", formatMoney(metrics?.biggest_submitted_bid)]].map(([label, value]) => <Card key={String(label)}><CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">{label}</CardTitle></CardHeader><CardContent className="text-2xl font-bold">{loading ? "—" : value}</CardContent></Card>)}
-      </div>
+      {error && <div role="alert" className="cf-banner cf-banner-bad">{error}</div>}
+      <section aria-label="Totals" className="cf-grid-kpi">
+        {kpis.map(([label, value, hero]) => (
+          <div key={label} className={`cf-card cf-kpi${hero ? " cf-kpi-hero" : ""}`}>
+            <div className="cf-lbl" style={hero ? { color: "#0E7490" } : undefined}>{label}</div>
+            <div className="cf-kpi-v" style={hero ? { font: "500 34px/1 var(--cf-display)" } : { font: "500 26px/1.1 var(--cf-mono)" }}>{loading && !metrics ? "—" : value}</div>
+          </div>
+        ))}
+      </section>
       <BidSizeSection report={sizeReport} companyMode={companyMode} interval={trendInterval} onIntervalChange={changeInterval} />
       {companyMode ? (
-        <p className="text-sm text-muted-foreground">Choose an agent to see their individual active, released and completed bids.</p>
+        <p className="cf-sub">Choose an agent to see their individual active, released and completed bids.</p>
       ) : <>
-        <Card><CardHeader><CardTitle>Active bids</CardTitle></CardHeader><CardContent><PipelineTable items={active} variant="person" empty="No active bids." /></CardContent></Card>
-        <Card><CardHeader><CardTitle>Historical / released / reassigned</CardTitle></CardHeader><CardContent><PipelineTable items={historical} variant="person" empty="No released or reassigned bids." /></CardContent></Card>
-        <Card><CardHeader><CardTitle>Completed bids</CardTitle></CardHeader><CardContent><PipelineTable items={completed} variant="history" empty="No completed bids." /></CardContent></Card>
+        <section className="cf-card" style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 12 }}>
+          <h2 className="cf-h2">Active bids</h2>
+          <PipelineTable items={active} variant="person" empty="No active bids." />
+        </section>
+        <section className="cf-card" style={{ padding: "20px 24px", display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+          <div>
+            <h2 className="cf-h2">Historical / released / reassigned</h2>
+            {historical.length === 0 ? <p className="cf-sub">No bids were released or reassigned away from you in this period.</p> : null}
+          </div>
+          <Link className="cf-link" href="/my-bids">See active and completed bids in My bids</Link>
+          <div style={{ flex: "1 1 100%" }}><PipelineTable items={historical} variant="person" empty="No released or reassigned bids." /></div>
+        </section>
+        <section className="cf-card" aria-labelledby="done-h" style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
+          <div style={{ padding: "18px 24px 14px", display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
+            <div>
+              <h2 id="done-h" className="cf-h2">Completed bids</h2>
+              <p className="cf-sub">Submitted bids in this range, with the recorded price and outcome</p>
+            </div>
+            <span className="cf-mono cf-meta">{completed.length} BIDS</span>
+          </div>
+          {completed.length === 0 ? (
+            <p className="cf-meta" style={{ padding: "4px 24px 20px" }}>No completed bids.</p>
+          ) : (
+            <PipelineTable items={completed} variant="history" empty="No completed bids." />
+          )}
+        </section>
       </>}
       </PageMain>
     </>

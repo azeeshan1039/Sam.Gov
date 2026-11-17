@@ -3,7 +3,6 @@
 import dynamic from "next/dynamic";
 import Highcharts from "highcharts";
 import HighchartsAccessibility from "highcharts/modules/accessibility";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatMoney } from "@/lib/pipeline";
 
 // Gives each chart SVG an accessible name and a screen-reader data table.
@@ -20,10 +19,10 @@ export const BUCKET_NAMES = ["Small", "Medium", "Large", "Very Large"] as const;
 export type BucketName = (typeof BUCKET_NAMES)[number];
 // Sequential blues: bucket order reads small -> very large.
 const BUCKET_COLORS: Record<BucketName, string> = {
-  Small: "#93c5fd",
-  Medium: "#3b82f6",
-  Large: "#1d4ed8",
-  "Very Large": "#1e3a8a",
+  Small: "#A5F3FC",
+  Medium: "#06B6D4",
+  Large: "#0E7490",
+  "Very Large": "#164E63",
 };
 
 type BucketTotals = Record<string, { count: number; total: number }>;
@@ -144,107 +143,115 @@ export function BidSizeSection({
 }) {
   if (!report) {
     return (
-      <Card>
-        <CardHeader><CardTitle>Bid Value vs. Size</CardTitle></CardHeader>
-        <CardContent className="text-sm text-slate-600">No size data for this period.</CardContent>
-      </Card>
+      <section className="cf-card" style={{ padding: "22px 24px" }}>
+        <h2 className="cf-h2" style={{ fontSize: 20 }}>Bid value vs. size</h2>
+        <p className="cf-sub">No size data for this period.</p>
+      </section>
     );
   }
+  const emptyBucket = (count: number) => count === 0;
   return (
-    <Card aria-labelledby="bid-size-heading">
-      <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3 space-y-0">
+    <section className="cf-card" aria-labelledby="bid-size-heading" style={{ padding: "22px 24px 24px", display: "flex", flexDirection: "column", gap: 20 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
         <div>
-          <CardTitle id="bid-size-heading">Bid Value vs. Size</CardTitle>
-          <CardDescription className="text-slate-600">
-            {companyMode ? "Company-wide" : "This agent's"} submitted bids by size bucket · {report.count} bids · {formatMoney(report.total)}
-          </CardDescription>
+          <h2 id="bid-size-heading" className="cf-h2" style={{ fontSize: 20 }}>Bid value vs. size</h2>
+          <p className="cf-sub">
+            {companyMode ? "Company-wide" : "Your"} submitted bids by size bucket · {report.count} bids · {formatMoney(report.total)}
+          </p>
         </div>
-        <div className="flex gap-1" role="group" aria-label="Trend interval">
+        <div className="cf-seg-wrap" role="group" aria-label="Time grouping">
           {(["week", "month"] as const).map((value) => (
             <button key={value} type="button" onClick={() => onIntervalChange(value)}
               aria-pressed={interval === value}
-              className={`rounded-md border px-3 py-1 text-sm ${interval === value ? "bg-primary text-primary-foreground" : "bg-background"}`}>
+              className={`cf-seg${interval === value ? " cf-seg-on" : ""}`}>
               {value === "week" ? "Weekly" : "Monthly"}
             </button>
           ))}
         </div>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {report.buckets.map((bucket) => (
-            <div key={bucket.name} className="rounded-lg border p-3" data-testid={`bucket-${bucket.name}`}>
-              <div className="flex items-center gap-2">
-                <span className="h-3 w-3 rounded-sm" style={{ backgroundColor: BUCKET_COLORS[bucket.name] }} aria-hidden />
-                <p className="font-semibold">{bucket.name}</p>
-                <span className="text-xs text-slate-600">{rangeLabel(bucket.min, bucket.max)}</span>
-              </div>
-              <p className="mt-2 text-2xl font-bold tabular-nums">{bucket.count}</p>
-              <p className="text-sm tabular-nums">{formatMoney(bucket.total)}</p>
-              <p className="mt-1 text-xs text-slate-600">{bucket.count_share}% of bids · {bucket.value_share}% of $</p>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(220px, 100%), 1fr))", gap: 12 }}>
+        {report.buckets.map((bucket) => (
+          <div key={bucket.name} className="cf-bucket" data-testid={`bucket-${bucket.name}`}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span className="cf-sw" style={{ background: BUCKET_COLORS[bucket.name] }} aria-hidden />
+              <span style={{ fontWeight: 500 }}>{bucket.name}</span>
+              <span className="cf-meta cf-mono">{rangeLabel(bucket.min, bucket.max)}</span>
             </div>
-          ))}
-        </div>
+            <div className="cf-bucket-v" style={emptyBucket(bucket.count) ? { color: "var(--cf-text-3)" } : undefined}>{bucket.count}</div>
+            <div className="cf-mono" style={{ fontSize: 13, color: emptyBucket(bucket.count) ? "var(--cf-text-3)" : undefined }}>{formatMoney(bucket.total)}</div>
+            <div className="cf-meta">{bucket.count_share}% of bids · {bucket.value_share}% of $</div>
+          </div>
+        ))}
+      </div>
 
-        {report.count > 0 ? (
-          <>
-            <div className="grid gap-6 lg:grid-cols-2">
-              <figure>
-                <figcaption className="mb-2 text-sm font-medium">Bid count by size</figcaption>
-                <HighchartsReact highcharts={Highcharts} options={bucketChartOptions(report, "count")} />
-              </figure>
-              <figure>
-                <figcaption className="mb-2 text-sm font-medium">Submitted $ by size</figcaption>
-                <HighchartsReact highcharts={Highcharts} options={bucketChartOptions(report, "total")} />
-              </figure>
-            </div>
-            <figure>
-              <figcaption className="mb-2 text-sm font-medium">Bids by size over time ({interval === "week" ? "weekly" : "monthly"})</figcaption>
-              <HighchartsReact highcharts={Highcharts} options={trendChartOptions(report)} />
+      {report.count > 0 ? (
+        <>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 24 }}>
+            <figure style={{ flex: "1 1 420px", minWidth: 0, margin: 0, display: "flex", flexDirection: "column", gap: 8 }}>
+              <figcaption className="cf-lbl">Bid count by size</figcaption>
+              <HighchartsReact highcharts={Highcharts} options={bucketChartOptions(report, "count")} />
             </figure>
-            {companyMode && report.by_agent.length > 0 && (
-              <figure>
-                <figcaption className="mb-2 text-sm font-medium">Bids by size per agent</figcaption>
-                <HighchartsReact highcharts={Highcharts} options={agentChartOptions(report)} />
-              </figure>
-            )}
-          </>
-        ) : (
-          <p className="text-sm text-slate-600">No submitted bids in this period.</p>
-        )}
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm" aria-label="Bid size breakdown">
-            <thead>
-              <tr className="border-b text-left">
-                <th className="py-2 pr-3 font-medium">{companyMode ? "Agent" : "Bucket"}</th>
-                {companyMode
-                  ? BUCKET_NAMES.map((name) => <th key={name} className="py-2 pr-3 font-medium">{name}</th>)
-                  : <><th className="py-2 pr-3 font-medium">Bids</th><th className="py-2 pr-3 font-medium">Submitted $</th></>}
-                {companyMode && <th className="py-2 pr-3 font-medium">Total</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {companyMode
-                ? report.by_agent.map((agent) => (
-                  <tr key={agent.user_id ?? "other"} className="border-b last:border-0">
-                    <td className="py-2 pr-3">{agent.name}{!agent.is_active && <span className="ml-1 text-xs text-slate-600">(inactive)</span>}</td>
-                    {BUCKET_NAMES.map((name) => (
-                      <td key={name} className="py-2 pr-3 tabular-nums">{agent.buckets[name]?.count ?? 0} · {formatMoney(agent.buckets[name]?.total ?? 0)}</td>
-                    ))}
-                    <td className="py-2 pr-3 tabular-nums">{agent.count} · {formatMoney(agent.total)}</td>
-                  </tr>
-                ))
-                : report.buckets.map((bucket) => (
-                  <tr key={bucket.name} className="border-b last:border-0">
-                    <td className="py-2 pr-3">{bucket.name}</td>
-                    <td className="py-2 pr-3 tabular-nums">{bucket.count}</td>
-                    <td className="py-2 pr-3 tabular-nums">{formatMoney(bucket.total)}</td>
-                  </tr>
+            <figure style={{ flex: "1 1 420px", minWidth: 0, margin: 0, display: "flex", flexDirection: "column", gap: 8 }}>
+              <figcaption className="cf-lbl">Submitted $ by size</figcaption>
+              <HighchartsReact highcharts={Highcharts} options={bucketChartOptions(report, "total")} />
+            </figure>
+          </div>
+          <figure style={{ margin: 0, display: "flex", flexDirection: "column", gap: 10, borderTop: "1px solid var(--cf-line)", paddingTop: 20 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 12 }}>
+              <figcaption className="cf-lbl">Bids by size, {interval === "week" ? "week by week" : "month by month"}</figcaption>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 16, fontSize: 13, color: "var(--cf-text-2)" }}>
+                {BUCKET_NAMES.map((name) => (
+                  <span key={name} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    <span className="cf-sw" style={{ background: BUCKET_COLORS[name] }} />{name}
+                  </span>
                 ))}
-            </tbody>
-          </table>
-        </div>
-      </CardContent>
-    </Card>
+              </div>
+            </div>
+            <HighchartsReact highcharts={Highcharts} options={{ ...trendChartOptions(report), legend: { enabled: false } }} />
+          </figure>
+          {companyMode && report.by_agent.length > 0 && (
+            <figure style={{ margin: 0 }}>
+              <figcaption className="cf-lbl" style={{ marginBottom: 8 }}>Bids by size per agent</figcaption>
+              <HighchartsReact highcharts={Highcharts} options={agentChartOptions(report)} />
+            </figure>
+          )}
+        </>
+      ) : (
+        <p className="cf-sub">No submitted bids in this period.</p>
+      )}
+
+      <div style={{ overflowX: "auto" }}>
+        <table className="cf-table" aria-label="Bid size breakdown">
+          <thead>
+            <tr>
+              <th>{companyMode ? "Agent" : "Bucket"}</th>
+              {companyMode
+                ? BUCKET_NAMES.map((name) => <th key={name}>{name}</th>)
+                : <><th className="cf-num">Bids</th><th className="cf-num">Submitted $</th></>}
+              {companyMode && <th>Total</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {companyMode
+              ? report.by_agent.map((agent) => (
+                <tr key={agent.user_id ?? "other"}>
+                  <td>{agent.name}{!agent.is_active && <span className="cf-meta"> (inactive)</span>}</td>
+                  {BUCKET_NAMES.map((name) => (
+                    <td key={name} className="cf-num">{agent.buckets[name]?.count ?? 0} · {formatMoney(agent.buckets[name]?.total ?? 0)}</td>
+                  ))}
+                  <td className="cf-num">{agent.count} · {formatMoney(agent.total)}</td>
+                </tr>
+              ))
+              : report.buckets.map((bucket) => (
+                <tr key={bucket.name}>
+                  <td>{bucket.name}</td>
+                  <td className="cf-num">{bucket.count}</td>
+                  <td className="cf-num">{formatMoney(bucket.total)}</td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }

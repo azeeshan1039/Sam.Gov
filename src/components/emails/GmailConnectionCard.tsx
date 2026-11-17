@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { CheckCircle2, Loader2, MailWarning, RefreshCw, Unplug } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { formatDateTime, requestJson, type GmailAccount, type SyncSummary } from "@/lib/emails";
@@ -98,18 +97,18 @@ export function GmailConnectionCard({ callbackResult, callbackMessage }: { callb
             <div className="flex flex-wrap gap-2">
               {status === "connected" ? (
                 <>
-                  <Button onClick={sync} disabled={busy !== null}>
-                    <RefreshCw className={`mr-2 h-4 w-4 ${busy === "sync" ? "animate-spin" : ""}`} aria-hidden />Sync now
-                  </Button>
-                  <Button variant="outline" onClick={() => setConfirmDisconnect(true)} disabled={busy !== null}>
-                    <Unplug className="mr-2 h-4 w-4" aria-hidden />Disconnect
-                  </Button>
+                  <button type="button" className="cf-btn cf-btn-primary" onClick={sync} disabled={busy !== null}>
+                    <RefreshCw className={busy === "sync" ? "animate-spin" : ""} size={16} aria-hidden />Sync now
+                  </button>
+                  <button type="button" className="cf-btn cf-btn-secondary" onClick={() => setConfirmDisconnect(true)} disabled={busy !== null}>
+                    <Unplug size={16} aria-hidden />Disconnect
+                  </button>
                 </>
               ) : (
-                <Button onClick={connect} disabled={busy !== null || account.configured === false}>
-                  {busy === "connect" && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />}
+                <button type="button" className="cf-btn cf-btn-primary" onClick={connect} disabled={busy !== null || account.configured === false}>
+                  {busy === "connect" && <Loader2 className="animate-spin" size={16} aria-hidden />}
                   {status === "expired" ? "Reconnect Gmail" : "Connect Gmail"}
-                </Button>
+                </button>
               )}
             </div>
           </>
@@ -125,8 +124,8 @@ export function GmailConnectionCard({ callbackResult, callbackMessage }: { callb
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setConfirmDisconnect(false)}>Cancel</Button>
-            <Button variant="destructive" onClick={disconnect}>Disconnect</Button>
+            <button type="button" className="cf-btn cf-btn-secondary" onClick={() => setConfirmDisconnect(false)}>Cancel</button>
+            <button type="button" className="cf-btn cf-btn-primary" onClick={disconnect}>Disconnect</button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

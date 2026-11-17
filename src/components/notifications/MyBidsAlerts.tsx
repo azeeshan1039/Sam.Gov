@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { Bell } from "lucide-react";
 import { agentAlertLabel, formatAlertTime } from "@/lib/agent-alerts";
 import { useAgentAlerts } from "@/components/notifications/AgentAlertsProvider";
 
@@ -19,48 +20,48 @@ export default function MyBidsAlerts() {
   };
 
   return (
-    <section className="rounded-lg border bg-white p-4 shadow-sm">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-sm font-semibold text-slate-900">Alerts</h2>
-        {unreadCount > 0 && (
+    <section className="cf-card" style={{ display: "flex", flexDirection: "column", borderColor: "rgba(251,191,36,.4)", background: "linear-gradient(180deg, rgba(251,191,36,.06), transparent 60%), var(--cf-surface)" }}>
+      <div style={{ padding: "18px 24px 6px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+        <h2 className="cf-h2" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <Bell size={20} strokeWidth={1.75} color="#D97706" aria-hidden />
+          {unreadCount} alert{unreadCount === 1 ? "" : "s"}
+        </h2>
+        {unreadCount > 0 ? (
           <button
             type="button"
-            className="text-xs font-medium text-slate-600 hover:text-slate-900"
+            style={{ border: 0, background: "none", font: "500 13px var(--cf-body)", color: "#0E7490", cursor: "pointer", minHeight: 32 }}
             onClick={() => {
               markRead("all").catch((err) => console.error("[notifications] mark all failed", err));
             }}
           >
             Mark all read
           </button>
-        )}
+        ) : null}
       </div>
-      {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
-      {!error && loading && unread.length === 0 && (
-        <p className="mt-3 text-sm text-slate-500">Loading alerts…</p>
-      )}
-      {!error && !loading && unread.length === 0 && (
-        <p className="mt-3 text-sm text-slate-500">No alerts.</p>
-      )}
-      {unread.length > 0 && (
-        <ul className="mt-3 divide-y divide-slate-100">
+      {error ? <p className="cf-err" style={{ padding: "0 24px 16px" }}>{error}</p> : null}
+      {!error && loading && unread.length === 0 ? <p className="cf-meta" style={{ padding: "8px 24px 18px" }}>Loading alerts…</p> : null}
+      {!error && !loading && unread.length === 0 ? <p className="cf-meta" style={{ padding: "8px 24px 18px" }}>No new alerts</p> : null}
+      {unread.length > 0 ? (
+        <ul style={{ listStyle: "none", margin: 0, padding: "0 24px 10px" }}>
           {unread.map((alert) => (
-            <li key={alert.id}>
+            <li key={alert.id} style={{ borderTop: "1px solid var(--cf-line)" }}>
               <button
                 type="button"
                 onClick={() => openAlert(alert.id, alert.href)}
-                className="w-full rounded-md px-2 py-3 text-left hover:bg-amber-50"
+                style={{ width: "100%", display: "flex", flexWrap: "wrap", gap: "8px 16px", alignItems: "center", justifyContent: "space-between", padding: "11px 0", border: 0, background: "transparent", textAlign: "left", cursor: "pointer", color: "inherit" }}
               >
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                  {agentAlertLabel(alert.notification_type)}
-                </p>
-                <p className="mt-1 text-sm font-medium text-slate-900">{alert.title}</p>
-                <p className="mt-0.5 text-sm text-slate-600">{alert.reason}</p>
-                <p className="mt-1 text-xs text-slate-400">{formatAlertTime(alert.created_at)}</p>
+                <span style={{ fontSize: 14 }}>
+                  <span className="cf-due">{agentAlertLabel(alert.notification_type)}</span>
+                  {" · "}
+                  <span style={{ fontWeight: 500 }}>{alert.title}</span>
+                  {alert.reason ? <span className="cf-meta"> · {alert.reason}</span> : null}
+                </span>
+                <span className="cf-mono cf-meta">{formatAlertTime(alert.created_at)}</span>
               </button>
             </li>
           ))}
         </ul>
-      )}
+      ) : null}
     </section>
   );
 }

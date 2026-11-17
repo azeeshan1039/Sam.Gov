@@ -193,7 +193,7 @@ describe("KAN-67 filters, sorting and views", () => {
     await user.click(screen.getByRole("button", { name: "Awarded $" }));
     await waitFor(() => expect(lastParams().get("sort")).toBe("awarded_amount"));
     expect(lastParams().get("dir")).toBe("desc");
-    expect(screen.getByRole("columnheader", { name: "Awarded $" })).toHaveAttribute("aria-sort", "descending");
+    expect(screen.getByRole("columnheader", { name: "Awarded to" })).toHaveAttribute("aria-sort", "descending");
     expect(await screen.findAllByTestId(/award-row-/)).toHaveLength(3);
   });
 
@@ -206,7 +206,7 @@ describe("KAN-67 filters, sorting and views", () => {
     expect(screen.queryByRole("combobox", { name: "Employee" })).not.toBeInTheDocument();
     expect(screen.getByText("My submitted bids")).toBeInTheDocument();
     expect(screen.queryByRole("columnheader", { name: "Agent" })).not.toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("1 award check(s) need your update.");
+    expect(screen.getByRole("status")).toHaveTextContent("1 award check is due.");
     await user.click(screen.getByRole("button", { name: "Show checks due" }));
     await waitFor(() => expect(lastParams().get("checkpoint_state")).toBe("due"));
   });

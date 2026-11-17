@@ -92,7 +92,7 @@ describe("KAN-60/KAN-61 Bid Value vs. Size in Agent Bid Data", () => {
     }) as jest.Mock;
     const user = userEvent.setup();
     render(<AgentBidDataPage />);
-    expect(await screen.findByText("Bid Value vs. Size")).toBeInTheDocument();
+    expect(await screen.findByText("Bid value vs. size")).toBeInTheDocument();
     expect(screen.getAllByTestId("pipeline-table")).toHaveLength(3);
 
     const select = screen.getByLabelText("Agent");
@@ -132,7 +132,7 @@ describe("KAN-60/KAN-61 Bid Value vs. Size in Agent Bid Data", () => {
       return respond(agentBidData(2));
     }) as jest.Mock;
     render(<AgentBidDataPage />);
-    expect(await screen.findByText(/This agent's submitted bids by size bucket/)).toBeInTheDocument();
+    expect(await screen.findByText(/Your submitted bids by size bucket/)).toBeInTheDocument();
     expect(screen.queryByLabelText("Agent")).not.toBeInTheDocument();
     expect(urls[0]).not.toContain("agent_user_id=all");
     expect(screen.getAllByTestId("chart")).toHaveLength(3);  // no per-agent chart
@@ -175,7 +175,7 @@ describe("KAN-60/KAN-61 Bid Value vs. Size in Agent Bid Data", () => {
     }) as jest.Mock;
     render(<AgentBidDataPage />);
     await waitFor(() => expect(urls[0]).toContain("agent_user_id=2"));
-    expect(screen.getByLabelText("Agent")).toHaveValue("2");
+    await waitFor(() => expect(screen.getByLabelText("Agent")).toHaveValue("2"));
     expect(await screen.findByText("Submitted bids")).toBeInTheDocument();
   });
 

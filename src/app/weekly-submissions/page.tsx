@@ -6,8 +6,6 @@ import { getStoredUser, type AuthUser } from "@/lib/auth";
 import { PageBand, PageMain, ReportTabs } from "@/components/design/PageFrame";
 import { formatMoney } from "@/lib/pipeline";
 import { dateOnly, easternTodayUtc, formatUtcDateRange } from "@/lib/eastern-date";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 export default function WeeklySubmissionsPage() {
   const router = useRouter();
@@ -37,14 +35,56 @@ export default function WeeklySubmissionsPage() {
   }, [weekStart]);
   useEffect(() => { if (user) load(); }, [load, user]);
 
+  const totals = data?.company_totals;
+  const selected = weeks.find((week) => week.value === weekStart);
+
   return <>
-    <PageBand eyebrow="REPORTS" title="Weekly submissions" lead="Monday–Sunday reporting in Eastern Time using actual submitted prices." />
+    <PageBand eyebrow="REPORTS" title="Weekly submissions" lead="Monday–Sunday in Eastern Time, using actual submitted prices" />
     <ReportTabs current="/weekly-submissions" />
     <PageMain>
-    <label className="grid max-w-sm gap-1 text-sm">Week<select className="h-10 rounded-md border px-3" value={weekStart} onChange={(e) => setWeekStart(e.target.value)}>{weeks.map((week) => <option key={week.value} value={week.value}>{week.label}</option>)}</select></label>
-    {error && <div className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
-    <div className="grid gap-4 sm:grid-cols-3"><Card><CardHeader><CardTitle className="text-sm">Submitted count</CardTitle></CardHeader><CardContent className="text-2xl font-bold">{data?.company_totals.submitted_count ?? "—"}</CardContent></Card><Card><CardHeader><CardTitle className="text-sm">Submitted price</CardTitle></CardHeader><CardContent className="text-2xl font-bold">{formatMoney(data?.company_totals.total_submitted_price)}</CardContent></Card><Card><CardHeader><CardTitle className="text-sm">Gross profit</CardTitle></CardHeader><CardContent className="text-2xl font-bold">{formatMoney(data?.company_totals.total_gross_profit)}</CardContent></Card></div>
-    <Card><CardHeader><CardTitle>{user?.role === "admin" ? "Company agents" : "My submissions"}</CardTitle></CardHeader><CardContent><Table><TableHeader><TableRow><TableHead>Agent</TableHead><TableHead>Submitted</TableHead><TableHead>Submitted price</TableHead><TableHead>Gross profit</TableHead></TableRow></TableHeader><TableBody>{(data?.rows || []).map((row) => <TableRow key={row.agent_user_id}><TableCell>{row.agent_name}{row.is_active ? "" : " (inactive)"}</TableCell><TableCell>{row.submitted_count}</TableCell><TableCell>{formatMoney(row.total_submitted_price)}</TableCell><TableCell>{formatMoney(row.total_gross_profit)}</TableCell></TableRow>)}</TableBody></Table></CardContent>    </Card>
+    {error && <div role="alert" className="cf-banner cf-banner-bad">{error}</div>}
+    <section aria-label="Week totals" className="cf-grid-kpi">
+      <div className="cf-card cf-kpi cf-kpi-hero"><div className="cf-lbl" style={{ color: "#0E7490" }}>Submitted bids</div><div className="cf-kpi-v" style={{ font: "500 34px/1 var(--cf-display)" }}>{totals ? totals.submitted_count : "—"}</div></div>
+      <div className="cf-card cf-kpi"><div className="cf-lbl">Submitted price</div><div className="cf-kpi-v" style={{ font: "500 26px/1.1 var(--cf-mono)" }}>{formatMoney(totals?.total_submitted_price)}</div></div>
+      <div className="cf-card cf-kpi"><div className="cf-lbl">Gross profit</div><div className="cf-kpi-v" style={{ font: "500 26px/1.1 var(--cf-mono)" }}>{formatMoney(totals?.total_gross_profit)}</div></div>
+    </section>
+    <section id="weekly" className="cf-card" aria-labelledby="wk-h" style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      <div style={{ padding: "20px 24px 14px", display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+        <div>
+          <h2 id="wk-h" className="cf-h2">Weekly submissions</h2>
+          <p className="cf-sub">{user?.role === "admin" ? "Company agents" : "My submissions"} · {selected?.label || "Selected week"}</p>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <label htmlFor="wk" className="cf-lbl">Week</label>
+          <select id="wk" className="cf-select" style={{ width: "auto" }} value={weekStart} onChange={(event) => setWeekStart(event.target.value)}>
+            {weeks.map((week) => <option key={week.value} value={week.value}>{week.label}</option>)}
+          </select>
+        </div>
+      </div>
+      <div style={{ overflowX: "auto" }}>
+        <table className="cf-table">
+          <thead><tr><th>Agent</th><th className="cf-num">Bids</th><th className="cf-num">Submitted price</th><th className="cf-num">Gross profit</th></tr></thead>
+          <tbody>
+            {(data?.rows || []).map((row) => (
+              <tr key={row.agent_user_id}>
+                <td>{row.agent_name}{row.is_active ? "" : " (inactive)"}</td>
+                <td className="cf-num">{row.submitted_count}</td>
+                <td className="cf-num">{formatMoney(row.total_submitted_price)}</td>
+                <td className="cf-num">{formatMoney(row.total_gross_profit)}</td>
+              </tr>
+            ))}
+            {totals ? (
+              <tr>
+                <td style={{ fontWeight: 600, background: "var(--cf-surface-2)" }}>Total</td>
+                <td className="cf-num" style={{ fontWeight: 600, background: "var(--cf-surface-2)" }}>{totals.submitted_count}</td>
+                <td className="cf-num" style={{ fontWeight: 600, background: "var(--cf-surface-2)", color: "var(--cf-cyan-text)" }}>{formatMoney(totals.total_submitted_price)}</td>
+                <td className="cf-num" style={{ fontWeight: 600, background: "var(--cf-surface-2)" }}>{formatMoney(totals.total_gross_profit)}</td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+    </section>
     </PageMain>
   </>;
 }

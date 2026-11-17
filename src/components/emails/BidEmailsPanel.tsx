@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import DOMPurify from "dompurify";
 import { ArrowDownLeft, ArrowUpRight, Link2, Mail, RefreshCw, Reply } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { ComposeEmailDialog, type ComposeTarget } from "./ComposeEmailDialog";
 import {
   formatDateTime,
@@ -192,18 +191,18 @@ export function BidEmailsPanel({ bidId, composeRequest, readOnly = false }: { bi
           {account?.connected ? (
             <p>Your mailbox: <strong>{account.gmail_address}</strong> · last synced {formatDateTime(account.last_synced_at)}</p>
           ) : account?.status === "expired" ? (
-            <p role="alert" className="font-medium text-amber-800">Gmail authorization expired. <Link href="/settings" className="underline">Reconnect Gmail</Link> to send and sync.</p>
+            <p role="alert" className="font-medium" style={{ color: "#B45309" }}>Gmail authorization expired. <Link href="/settings" className="cf-link cf-link-ul">Reconnect Gmail</Link> to send and sync.</p>
           ) : (
-            <p className="text-slate-600"><Link href="/settings" className="font-medium text-primary underline">Connect Gmail</Link> to send and sync bid emails.</p>
+            <p style={{ color: "var(--cf-text-2)" }}><Link href="/settings" className="cf-link cf-link-ul">Connect Gmail</Link> to send and sync bid emails.</p>
           )}
         </div>
         <div className="flex gap-2">
           {account?.connected && (
-            <Button variant="outline" size="sm" onClick={syncNow} disabled={syncing}>
-              <RefreshCw className={`mr-2 h-4 w-4 ${syncing ? "animate-spin" : ""}`} aria-hidden />Sync now
-            </Button>
+            <button type="button" className="cf-btn cf-btn-secondary" onClick={syncNow} disabled={syncing}>
+              <RefreshCw className={syncing ? "animate-spin" : ""} size={16} aria-hidden />Sync now
+            </button>
           )}
-          {!readOnly && <Button size="sm" onClick={startNew}><Mail className="mr-2 h-4 w-4" aria-hidden />New email</Button>}
+          {!readOnly && <button type="button" className="cf-btn cf-btn-primary" onClick={startNew}><Mail size={16} aria-hidden />New email</button>}
         </div>
       </div>
 
@@ -226,8 +225,8 @@ export function BidEmailsPanel({ bidId, composeRequest, readOnly = false }: { bi
               {message.send_status === "held" && <p className="mt-1 text-sm text-amber-800">Waiting for an admin to review. Edit it to lower the spam risk, or ask an admin to release it.</p>}
               {message.sent_by_user_id === ownId && !readOnly && (
                 <div className="mt-2 flex gap-2">
-                  {message.send_status !== "sending" && <Button size="sm" variant="outline" onClick={() => startEdit(message)}>{message.send_status === "failed" ? "Edit and retry" : "Edit"}</Button>}
-                  <Button size="sm" variant="ghost" onClick={() => discard(message)}>Discard</Button>
+                  {message.send_status !== "sending" && <button type="button" className="cf-btn cf-btn-secondary" onClick={() => startEdit(message)}>{message.send_status === "failed" ? "Edit and retry" : "Edit"}</button>}
+                  <button type="button" className="cf-btn cf-btn-secondary" onClick={() => discard(message)}>Discard</button>
                 </div>
               )}
             </div>
@@ -242,9 +241,9 @@ export function BidEmailsPanel({ bidId, composeRequest, readOnly = false }: { bi
           {suggested.map((thread) => (
             <div key={thread.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
               <span>{thread.subject || "(no subject)"} · {thread.counterpart_emails.join(", ")}</span>
-              <Button size="sm" variant="outline" onClick={() => patchThread(thread.id, { bid_id: bidId })}>
-                <Link2 className="mr-2 h-4 w-4" aria-hidden />Link to this bid
-              </Button>
+              <button type="button" className="cf-btn cf-btn-secondary" onClick={() => patchThread(thread.id, { bid_id: bidId })}>
+                <Link2 size={16} aria-hidden />Link to this bid
+              </button>
             </div>
           ))}
         </section>
@@ -316,7 +315,7 @@ export function BidEmailsPanel({ bidId, composeRequest, readOnly = false }: { bi
                         </li>
                       ))}
                     </ol>
-                    {!readOnly && <Button size="sm" variant="outline" onClick={() => startReply(thread)}><Reply className="mr-2 h-4 w-4" aria-hidden />Reply</Button>}
+                    {!readOnly && <button type="button" className="cf-btn cf-btn-secondary" onClick={() => startReply(thread)}><Reply size={16} aria-hidden />Reply</button>}
                   </div>
                 )}
               </li>
