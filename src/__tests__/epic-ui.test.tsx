@@ -174,18 +174,12 @@ describe("KAN-18, KAN-19, and KAN-22 dashboard views", () => {
 
     expect(await screen.findByRole("heading", { name: "Bid performance" })).toBeInTheDocument();
     expect(await screen.findByText("SOL-100")).toBeInTheDocument();
-    expect(screen.getByText("3 active bids · $250.0K")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Company pulse" })).toBeInTheDocument();
     expect(screen.getAllByText("Today").length).toBeGreaterThan(0);
     expect(screen.getAllByText("This week").length).toBeGreaterThan(0);
     expect(screen.getAllByText("This month").length).toBeGreaterThan(0);
     expect(screen.getByRole("heading", { name: "Agent leaderboard" })).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Bids vs. goal" })).toBeInTheDocument();
     expect(screen.getByText("No submitted agent bids for this period.")).toBeInTheDocument();
-    expect(screen.getByText("2")).toBeInTheDocument();
-    expect(screen.getByText("1")).toBeInTheDocument();
-    expect(screen.getByLabelText("Employee")).toHaveValue("2");
-    expect(screen.getByRole("link", { name: "Open Agent Bid Data" })).toHaveAttribute("href", "/agent-bid-data?agent_user_id=2");
     expect(screen.getByRole("link", { name: /SOL-100/ })).toHaveAttribute("href", "/work-management#duplicate-7");
     expect(screen.getByRole("link", { name: /SOL-STALE/ })).toHaveAttribute("href", "/work-management#stale-4");
     const reviewLinks = screen.getAllByRole("link", { name: "Review all" });
@@ -193,7 +187,10 @@ describe("KAN-18, KAN-19, and KAN-22 dashboard views", () => {
         "/work-management#duplicates",
         "/work-management#stale-bids",
       ]);
-    expect(screen.getByRole("link", { name: "View all activity" })).toHaveAttribute("href", "/activity-log");
+    expect(screen.getByRole("heading", { name: "Pipeline by stage" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Latest submissions" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Financial summary" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Company pulse" })).not.toBeInTheDocument();
     expect(await screen.findByText("SOL-STALE")).toBeInTheDocument();
   });
 
@@ -204,6 +201,10 @@ describe("KAN-18, KAN-19, and KAN-22 dashboard views", () => {
       if (url.includes("dashboard-stats")) return response({ stats: {} });
       if (url.includes("stats/my-goal")) return response({ achieved: 1, monthly: 5, left: 4 });
       if (url.includes("opportunities/mine")) return response({ opportunities: [] });
+      if (url.includes("pipeline/my-bids")) return response({ items: [] });
+      if (url.includes("award-tracking")) return response({ items: [], summary: null });
+      if (url.includes("stats/leaderboard")) return response({ by_amount: [], by_count: [] });
+      if (url.includes("/api/sam-gov")) return response([]);
       throw new Error(`Admin endpoint requested by agent dashboard: ${url}`);
     });
     global.fetch = fetchMock as jest.Mock;
@@ -214,8 +215,11 @@ describe("KAN-18, KAN-19, and KAN-22 dashboard views", () => {
     expect(screen.queryByText("Duplicate flags")).not.toBeInTheDocument();
     expect(screen.queryByText("Pickup rules")).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Agent leaderboard" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Team leaderboard" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Suggested for you" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Find opportunities" })).toBeInTheDocument();
     const urls = fetchMock.mock.calls.map((call) => urlOf(call[0] as RequestInfo | URL));
-    expect(urls.some((url) => /duplicates|leaderboard|auth\/team|dashboard-pulse/.test(url))).toBe(false);
+    expect(urls.some((url) => /duplicates|auth\/team|dashboard-pulse/.test(url))).toBe(false);
   });
 });
 

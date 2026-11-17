@@ -4,18 +4,19 @@ import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Award, Calendar, Check, ChevronDown, Clock, Download, TriangleAlert } from "lucide-react";
+import { ArrowRight, Award, Calendar, Check, ChevronDown, Clock, Download, Search, TriangleAlert } from "lucide-react";
 import { getStoredUser, getUserDisplayName } from "@/lib/auth";
 import { formatMoney, type StatsPayload } from "@/lib/stats";
 import type { PipelineItem } from "@/lib/pipeline";
-
-const DashboardChart = dynamic(() => import("@/components/DashboardChart"), {
-  ssr: false,
-});
+import type { AwardTrackingItem, AwardTrackingSummary } from "@/lib/awards";
+import { easternTodayUtc } from "@/lib/eastern-date";
+import { isProductRfq } from "@/lib/ai-suggestion-prefilter";
 
 const GoalPaceChart = dynamic(() => import("@/components/GoalPaceChart"), {
   ssr: false,
 });
+
+const WeeklyBars = dynamic(() => import("@/components/WeeklyBars"), { ssr: false });
 
 const DashboardTable = dynamic(() => import("@/components/DashboardTable"), {
   ssr: false,
@@ -62,6 +63,36 @@ function submittedStamp(value: string) {
   const day = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "America/New_York" }).format(date).toUpperCase();
   const time = new Intl.DateTimeFormat("en-US", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/New_York" }).format(date);
   return `${day} · ${time}`;
+}
+
+function dueLabel(value?: string | null) {
+  if (!value) return { text: "—", urgent: false, short: "—" };
+  const due = new Date(value);
+  if (Number.isNaN(due.getTime())) return { text: value, urgent: false, short: value };
+  const days = Math.ceil((due.getTime() - Date.now()) / 86400000);
+  const date = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "America/New_York" }).format(due);
+  return { text: `${date} · ${days} day${days === 1 ? "" : "s"}`, urgent: days <= 11, short: `${date} · ${Math.max(days, 0)}D`.toUpperCase() };
+}
+
+function weekBuckets(items: PipelineItem[]) {
+  const today = easternTodayUtc();
+  const monday = new Date(today);
+  monday.setUTCDate(monday.getUTCDate() - ((monday.getUTCDay() + 6) % 7));
+  return [3, 2, 1, 0].map((ago) => {
+    const start = new Date(monday);
+    start.setUTCDate(start.getUTCDate() - ago * 7);
+    const end = new Date(start);
+    end.setUTCDate(end.getUTCDate() + 6);
+    const count = items.filter((item) => {
+      if (!item.submitted_at) return false;
+      const stamp = easternTodayUtc(new Date(item.submitted_at));
+      return stamp >= start && stamp <= end;
+    }).length;
+    const label = ago === 0
+      ? "THIS WEEK"
+      : new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" }).format(start).toUpperCase();
+    return { label, count, current: ago === 0 };
+  });
 }
 
 function sumNumbers(values: Array<number | null | undefined>) {
@@ -163,6 +194,10 @@ export default function DashboardPage() {
   const [dashView, setDashView] = useState<"overview" | "agent" | "portal">("overview");
   const [myGoal, setMyGoal] = useState<{ achieved: number; monthly: number; left: number } | null>(null);
   const [myClaims, setMyClaims] = useState<Array<{ id: number; external_notice_id: string; solicitation_number?: string | null; title: string; expected_bid_value?: number | null; response_deadline?: string | null; state: string }>>([]);
+  const [myBidItems, setMyBidItems] = useState<PipelineItem[]>([]);
+  const [awardDue, setAwardDue] = useState<AwardTrackingItem[]>([]);
+  const [awardSummary, setAwardSummary] = useState<AwardTrackingSummary | null>(null);
+  const [suggestions, setSuggestions] = useState<Array<{ id: string; solicitationNumber?: string; title: string; department?: string; closingDate?: string; fitReason?: string }>>([]);
   const [pipelineItems, setPipelineItems] = useState<PipelineItem[]>([]);
 
   useEffect(() => {
@@ -262,7 +297,7 @@ export default function DashboardPage() {
   }, [authChecked, companyId, role, userId]);
 
   useEffect(() => {
-    if (!authChecked || role !== "admin") return;
+    if (!authChecked || (role !== "admin" && role !== "agent")) return;
     let cancelled = false;
     const loadLeaderboard = async () => {
       try {
@@ -291,9 +326,11 @@ export default function DashboardPage() {
     });
     const loadAgent = async () => {
       try {
-        const [goalRes, claimsRes] = await Promise.all([
+        const [goalRes, claimsRes, bidsRes, awardsRes] = await Promise.all([
           fetch(`/api/backend/stats/my-goal?${query}`, { cache: "no-store" }),
           fetch("/api/backend/opportunities/mine", { cache: "no-store" }),
+          fetch(`/api/backend/pipeline/my-bids?${query}`, { cache: "no-store" }),
+          fetch(`/api/backend/pipeline/award-tracking?${query}`, { cache: "no-store" }),
         ]);
         if (cancelled) return;
         if (goalRes.ok) {
@@ -307,6 +344,36 @@ export default function DashboardPage() {
         if (claimsRes.ok) {
           const claimsData = await claimsRes.json();
           setMyClaims((claimsData.opportunities || []).filter((claim: { state: string }) => claim.state === "assigned"));
+        }
+        if (bidsRes.ok) {
+          const bidsData = await bidsRes.json();
+          setMyBidItems(bidsData.items || []);
+        }
+        if (awardsRes.ok) {
+          const awardsData = await awardsRes.json();
+          const items = (awardsData.items || []) as AwardTrackingItem[];
+          setAwardDue(items.filter((item) => item.checkpoint_state === "due" || item.checkpoint_state === "flagged" || item.current_checkpoint?.state === "due"));
+          setAwardSummary(awardsData.summary || null);
+        }
+        try {
+          const catalogRes = await fetch("/api/sam-gov", { cache: "no-store" });
+          if (catalogRes.ok && !cancelled) {
+            const catalog = await catalogRes.json();
+            const opportunities = (Array.isArray(catalog) ? catalog : []).filter(isProductRfq).slice(0, 40);
+            if (opportunities.length) {
+              const suggestRes = await fetch("/api/sam-gov/ai-suggestions", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ opportunities }),
+              });
+              if (suggestRes.ok && !cancelled) {
+                const suggestData = await suggestRes.json();
+                setSuggestions((suggestData.suggestions || []).slice(0, 3));
+              }
+            }
+          }
+        } catch (suggestErr) {
+          console.error("Failed to fetch suggestions:", suggestErr);
         }
       } catch (err) {
         console.error("Failed to fetch agent dashboard:", err);
@@ -361,6 +428,15 @@ export default function DashboardPage() {
   const agentGoal = myGoal?.monthly || 0;
   const agentDone = myGoal?.achieved || 0;
   const agentPct = agentGoal > 0 ? Math.min(100, Math.round((agentDone / agentGoal) * 100)) : 0;
+  const etToday = easternTodayUtc();
+  const agentSubmitted = myBidItems.filter((item) => inEasternMonth(item.submitted_at, etToday.getUTCFullYear(), etToday.getUTCMonth() + 1));
+  const agentValue = sumNumbers(agentSubmitted.map((item) => item.submitted_price));
+  const agentProfit = sumNumbers(agentSubmitted.map((item) => item.gross_profit));
+  const agentMarkups = agentSubmitted.map((item) => item.markup_percent).filter((value): value is number => value != null);
+  const agentMarkup = agentMarkups.length ? agentMarkups.reduce((total, value) => total + value, 0) / agentMarkups.length : null;
+  const myRank = byAmount.find((row) => row.user_id === userId);
+  const activeBids = myBidItems.filter((item) => ["Finding Supplier", "Waiting Approval", "Approved for Submission", "Bid No Approved"].includes(item.internal_status));
+  const weeks = weekBuckets(myBidItems);
 
   if (role === "agent") {
     return (
@@ -378,9 +454,9 @@ export default function DashboardPage() {
                   : "Your government contract opportunities and progress"}
               </p>
             </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
               <Link className="cf-btn cf-btn-secondary" href="/my-bids">My bids</Link>
-              <Link className="cf-btn cf-btn-primary" href="/opportunities">Find opportunities</Link>
+              <Link className="cf-btn cf-btn-primary" href="/opportunities"><Search size={16} strokeWidth={2} />Find opportunities</Link>
             </div>
           </div>
         </section>
@@ -393,27 +469,28 @@ export default function DashboardPage() {
                 <span className="cf-mono" style={{ fontSize: 14, color: "var(--cf-text-2)" }}>/ {agentGoal || "—"} goal</span>
               </div>
               <div className="cf-bar"><span style={{ width: `${agentPct}%` }} /></div>
-              <div className="cf-meta">{myGoal ? `${agentPct}% of goal` : "Goal loads from your account"}</div>
+              <div className="cf-meta">{myRank ? `Rank #${myRank.rank} of ${byAmount.length} on the team` : "Team rank loads with the leaderboard"}</div>
             </div>
             <div className="cf-card cf-kpi">
               <div className="cf-lbl">Submitted value</div>
-              <div className="cf-kpi-v">{loading ? "—" : formatCurrency(stats?.total_target_value ?? 0)}</div>
-              <div className="cf-meta">From your negotiation sessions</div>
+              <div className="cf-kpi-v">{agentValue == null ? "—" : formatMoney(agentValue)}</div>
+              <div className="cf-meta">Month-over-month change is not in this feed</div>
             </div>
             <div className="cf-card cf-kpi">
-              <div className="cf-lbl">Active negotiations</div>
-              <div className="cf-kpi-v">{loading ? "—" : stats?.active_negotiations ?? 0}</div>
-              <div className="cf-meta">{stats?.suppliers_responded ?? 0} suppliers responded</div>
+              <div className="cf-lbl">Gross profit</div>
+              <div className="cf-kpi-v">{agentProfit == null ? "—" : formatMoney(agentProfit)}</div>
+              <div className="cf-meta">{agentMarkup == null ? "Average markup is not in this feed" : `${agentMarkup.toFixed(1)}% avg. markup`}</div>
             </div>
             <div className="cf-card cf-kpi">
-              <div className="cf-lbl">Bids submitted</div>
-              <div className="cf-kpi-v">{loading ? "—" : stats?.bids_submitted ?? 0}</div>
-              <div className="cf-meta">Gross profit and win rate are not in this feed</div>
+              <div className="cf-lbl">Win rate · 90 days</div>
+              <div className="cf-kpi-v">{awardSummary?.win_rate == null ? "—" : `${Math.round(awardSummary.win_rate)}%`}</div>
+              <div className="cf-meta">{awardSummary?.outcomes ? `${awardSummary.outcomes.won} won · ${awardSummary.outcomes.lost} lost` : "Won and lost counts are not in this feed"}</div>
             </div>
-            <Link className="cf-card cf-kpi" href="/award-tracking" style={{ textDecoration: "none", borderColor: "rgba(251,191,36,.45)" }}>
+            {/* Active negotiations and raw bid-count tiles are not on the agent design. */}
+            <Link className="cf-card cf-kpi cf-kpi-warn" href="/award-tracking">
               <div className="cf-lbl" style={{ color: "#B45309" }}>Award checks due</div>
-              <div className="cf-kpi-v">—</div>
-              <span className="cf-link" style={{ fontSize: 12 }}>Record outcomes</span>
+              <div className="cf-kpi-v">{awardDue.length}</div>
+              <span className="cf-link" style={{ fontSize: 12 }}>Record outcomes →</span>
             </Link>
           </section>
 
@@ -426,40 +503,137 @@ export default function DashboardPage() {
                 </div>
                 <Link className="cf-link" href="/my-bids">All my bids</Link>
               </div>
-              <div style={{ display: "flex", flexDirection: "column", padding: "0 24px 16px" }}>
-                {myClaims.length === 0 ? (
+              <div style={{ display: "flex", flexDirection: "column", padding: "0 24px 12px" }}>
+                {activeBids.length === 0 && myClaims.length === 0 ? (
                   <p className="cf-meta" style={{ padding: "8px 0 12px" }}>No picked-up bids are waiting on you.</p>
-                ) : myClaims.map((claim) => (
-                  <div key={claim.id} style={{ display: "flex", flexWrap: "wrap", gap: 16, alignItems: "center", padding: "14px 0", borderTop: "1px solid var(--cf-line)" }}>
-                    <div style={{ flex: "1 1 320px", minWidth: 0 }}>
-                      <div className="cf-mono" style={{ fontSize: 13, fontWeight: 500 }}>{claim.solicitation_number || claim.external_notice_id} · SAM.GOV</div>
-                      <Link href={`/sam-gov/${encodeURIComponent(claim.external_notice_id)}`} style={{ font: "500 17px var(--cf-display)", color: "var(--cf-text)", textDecoration: "none" }}>{claim.title}</Link>
+                ) : activeBids.length ? activeBids.map((item) => {
+                  const waiting = item.internal_status === "Waiting Approval";
+                  const due = dueLabel(item.due_date);
+                  const price = waiting ? item.submitted_price ?? item.expected_submitted_price : item.expected_submitted_price ?? item.submitted_price;
+                  return (
+                    <div key={item.id} className="cf-row">
+                      <div style={{ flex: "1 1 320px", minWidth: 0, display: "flex", flexDirection: "column", gap: 6 }}>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
+                          <span className={`cf-pill ${waiting ? "cf-pill-app" : "cf-pill-sup"}`}>{item.internal_status}</span>
+                          <span className="cf-id-dim">{item.solicitation_number || item.bid_id} · {(item.portal || "SAM.GOV").toUpperCase()}</span>
+                        </div>
+                        <Link href={`/bids/${item.id}`} style={{ font: "500 17px var(--cf-display)", color: "var(--cf-text)", textDecoration: "none" }}>{item.title || "Untitled bid"}</Link>
+                        <div className="cf-meta" style={{ fontSize: 13 }}>{waiting ? `Sent for approval${item.approved_by_name ? ` to ${item.approved_by_name}` : ""}` : "Next step: add a supplier quote"}</div>
+                      </div>
+                      <div className="cf-kv"><span className="cf-lbl">Response due</span><b style={due.urgent ? { color: "#BE123C" } : undefined}>{due.text}</b></div>
+                      <div className="cf-kv"><span className="cf-lbl">{waiting ? "Bid price" : "Est. value"}</span><b className="cf-mono">{price == null ? "—" : formatMoney(price)}</b></div>
+                      <Link className={`cf-btn ${waiting ? "cf-btn-secondary" : "cf-btn-primary"}`} href={`/bids/${item.id}`}>{waiting ? "View" : "Continue"}</Link>
                     </div>
-                    <div>
-                      <div className="cf-lbl">Response due</div>
-                      <b>{claim.response_deadline ? new Date(claim.response_deadline).toLocaleDateString("en-US", { timeZone: "America/New_York" }) : "—"}</b>
+                  );
+                }) : myClaims.map((claim) => {
+                  const due = dueLabel(claim.response_deadline);
+                  return (
+                    <div key={claim.id} className="cf-row">
+                      <div style={{ flex: "1 1 320px", minWidth: 0, display: "flex", flexDirection: "column", gap: 6 }}>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
+                          <span className="cf-pill cf-pill-sup">Finding supplier</span>
+                          <span className="cf-id-dim">{claim.solicitation_number || claim.external_notice_id} · SAM.GOV</span>
+                        </div>
+                        <Link href={`/sam-gov/${encodeURIComponent(claim.external_notice_id)}`} style={{ font: "500 17px var(--cf-display)", color: "var(--cf-text)", textDecoration: "none" }}>{claim.title}</Link>
+                        <div className="cf-meta" style={{ fontSize: 13 }}>Next step: add a supplier quote</div>
+                      </div>
+                      <div className="cf-kv"><span className="cf-lbl">Response due</span><b style={due.urgent ? { color: "#BE123C" } : undefined}>{due.text}</b></div>
+                      <div className="cf-kv"><span className="cf-lbl">Est. value</span><b className="cf-mono">{claim.expected_bid_value != null ? formatMoney(claim.expected_bid_value) : "—"}</b></div>
+                      <Link className="cf-btn cf-btn-primary" href={`/sam-gov/${encodeURIComponent(claim.external_notice_id)}`}>Continue</Link>
                     </div>
-                    <div>
-                      <div className="cf-lbl">Est. value</div>
-                      <b className="cf-mono">{claim.expected_bid_value != null ? formatMoney(claim.expected_bid_value) : "—"}</b>
-                    </div>
-                    <Link className="cf-btn cf-btn-primary" href={`/sam-gov/${encodeURIComponent(claim.external_notice_id)}`}>Continue</Link>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
-            <aside className="cf-card cf-split-side">
+            <aside className="cf-card cf-split-side" aria-labelledby="checks-h" style={{ display: "flex", flexDirection: "column" }}>
               <div className="cf-card-hd">
-                <h2 className="cf-h2">Award checks due</h2>
+                <h2 id="checks-h" className="cf-h2">Award checks due</h2>
+                <span className="cf-mono" style={{ fontSize: 11, fontWeight: 500, color: "#B45309", background: "rgba(251,191,36,.1)", border: "1px solid rgba(251,191,36,.3)", padding: "3px 10px", borderRadius: 999 }}>{awardDue.length} DUE</span>
               </div>
-              <p className="cf-meta" style={{ padding: "0 24px 20px" }}>Personal checkpoint counts are not in the current agent feed. Open award tracking to record outcomes.</p>
+              {awardDue.length === 0 ? (
+                <p className="cf-meta" style={{ padding: "0 24px 20px" }}>No checkpoint is due.</p>
+              ) : (
+                <ul style={{ listStyle: "none", margin: 0, padding: "0 24px 12px" }}>
+                  {awardDue.slice(0, 5).map((item) => (
+                    <li key={item.id} style={{ display: "flex", flexDirection: "column", gap: 4, padding: "14px 0", borderTop: "1px solid var(--cf-line)" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                        <span className="cf-lbl" style={{ color: "#B45309" }}>{item.current_checkpoint ? `${item.current_checkpoint.checkpoint_days}-day check` : "Award check"}</span>
+                        <span className="cf-meta">{item.submitted_on ? `Submitted ${new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "America/New_York" }).format(new Date(item.submitted_on))}` : "Submitted date unavailable"}</span>
+                      </div>
+                      <span style={{ fontSize: 14, fontWeight: 500 }}><span className="cf-mono" style={{ fontSize: 13 }}>{item.solicitation_number || item.bid_id}</span> · {item.title || "Untitled"}</span>
+                      <Link className="cf-link" href={`/bids/${item.id}`} style={{ fontSize: 13 }}>Record outcome</Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </aside>
           </section>
 
-          <section className="cf-card" style={{ padding: "20px 24px" }}>
-            <h2 className="cf-h2">My weekly submissions</h2>
-            <p className="cf-sub">Loaded from your existing session chart</p>
-            <div style={{ marginTop: 16 }}><DashboardChart /></div>
+          <section className="cf-split">
+            <div className="cf-card" style={{ flex: "1 1 420px", minWidth: 0, padding: "20px 24px", display: "flex", flexDirection: "column", gap: 16 }}>
+              <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 12 }}>
+                <div>
+                  <h2 className="cf-h2">My weekly submissions</h2>
+                  <p className="cf-sub">Monday–Sunday, Eastern Time · goal 5 a week</p>
+                </div>
+                <Link className="cf-link" href="/agent-bid-data">Reports</Link>
+              </div>
+              <WeeklyBars weeks={weeks} goal={5} />
+            </div>
+            <div className="cf-card" style={{ flex: "1 1 420px", minWidth: 0, display: "flex", flexDirection: "column" }}>
+              <div className="cf-card-hd" style={{ display: "block" }}>
+                <h2 className="cf-h2">Team leaderboard</h2>
+                <p className="cf-sub">{monthLabel} · by submitted value</p>
+              </div>
+              {byAmount.length === 0 ? (
+                <p className="cf-meta" style={{ padding: "0 24px 20px" }}>No submitted agent bids for this month.</p>
+              ) : (
+                <ol style={{ listStyle: "none", margin: 0, padding: "0 24px 12px" }}>
+                  {byAmount.map((entry) => {
+                    const mine = entry.user_id === userId;
+                    const letters = entry.name.trim().split(/\s+/).filter(Boolean);
+                    const mark = letters.length >= 2 ? `${letters[0][0]}${letters[1][0]}`.toUpperCase() : (letters[0] || "?").slice(0, 2).toUpperCase();
+                    return (
+                      <li key={entry.user_id} style={{ display: "flex", alignItems: "center", gap: 12, padding: mine ? 12 : "12px 0", margin: mine ? "4px -12px 0" : undefined, marginTop: mine ? 4 : 6, background: mine ? "rgba(34,211,238,.07)" : undefined, border: mine ? "1px solid rgba(34,211,238,.3)" : undefined, borderTop: mine ? undefined : "1px solid var(--cf-line)", borderRadius: mine ? 10 : undefined }}>
+                        <span className="cf-mono" style={{ width: 24, fontWeight: mine ? 600 : 400, color: mine ? "#0E7490" : "var(--cf-text-3)" }}>{String(entry.rank).padStart(2, "0")}</span>
+                        <span className={`cf-av ${mine ? "cf-av-me" : ""}`} style={mine ? { width: 30, height: 30, fontSize: 11 } : { width: 30, height: 30, fontSize: 11, background: "var(--cf-surface-3)", color: "var(--cf-text-2)", border: "1px solid var(--cf-line-2)" }}>{mark}</span>
+                        <span style={{ flex: 1, fontWeight: mine ? 500 : 400 }}>{entry.name}{mine ? " (you)" : ""}</span>
+                        <span className="cf-meta" style={{ fontSize: 13 }}>{entry.bid_count} bids</span>
+                        <span className="cf-mono" style={{ width: 84, textAlign: "right", fontWeight: mine ? 500 : 400 }}>{compactMoney(entry.amount)}</span>
+                      </li>
+                    );
+                  })}
+                </ol>
+              )}
+            </div>
+          </section>
+
+          <section className="cf-card" aria-labelledby="sugg-h" style={{ display: "flex", flexDirection: "column" }}>
+            <div className="cf-card-hd">
+              <div>
+                <h2 id="sugg-h" className="cf-h2">Suggested for you</h2>
+                <p className="cf-sub">Unclaimed opportunities similar to bids you have won</p>
+              </div>
+              <Link className="cf-link" href="/opportunities">All opportunities</Link>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(300px, 100%), 1fr))", gap: 16, padding: "12px 24px 24px" }}>
+              {suggestions.length === 0 ? (
+                <p className="cf-meta">Suggestions appear when the AI suggestions feed returns matches.</p>
+              ) : suggestions.map((item) => {
+                const due = dueLabel(item.closingDate);
+                return (
+                  <div key={item.id} className="cf-sugg">
+                    <div className="cf-id-dim">{(item.solicitationNumber || item.id).toUpperCase()} · {(item.department || "SAM.GOV").toUpperCase()}</div>
+                    <div style={{ font: "500 17px var(--cf-display)" }}>{item.title}</div>
+                    <div style={{ fontSize: 13, color: "var(--cf-text-2)" }}>{item.fitReason || "Similar to bids you have worked"}</div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginTop: 6 }}>
+                      <span className="cf-mono" style={{ fontSize: 12, color: "var(--cf-text-2)" }}>{item.closingDate ? `DUE ${due.short}` : "DUE —"}</span>
+                      <Link className="cf-btn cf-btn-primary" href={`/sam-gov/${encodeURIComponent(item.id)}`} style={{ minHeight: 36 }}>Pick up</Link>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </section>
         </main>
       </>
@@ -725,6 +899,7 @@ export default function DashboardPage() {
           </div>
         </section>
 
+        {/* Company pulse is not in the manager design. Kept here so it can be restored.
         {dashView === "overview" && (
           <section>
             <h2 className="cf-h2" style={{ marginBottom: 12 }}>Company pulse</h2>
@@ -741,6 +916,7 @@ export default function DashboardPage() {
             </div>
           </section>
         )}
+        */}
 
         {(dashView === "overview" || dashView === "agent") && (
           <section className="cf-split">
@@ -840,8 +1016,10 @@ export default function DashboardPage() {
                       <td className="cf-mono cf-dim" style={{ whiteSpace: "nowrap", fontSize: 12 }}>{submittedStamp(item.submitted_at || "")}</td>
                       <td>{item.agent_name || "—"}</td>
                       <td>
-                        <Link className="cf-id" href={`/bids/${item.id}`}>{item.solicitation_number || item.bid_id}</Link>
-                        <div className="cf-meta">{item.title || "—"}</div>
+                        <Link href={`/bids/${item.id}`} style={{ textDecoration: "none" }}>
+                          <span className="cf-id">{item.solicitation_number || item.bid_id}</span>
+                          <span className="cf-meta" style={{ display: "block" }}>{item.title || "—"}</span>
+                        </Link>
                       </td>
                       <td>{item.portal || "—"}</td>
                       <td className="cf-num">{priceMoney(item.submitted_price)}</td>
@@ -869,6 +1047,7 @@ export default function DashboardPage() {
           </div>
         </section>
 
+        {/* Not on the manager design: status activity, pickup rules, employee drill-down, recent opportunities.
         <section className="cf-split">
           <div className="cf-card cf-split-main">
             <div className="cf-card-hd">
@@ -926,6 +1105,7 @@ export default function DashboardPage() {
           <h2 className="cf-h2">Recent opportunities</h2>
           <DashboardTable />
         </section>
+        */}
       </main>
     </>
   );

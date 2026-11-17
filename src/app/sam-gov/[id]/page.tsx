@@ -13,7 +13,7 @@ import { format, parseISO } from 'date-fns';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
-import { FileText } from 'lucide-react';
+import { Check, FileText } from 'lucide-react';
 import DOMPurify from 'dompurify';
 import { getStoredUser, type AuthUser } from '@/lib/auth';
 import { PageBand, PageMain } from '@/components/design/PageFrame';
@@ -307,9 +307,10 @@ export default function SamGovOpportunityPage() {
     return parts.join(', ') || 'N/A';
   };
 
-  const formattedClosingDate = opportunity.closingDate
-    ? format(parseISO(opportunity.closingDate), 'PPP HH:mm zzz')
-    : 'N/A';
+  const closingDate = opportunity.closingDate ? parseISO(opportunity.closingDate) : null;
+  const closingDays = closingDate ? Math.ceil((closingDate.getTime() - Date.now()) / 86400000) : null;
+  const formattedClosingDate = closingDate ? format(closingDate, 'MMM d, yyyy') : '—';
+  const closingLabel = closingDays == null ? formattedClosingDate : `${formattedClosingDate} · ${closingDays} day${closingDays === 1 ? '' : 's'}`;
   const ownedByCurrentAgent = Boolean(
     currentUser?.role === 'agent' &&
     availability &&
@@ -324,16 +325,115 @@ export default function SamGovOpportunityPage() {
 
   return (
     <>
-      <PageBand
-        eyebrow={`OPPORTUNITIES / ${opportunity.solicitationNumber || opportunity.id}`}
-        title={opportunity.title || 'Untitled opportunity'}
-        lead={`${opportunity.solicitationNumber || opportunity.id} · ${opportunity.office || opportunity.department || 'SAM.gov'} · SAM.GOV`}
-        actions={opportunity.link && opportunity.link !== '#' ? <a className="cf-btn cf-btn-secondary" href={opportunity.link} target="_blank" rel="noreferrer">View on SAM.gov</a> : <button type="button" className="cf-btn cf-btn-secondary" onClick={() => router.back()}>Back</button>}
-      />
-      <PageMain>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
-          <span className="cf-chip">{availabilityPresentation?.label || 'Unclaimed'}</span>
+      <section className="cf-band">
+        <div className="cf-wrap cf-band-in">
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, flex: "1 1 320px", minWidth: 0 }}>
+            <nav aria-label="Breadcrumb" className="cf-mono" style={{ fontSize: 12, color: "var(--cf-text-3)", display: "flex", gap: 8, letterSpacing: "0.04em" }}>
+              <Link href="/opportunities">OPPORTUNITIES</Link>
+              <span aria-hidden="true">/</span>
+              <span>{opportunity.solicitationNumber || opportunity.id}</span>
+            </nav>
+            <h1 className="cf-h1" style={{ marginTop: 4, overflowWrap: "anywhere" }}>{opportunity.title || "Untitled opportunity"}</h1>
+            <div className="cf-mono" style={{ fontSize: 12, color: "var(--cf-text-2)", letterSpacing: "0.03em", overflowWrap: "anywhere" }}>{opportunity.solicitationNumber || opportunity.id} · {opportunity.office || opportunity.department || "SAM.gov"} · SAM.GOV</div>
+          </div>
+          <div style={{ display: "flex", flexWrap: "nowrap", gap: 12, alignItems: "center", flex: "none", alignSelf: "flex-end", marginLeft: "auto" }}>
+            <span className={`cf-pill ${availabilityPresentation?.state === "claimed" ? "cf-pill-sup" : availabilityPresentation?.state === "terminal" ? "cf-pill-pool" : "cf-pill-pool"}`} style={{ alignSelf: "center" }}>
+              {ownedByCurrentAgent ? "Yours · finding supplier" : availabilityPresentation?.state === "available" || !availabilityPresentation ? "Unclaimed" : availabilityPresentation.label}
+            </span>
+            {opportunity.link && opportunity.link !== "#" ? <a className="cf-btn cf-btn-secondary" href={opportunity.link} target="_blank" rel="noreferrer" style={{ minHeight: 40 }}>View on SAM.gov ↗</a> : <button type="button" className="cf-btn cf-btn-secondary" onClick={() => router.back()}>Back</button>}
+          </div>
         </div>
+      </section>
+      <PageMain>
+        <div className="cf-split" style={{ alignItems: "flex-start" }}>
+          <div className="cf-split-main" style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+            <section className="cf-facts" aria-label="Key facts">
+              <div className="cf-fact"><span className="cf-lbl">Response due</span><b style={{ color: closingDays != null && closingDays <= 11 ? "#BE123C" : "#0B1220" }}>{closingLabel}</b></div>
+              <div className="cf-fact"><span className="cf-lbl">Quantity</span><b className="cf-mono">{"quantity" in opportunity && (opportunity as { quantity?: string | null }).quantity ? (opportunity as { quantity?: string | null }).quantity : "—"}</b></div>
+              <div className="cf-fact"><span className="cf-lbl">Notice type</span><b>{opportunity.type || "—"}</b></div>
+              <div className="cf-fact"><span className="cf-lbl">Set-aside</span><b>{opportunity.setAside || "—"}</b></div>
+              <div className="cf-fact"><span className="cf-lbl">NAICS</span><b className="cf-mono">{opportunity.ncode || "—"}</b></div>
+              <div className="cf-fact"><span className="cf-lbl">Delivery</span><b>{renderLocation(opportunity.location)}</b></div>
+            </section>
+            <section className="cf-card" aria-labelledby="desc-h" style={{ padding: "22px 24px", display: "flex", flexDirection: "column", gap: 16 }}>
+              <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
+                <h2 id="desc-h" className="cf-h2">Description</h2>
+                <span className="cf-mono cf-meta">FROM SAM.GOV</span>
+              </div>
+              {descriptionLoading ? <Skeleton className="h-16 w-full" /> : <div style={{ fontSize: 15, lineHeight: 1.65, color: "var(--cf-text-2)" }}><DescriptionBlock content={detailedDescription || "No description available."} isHtml={descriptionIsHtml} /></div>}
+              {opportunity.resourceLinks && opportunity.resourceLinks.length > 0 ? (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(260px, 100%), 1fr))", gap: 10 }}>
+                  {opportunity.resourceLinks.map((resourceLink, idx) => {
+                    const isObject = typeof resourceLink === "object" && resourceLink !== null;
+                    const linkUrl = isObject ? resourceLink.link : resourceLink;
+                    const linkName = isObject ? resourceLink.name : getFileName(resourceLink);
+                    return (
+                      <a key={idx} className="cf-att" href={linkUrl} target="_blank" rel="noreferrer">
+                        <FileText size={20} strokeWidth={1.6} color="#0891B2" />
+                        <span style={{ flex: 1 }}><span style={{ display: "block", fontWeight: 500 }}>{linkName || `Attachment ${idx + 1}`}</span><span className="cf-mono cf-meta">OPENS ON SAM.GOV</span></span>
+                      </a>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </section>
+            <section className="cf-card" aria-labelledby="past-h" style={{ overflow: "hidden" }}>
+              <div style={{ padding: "20px 24px 14px" }}>
+                <h2 id="past-h" className="cf-h2">Your company&apos;s past bids on similar items</h2>
+                <p className="cf-sub">Use these to sanity-check your price</p>
+              </div>
+              <table className="cf-table">
+                <thead><tr><th>Solicitation</th><th>Agent</th><th className="cf-num">Price</th><th className="cf-num">Markup</th><th>Outcome</th></tr></thead>
+                <tbody><tr><td colSpan={5}>Similar bids are not in this feed.</td></tr></tbody>
+              </table>
+            </section>
+          </div>
+          <aside className="cf-split-side" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <section className={`cf-card ${availabilityPresentation?.state === "terminal" ? "cf-state-bad" : availabilityPresentation?.state === "claimed" ? "cf-state-warn" : "cf-state-hero"}`} style={{ padding: 22, display: "flex", flexDirection: "column", gap: 16 }}>
+              <div className="cf-lbl" style={{ color: availabilityPresentation?.state === "claimed" ? "#0E7490" : availabilityPresentation?.state === "terminal" ? "#BE123C" : "#0E7490" }}>
+                {availabilityPresentation?.state === "claimed" ? "Already picked up" : availabilityPresentation?.state === "terminal" ? "Closed in the company workflow" : "Unclaimed · no one on your team has this"}
+              </div>
+              <h2 className="cf-h2" style={{ fontSize: 22 }}>{availabilityPresentation?.state === "claimed" ? (ownedByCurrentAgent ? "This bid is yours" : "Someone else has this bid") : availabilityPresentation?.state === "terminal" ? "This bid is closed" : "Pick up this bid"}</h2>
+              {availabilityPresentation?.state === "available" || !availabilityPresentation ? (
+                <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 10 }}>
+                  {["It's reserved for you and hidden from teammates' pickup lists.", "Next step is finding a supplier and adding their quote.", "Bids with no progress for 3 days are flagged to your manager."].map((line) => (
+                    <li key={line} style={{ display: "flex", gap: 10, fontSize: 14, color: "var(--cf-text-2)", lineHeight: 1.45 }}><Check size={16} strokeWidth={2} color="#0891B2" style={{ flex: "none", marginTop: 2 }} />{line}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p style={{ margin: 0, fontSize: 14, color: "var(--cf-text-2)" }}>{availabilityPresentation.label}. {availabilityPresentation.state === "terminal" ? "It cannot be picked up again." : "Duplicate pickup is blocked."}</p>
+              )}
+              {ownedByCurrentAgent ? <Link className="cf-btn cf-btn-primary" href={`/sam-gov/${id}/bid-summary`} style={{ width: "100%" }}>Continue this bid</Link> : null}
+              {(availabilityPresentation?.state === "available" || !availabilityPresentation) && currentUser ? (
+                <>
+                  <label className="cf-field">Expected submitted price
+                    <input className="cf-input" aria-label="Expected submitted price" type="number" min="0" step="0.01" value={expectedBidValue} onChange={(event) => setExpectedBidValue(event.target.value)} placeholder="Per-bid ceiling check" />
+                  </label>
+                  {currentUser.role === "admin" ? (
+                    <label className="cf-field">Assign to agent
+                      <select className="cf-select" value={selectedAgentId} onChange={(event) => setSelectedAgentId(event.target.value)}>
+                        <option value="">Select agent</option>
+                        {agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.full_name}</option>)}
+                      </select>
+                    </label>
+                  ) : null}
+                  {currentUser.role === "admin" ? (
+                    <label className="cf-check"><input type="checkbox" checked={overrideLimits} onChange={(event) => setOverrideLimits(event.target.checked)} />Override agent limits</label>
+                  ) : null}
+                  {currentUser.role === "admin" && overrideLimits ? <input className="cf-input" value={overrideReason} onChange={(event) => setOverrideReason(event.target.value)} placeholder="Required audit reason" /> : null}
+                  <button className="cf-btn cf-btn-primary" type="button" onClick={claimOpportunity} disabled={claimLoading} style={{ width: "100%" }}>{claimLoading ? "Picking up…" : currentUser.role === "admin" ? "Assign this bid" : "Pick up this bid"}</button>
+                </>
+              ) : null}
+              {!currentUser ? <p className="cf-meta">Sign in to pick up this opportunity.</p> : null}
+              {claimError ? <p style={{ margin: 0, color: "#BE123C", fontSize: 13 }}>{claimError}</p> : null}
+            </section>
+            <section className="cf-card" style={{ padding: "18px 20px", display: "flex", flexDirection: "column", gap: 10 }}>
+              <div className="cf-lbl">Activity</div>
+              <div style={{ fontSize: 13, color: "var(--cf-text-2)", lineHeight: 1.6 }}>{opportunity.postedDate ? `Posted ${format(parseISO(opportunity.postedDate), "MMM d")}` : "Posted date is not in this feed."}</div>
+            </section>
+          </aside>
+        </div>
+        {/* Previous detail fields, kept so the extra company and assignment controls can be restored.
         <Card className="cf-card border-0 shadow-none">
           <CardContent className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-4">
@@ -402,7 +502,7 @@ export default function SamGovOpportunityPage() {
               )}
             </div>
 
-            {/* Attachments Section */}
+            Attachments Section
             {opportunity.resourceLinks && opportunity.resourceLinks.length > 0 && (
               <div className="md:col-span-2 pt-4 border-t mt-4">
                 <Label className="text-xl font-semibold text-primary mb-3 block">
@@ -473,6 +573,7 @@ export default function SamGovOpportunityPage() {
             </div>
           </CardContent>
         </Card>
+        */}
       </PageMain>
     </>
   );
