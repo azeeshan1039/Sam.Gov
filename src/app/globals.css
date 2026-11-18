@@ -733,6 +733,7 @@ a.cf-id:hover,
 .cf-search {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 10px;
   padding: 6px;
   border-radius: 14px;
@@ -743,7 +744,9 @@ a.cf-id:hover,
 .cf-search-input {
   flex: 1;
   width: 100%;
+  height: 48px;
   min-height: 48px;
+  max-height: 48px;
   padding: 0 16px 0 46px;
   border: 0;
   border-radius: 10px;
@@ -753,7 +756,7 @@ a.cf-id:hover,
   box-sizing: border-box;
 }
 .cf-search-input:focus { outline: none; }
-.cf-search-portal { flex: 1 1 180px; width: auto; min-height: 48px; background: var(--cf-surface-2); }
+.cf-search-portal { flex: 1 1 180px; width: auto; height: 48px; min-height: 48px; max-height: 48px; background: var(--cf-surface-2); }
 .cf-field { display: flex; flex-direction: column; gap: 6px; }
 .cf-field label, .cf-field .cf-lab { font-size: 13px; font-weight: 500; color: var(--cf-text); }
 .cf-check { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--cf-text); min-height: 32px; }

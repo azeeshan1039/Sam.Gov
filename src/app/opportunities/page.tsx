@@ -227,7 +227,7 @@ export default function OpportunitiesPage() {
   return (
     <>
       <section className="cf-band">
-        <div className="cf-wrap cf-band-in" style={{ alignItems: "stretch", flexDirection: "column" }}>
+        <div className="cf-wrap cf-band-in" style={{ alignItems: "stretch", flexDirection: "column", flexWrap: "nowrap" }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap", alignItems: "flex-end" }}>
             <div>
               <div className="cf-eyebrow">SAM.gov · SEPTA · Unison · Nassau County</div>
@@ -250,7 +250,7 @@ export default function OpportunitiesPage() {
             }}
           >
             <label htmlFor="opp-q" className="sr-only">Search opportunities</label>
-            <div style={{ flex: "999 1 420px", position: "relative", display: "flex" }}>
+            <div style={{ flex: "999 1 420px", position: "relative", display: "flex", height: 48, alignItems: "center" }}>
               <Search size={20} strokeWidth={1.75} color="#0891B2" aria-hidden style={{ position: "absolute", left: 14, top: 14 }} />
               <input id="opp-q" className="cf-search-input" type="search" placeholder="Search by keyword, solicitation number or NSN" value={draftQuery} onChange={(event) => setDraftQuery(event.target.value)} />
             </div>
