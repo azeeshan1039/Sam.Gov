@@ -124,7 +124,7 @@ export default function TeamPage() {
     }
   };
 
-  if (!user || loading) return <div className="space-y-5 p-6 lg:p-8"><Skeleton className="h-9 w-52" /><Skeleton className="h-48 w-full" /><Skeleton className="h-72 w-full" /></div>;
+  if (!user || loading) return <PageMain><Skeleton className="h-9 w-52" /><Skeleton className="h-48 w-full" /><Skeleton className="h-72 w-full" /></PageMain>;
 
   return (
     <>

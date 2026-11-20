@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Award, Calendar, Check, ChevronDown, Clock, Download, Search, TriangleAlert } from "lucide-react";
+import { ArrowRight, Award, Calendar, Check, Clock, Search, TriangleAlert } from "lucide-react";
 import { getStoredUser, getUserDisplayName } from "@/lib/auth";
 import { formatMoney, type StatsPayload } from "@/lib/stats";
 import type { PipelineItem } from "@/lib/pipeline";
@@ -170,6 +170,8 @@ interface PulsePeriod {
   date_to: string;
   picked_up: number;
   submitted: number;
+  submitted_value?: number;
+  gross_profit?: number;
 }
 
 export default function DashboardPage() {
@@ -241,7 +243,7 @@ export default function DashboardPage() {
             fetch('/api/backend/auth/team', { cache: 'no-store' }),
             fetch('/api/backend/pipeline/activity?limit=20&offset=0', { cache: 'no-store' }),
             fetch('/api/backend/pipeline/dashboard-pulse', { cache: 'no-store' }),
-            fetch(`/api/backend/stats?${statsQuery.toString()}`, { cache: 'no-store' }),
+            Promise.resolve().then(() => fetch(`/api/backend/stats?${statsQuery.toString()}`, { cache: 'no-store' })).catch(() => null),
           ]);
           if (flagsResponse.ok) {
             const flagsData = await flagsResponse.json();
@@ -263,7 +265,7 @@ export default function DashboardPage() {
             const pulseData = await pulseResponse.json();
             setPeriods(pulseData.periods || []);
           }
-          if (statsResponse.ok) {
+          if (statsResponse?.ok) {
             const statsData = await statsResponse.json();
             setCompanyStats(statsData);
           }
@@ -297,7 +299,7 @@ export default function DashboardPage() {
   }, [authChecked, companyId, role, userId]);
 
   useEffect(() => {
-    if (!authChecked || (role !== "admin" && role !== "agent")) return;
+    if (!authChecked || role !== "admin") return;
     let cancelled = false;
     const loadLeaderboard = async () => {
       try {
@@ -434,10 +436,19 @@ export default function DashboardPage() {
   const agentProfit = sumNumbers(agentSubmitted.map((item) => item.gross_profit));
   const agentMarkups = agentSubmitted.map((item) => item.markup_percent).filter((value): value is number => value != null);
   const agentMarkup = agentMarkups.length ? agentMarkups.reduce((total, value) => total + value, 0) / agentMarkups.length : null;
-  const myRank = byAmount.find((row) => row.user_id === userId);
   const activeBids = myBidItems.filter((item) => ["Finding Supplier", "Waiting Approval", "Approved for Submission", "Bid No Approved"].includes(item.internal_status));
   const weeks = weekBuckets(myBidItems);
 
+  const negotiationSummary = <section className="cf-card p-5">
+    <h2 className="cf-h2">Negotiations</h2>
+    {stats && <dl className="cf-facts">
+      {[["Active negotiations", stats.active_negotiations], ["Total sessions", stats.total_sessions],
+        ["Suppliers engaged", stats.total_suppliers_engaged], ["Suppliers responded", stats.suppliers_responded],
+        ["Negotiation savings", stats.total_savings == null ? "—" : formatMoney(stats.total_savings)]].map(([label, value]) =>
+        <div className="cf-fact" key={label}><dt className="cf-lbl">{label}</dt><dd>{value ?? "—"}</dd></div>)}
+    </dl>}
+    <Link className="cf-link" href="/negotiations">Open negotiations</Link>
+  </section>;
   if (role === "agent") {
     return (
       <>
@@ -469,7 +480,6 @@ export default function DashboardPage() {
                 <span className="cf-mono" style={{ fontSize: 14, color: "var(--cf-text-2)" }}>/ {agentGoal || "—"} goal</span>
               </div>
               <div className="cf-bar"><span style={{ width: `${agentPct}%` }} /></div>
-              <div className="cf-meta">{myRank ? `Rank #${myRank.rank} of ${byAmount.length} on the team` : "Team rank loads with the leaderboard"}</div>
             </div>
             <div className="cf-card cf-kpi">
               <div className="cf-lbl">Submitted value</div>
@@ -515,7 +525,7 @@ export default function DashboardPage() {
                       <div style={{ flex: "1 1 320px", minWidth: 0, display: "flex", flexDirection: "column", gap: 6 }}>
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
                           <span className={`cf-pill ${waiting ? "cf-pill-app" : "cf-pill-sup"}`}>{item.internal_status}</span>
-                          <span className="cf-id-dim">{item.solicitation_number || item.bid_id} · {(item.portal || "SAM.GOV").toUpperCase()}</span>
+                          <span className="cf-id-dim">{item.solicitation_number || item.bid_id} · {(item.portal || "—").toUpperCase()}</span>
                         </div>
                         <Link href={`/bids/${item.id}`} style={{ font: "500 17px var(--cf-display)", color: "var(--cf-text)", textDecoration: "none" }}>{item.title || "Untitled bid"}</Link>
                         <div className="cf-meta" style={{ fontSize: 13 }}>{waiting ? `Sent for approval${item.approved_by_name ? ` to ${item.approved_by_name}` : ""}` : "Next step: add a supplier quote"}</div>
@@ -580,32 +590,6 @@ export default function DashboardPage() {
               </div>
               <WeeklyBars weeks={weeks} goal={5} />
             </div>
-            <div className="cf-card" style={{ flex: "1 1 420px", minWidth: 0, display: "flex", flexDirection: "column" }}>
-              <div className="cf-card-hd" style={{ display: "block" }}>
-                <h2 className="cf-h2">Team leaderboard</h2>
-                <p className="cf-sub">{monthLabel} · by submitted value</p>
-              </div>
-              {byAmount.length === 0 ? (
-                <p className="cf-meta" style={{ padding: "0 24px 20px" }}>No submitted agent bids for this month.</p>
-              ) : (
-                <ol style={{ listStyle: "none", margin: 0, padding: "0 24px 12px" }}>
-                  {byAmount.map((entry) => {
-                    const mine = entry.user_id === userId;
-                    const letters = entry.name.trim().split(/\s+/).filter(Boolean);
-                    const mark = letters.length >= 2 ? `${letters[0][0]}${letters[1][0]}`.toUpperCase() : (letters[0] || "?").slice(0, 2).toUpperCase();
-                    return (
-                      <li key={entry.user_id} style={{ display: "flex", alignItems: "center", gap: 12, padding: mine ? 12 : "12px 0", margin: mine ? "4px -12px 0" : undefined, marginTop: mine ? 4 : 6, background: mine ? "rgba(34,211,238,.07)" : undefined, border: mine ? "1px solid rgba(34,211,238,.3)" : undefined, borderTop: mine ? undefined : "1px solid var(--cf-line)", borderRadius: mine ? 10 : undefined }}>
-                        <span className="cf-mono" style={{ width: 24, fontWeight: mine ? 600 : 400, color: mine ? "#0E7490" : "var(--cf-text-3)" }}>{String(entry.rank).padStart(2, "0")}</span>
-                        <span className={`cf-av ${mine ? "cf-av-me" : ""}`} style={mine ? { width: 30, height: 30, fontSize: 11 } : { width: 30, height: 30, fontSize: 11, background: "var(--cf-surface-3)", color: "var(--cf-text-2)", border: "1px solid var(--cf-line-2)" }}>{mark}</span>
-                        <span style={{ flex: 1, fontWeight: mine ? 500 : 400 }}>{entry.name}{mine ? " (you)" : ""}</span>
-                        <span className="cf-meta" style={{ fontSize: 13 }}>{entry.bid_count} bids</span>
-                        <span className="cf-mono" style={{ width: 84, textAlign: "right", fontWeight: mine ? 500 : 400 }}>{compactMoney(entry.amount)}</span>
-                      </li>
-                    );
-                  })}
-                </ol>
-              )}
-            </div>
           </section>
 
           <section className="cf-card" aria-labelledby="sugg-h" style={{ display: "flex", flexDirection: "column" }}>
@@ -635,12 +619,17 @@ export default function DashboardPage() {
               })}
             </div>
           </section>
+          {negotiationSummary}
+        <section className="cf-card" style={{ padding: "20px 24px" }}>
+          <h2 className="cf-h2">Recent opportunities</h2>
+          <DashboardTable />
+        </section>
         </main>
       </>
     );
   }
 
-  const pulseCards = periods.length ? periods : [
+  const pulseCards: PulsePeriod[] = periods.length ? periods : [
     { key: "today" as const, label: "Today", date_from: "", date_to: "", picked_up: 0, submitted: 0 },
     { key: "week" as const, label: "This week", date_from: "", date_to: "", picked_up: 0, submitted: 0 },
     { key: "month" as const, label: "This month", date_from: "", date_to: "", picked_up: 0, submitted: 0 },
@@ -724,14 +713,12 @@ export default function DashboardPage() {
                 <button key={key} type="button" className={`cf-seg${dashView === key ? " cf-seg-on" : ""}`} aria-pressed={dashView === key} onClick={() => setDashView(key)}>{label}</button>
               ))}
             </div>
-            <button className="cf-btn cf-btn-secondary" type="button">
+            <span className="cf-meta inline-flex items-center gap-2">
               <Calendar size={16} strokeWidth={1.75} />
               {monthLabel}
-              <ChevronDown size={16} strokeWidth={1.75} />
-            </button>
+            </span>
             <Link className="cf-btn cf-btn-secondary" href="/stats">
-              <Download size={16} strokeWidth={1.75} />
-              Export
+              Stats
             </Link>
           </div>
         </div>
@@ -754,13 +741,13 @@ export default function DashboardPage() {
           </div>
           <div className="cf-card cf-kpi">
             <div className="cf-lbl">Gross profit</div>
-            <div className="cf-kpi-v">—</div>
-            <div className="cf-meta">Not returned by the current stats API</div>
+            <div className="cf-kpi-v">{monthProfit == null ? "—" : formatMoney(monthProfit)}</div>
+            <div className="cf-meta">Submitted bids this month</div>
           </div>
           <div className="cf-card cf-kpi">
             <div className="cf-lbl">Avg. markup</div>
-            <div className="cf-kpi-v">—</div>
-            <div className="cf-meta">Not returned by the current stats API</div>
+            <div className="cf-kpi-v">{avgMarkup == null ? "—" : avgMarkup.toFixed(1) + "%"}</div>
+            <div className="cf-meta">Submitted bids this month</div>
           </div>
           <div className="cf-card cf-kpi">
             <div className="cf-lbl">Win rate · 90 days</div>
@@ -814,10 +801,10 @@ export default function DashboardPage() {
                   <div>
                     <b>{duplicateFlags.length ? `${duplicateFlags.length} unresolved duplicate flag${duplicateFlags.length === 1 ? "" : "s"}` : "No unresolved duplicate flags"}</b>
                     <p>
-                      {duplicateFlags.slice(0, 3).map((flag) => (
-                        <Link key={flag.id} href={`/work-management#duplicate-${flag.id}`} className="cf-link" style={{ marginRight: 8 }}>{flag.solicitation_number}</Link>
+                      {duplicateFlags.slice(0, 4).map((flag) => (
+                        <Link key={flag.id} href={`/work-management#duplicate-${flag.id}`} className="cf-link" style={{ marginRight: 8 }}><span>{flag.solicitation_number}</span> · {flag.attempted_by?.full_name} → {flag.existing_agent?.full_name}</Link>
                       ))}
-                      {duplicateFlags.length ? `${duplicateFlags[0].attempted_by?.full_name || "Someone"} attempted work owned by ${duplicateFlags[0].existing_agent?.full_name || "another agent"}` : "Checked with the latest sync"}
+
                     </p>
                     <Link className="cf-link" href="/work-management#duplicates">Review all</Link>
                   </div>
@@ -827,20 +814,23 @@ export default function DashboardPage() {
                   <div>
                     <b>{staleFlags.length ? `${staleFlags.length} stale bid${staleFlags.length === 1 ? "" : "s"}` : "No stale bids"}</b>
                     <p>
-                      {staleFlags.slice(0, 3).map((flag) => (
-                        <Link key={flag.claim_id} href={flag.href || `/work-management#stale-${flag.claim_id}`} className="cf-link" style={{ marginRight: 8 }}>{flag.solicitation_number || flag.title}</Link>
+                      {staleFlags.slice(0, 4).map((flag) => (
+                        <Link key={flag.claim_id} href={flag.href || `/work-management#stale-${flag.claim_id}`} className="cf-link" style={{ marginRight: 8 }}><span>{flag.solicitation_number || flag.title}</span> · {flag.assignee?.full_name} · {flag.last_status_at}</Link>
                       ))}
                       {staleFlags.length ? "No status change for 3 days" : "Clears when a bid status changes"}
                     </p>
                     <Link className="cf-link" href="/work-management#stale-bids">Review all</Link>
                   </div>
                 </li>
-                <li className="cf-attn">
+                <li id="award-flags" className="cf-attn">
                   <span className="cf-ico cf-ico-info"><Award size={18} strokeWidth={1.75} /></span>
                   <div>
                     <b>{awardFlags.length ? `${awardFlags.length} award checks overdue` : "Award checks"}</b>
                     <p>{awardFlags.length ? "90-day checks with no outcome logged" : "No submitted bids are past 90 days without an outcome."}</p>
-                    <Link className="cf-link" href="/award-tracking">Open award tracking</Link>
+                    {awardFlags.slice(0, 4).map((flag) => (
+                      <div key={flag.bid_id}><Link className="cf-link" href={flag.href}>{flag.solicitation_number || flag.display_bid_id}</Link><p>{flag.agent_name} · submitted {flag.submitted_on} · {flag.days_since_submission} days, no award outcome logged</p></div>
+                    ))}
+                    <Link className="cf-link" href="/award-tracking?checkpoint_state=flagged">Open Award Tracking</Link>
                   </div>
                 </li>
                 {duplicateFlags.length === 0 && staleFlags.length === 0 ? (
@@ -863,7 +853,7 @@ export default function DashboardPage() {
               <h2 id="pipe-h" className="cf-h2">Pipeline by stage</h2>
               <p className="cf-sub">Where every company-tracked opportunity sits right now</p>
             </div>
-            <Link className="cf-link" href="/pipeline">Open pipeline <ArrowRight size={16} strokeWidth={1.75} /></Link>
+            <Link className="cf-link" href="/bid-history">Open pipeline <ArrowRight size={16} strokeWidth={1.75} /></Link>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(200px, 100%), 1fr))", gap: 12 }}>
             <div className="cf-stage">
@@ -899,7 +889,6 @@ export default function DashboardPage() {
           </div>
         </section>
 
-        {/* Company pulse is not in the manager design. Kept here so it can be restored.
         {dashView === "overview" && (
           <section>
             <h2 className="cf-h2" style={{ marginBottom: 12 }}>Company pulse</h2>
@@ -911,12 +900,12 @@ export default function DashboardPage() {
                     <div><div className="cf-meta">Picked up</div><div className="cf-kpi-v" style={{ fontSize: 28 }}>{loading ? "—" : period.picked_up}</div></div>
                     <div><div className="cf-meta">Submitted</div><div className="cf-kpi-v" style={{ fontSize: 28 }}>{loading ? "—" : period.submitted}</div></div>
                   </div>
+                  <div className="cf-meta mt-2">Submitted value {period.submitted_value == null ? "—" : formatMoney(period.submitted_value)} · Gross profit {period.gross_profit == null ? "—" : formatMoney(period.gross_profit)}</div>
                 </div>
               ))}
             </div>
           </section>
         )}
-        */}
 
         {(dashView === "overview" || dashView === "agent") && (
           <section className="cf-split">
@@ -937,7 +926,7 @@ export default function DashboardPage() {
                 <Link className="cf-link" href="/agent-bid-data">Agent bid data</Link>
               </div>
             </div>
-            <div style={{ overflowX: "auto" }}>
+            <div tabIndex={0} style={{ overflowX: "auto" }}>
                 <table className="cf-table">
                   <thead>
                     <tr>
@@ -965,7 +954,7 @@ export default function DashboardPage() {
                           <td>
                             <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
                               <span className={`cf-av ${entry.rank === 1 ? "cf-av-me" : ""}`} style={entry.rank === 1 ? { width: 30, height: 30, fontSize: 11 } : { width: 30, height: 30, fontSize: 11, background: "var(--cf-surface-3)", color: "var(--cf-text-2)", border: "1px solid var(--cf-line-2)" }}>{mark}</span>
-                              <span style={{ fontWeight: 500 }}>{entry.name}</span>
+                              <Link className="cf-link" href={"/agent-bid-data?agent_user_id=" + entry.user_id}>{entry.name}</Link>
                             </span>
                           </td>
                           <td>
@@ -988,6 +977,12 @@ export default function DashboardPage() {
           </section>
         )}
 
+        {dashView !== "portal" && <section className="cf-card p-5">
+          <h2 className="cf-h2">Agent leaderboard by bid count</h2>
+          {byCount.length ? <ol className="mt-3 space-y-2">{byCount.map((entry) => <li key={entry.user_id}>
+            {entry.rank}. <Link className="cf-link" href={"/agent-bid-data?agent_user_id=" + entry.user_id}>{entry.name}</Link> · {entry.bid_count} bids
+          </li>)}</ol> : <p className="cf-meta">No submissions for this period.</p>}
+        </section>}
         {dashView === "portal" && portalMix}
 
         <section className="cf-split">
@@ -996,7 +991,7 @@ export default function DashboardPage() {
               <h2 className="cf-h2">Latest submissions</h2>
               <Link className="cf-link" href="/bid-history">All bid history</Link>
             </div>
-            <div style={{ overflowX: "auto" }}>
+            <div tabIndex={0} style={{ overflowX: "auto" }}>
               <table className="cf-table">
                 <thead>
                   <tr>
@@ -1047,7 +1042,6 @@ export default function DashboardPage() {
           </div>
         </section>
 
-        {/* Not on the manager design: status activity, pickup rules, employee drill-down, recent opportunities.
         <section className="cf-split">
           <div className="cf-card cf-split-main">
             <div className="cf-card-hd">
@@ -1055,7 +1049,7 @@ export default function DashboardPage() {
               <Link className="cf-link" href="/activity-log">View all activity</Link>
             </div>
             {statusActivity.length ? (
-              <div style={{ overflowX: "auto" }}>
+              <div tabIndex={0} style={{ overflowX: "auto" }}>
                 <table className="cf-table">
                   <thead><tr><th>Solicitation</th><th>Change</th><th>By</th><th>When</th></tr></thead>
                   <tbody>
@@ -1101,11 +1095,12 @@ export default function DashboardPage() {
           ) : <p className="cf-meta">No agents configured.</p>}
         </section>
 
+
+        {negotiationSummary}
         <section className="cf-card" style={{ padding: "20px 24px" }}>
           <h2 className="cf-h2">Recent opportunities</h2>
           <DashboardTable />
         </section>
-        */}
       </main>
     </>
   );

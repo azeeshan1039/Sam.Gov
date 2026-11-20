@@ -1,4 +1,26 @@
-@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap");
+@font-face {
+  font-family: 'Geist';
+  font-weight: 400 600;
+  font-style: normal;
+  font-display: swap;
+  src: url('/fonts/geist/geist.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Geist Mono';
+  font-weight: 400 600;
+  font-style: normal;
+  font-display: swap;
+  src: url('/fonts/geistmono/geistmono.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Space Grotesk';
+  font-weight: 400 600;
+  font-style: normal;
+  font-display: swap;
+  src: url('/fonts/spacegrotesk/spacegrotesk.ttf') format('truetype');
+}
 
 @tailwind base;
 @tailwind components;
@@ -9,7 +31,7 @@
     --background: 0 0% 100%;
     --foreground: 222.2 47.4% 11.2%;
     --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 56.9%;
+    --muted-foreground: 215.4 16.3% 41%;
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 47.4% 11.2%;
     --card: 0 0% 100%;
@@ -22,7 +44,7 @@
     --secondary-foreground: 222.2 47.4% 11.2%;
     --accent: 180 100% 25%;
     --accent-foreground: 0 0% 100%;
-    --destructive: 0 84.2% 60.2%;
+    --destructive: 0 72% 42%;
     --destructive-foreground: 0 0% 98%;
     --ring: 222.2 84% 4.9%;
     --radius: 0.5rem;
@@ -420,6 +442,35 @@ body {
   box-shadow: 0 0 24px rgba(34, 211, 238, 0.35);
 }
 
+.cf-workspace {
+  overflow-wrap: anywhere;
+}
+
+.cf-workspace [data-ui="button"] {
+  border-radius: 10px;
+}
+
+.cf-workspace [data-ui="button"][data-variant="default"] {
+  background: var(--cf-cyan);
+  color: var(--cf-cyan-ink);
+  box-shadow: inset 0 0 0 1px var(--cf-cyan-text);
+}
+
+.cf-workspace [data-ui="button"][data-variant="default"]:hover {
+  background: var(--cf-cyan-hi);
+}
+
+.cf-workspace [data-ui="button"][data-variant="outline"]:hover,
+.cf-workspace [data-ui="button"][data-variant="ghost"]:hover {
+  color: var(--cf-text);
+  background: var(--cf-surface-3);
+}
+
+.cf-workspace [data-ui="button"]:focus-visible {
+  outline: 2px solid var(--cf-cyan);
+  outline-offset: 2px;
+}
+
 .cf-btn-secondary {
   background: rgba(255, 255, 255, 0.02);
   color: var(--cf-text);
@@ -544,7 +595,7 @@ body {
 .cf-split-main { flex: 2 1 640px; min-width: 0; }
 .cf-split-side { flex: 1 1 340px; min-width: 0; }
 
-.cf-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.cf-table { position: relative; width: 100%; border-collapse: collapse; font-size: 14px; }
 .cf-table th {
   text-align: left;
   font: 500 11px/1.3 var(--cf-mono);
@@ -756,7 +807,6 @@ a.cf-id:hover,
   box-sizing: border-box;
 }
 .cf-search-input:focus { outline: none; }
-.cf-search-portal { flex: 1 1 180px; width: auto; height: 48px; min-height: 48px; max-height: 48px; background: var(--cf-surface-2); }
 .cf-field { display: flex; flex-direction: column; gap: 6px; }
 .cf-field label, .cf-field .cf-lab { font-size: 13px; font-weight: 500; color: var(--cf-text); }
 .cf-check { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--cf-text); min-height: 32px; }
@@ -810,13 +860,14 @@ a.cf-id:hover,
   padding: 0;
 }
 .cf-tab-on { color: var(--cf-text); border-bottom-color: var(--cf-cyan-text); }
+.cf-section-tabs { display: flex; flex-wrap: wrap; column-gap: 28px; }
 
 .cf-count {
   font: 500 11px var(--cf-mono);
   padding: 2px 8px;
   border-radius: 999px;
   background: var(--cf-surface-3);
-  color: var(--cf-text-3);
+  color: var(--cf-text-2);
 }
 
 .cf-result {
@@ -872,6 +923,16 @@ a.cf-id:hover,
 
 @media (max-width: 640px) {
   .cf-wrap { padding-left: 16px; padding-right: 16px; }
+  .cf-hdr-in { gap: 0 6px; }
+  .cf-logo { gap: 8px; }
+  .cf-logo-name { font-size: 15px; }
+  .cf-logo-tag { letter-spacing: 0.06em; }
+  .cf-hdr-right { margin-left: auto; gap: 2px; }
+  .cf-hdr-right .cf-icon-btn { width: 40px; }
+  .cf-me { padding-left: 6px; }
+  .cf-me > span:not(.cf-av) { display: none; }
+  .cf-section-tabs { column-gap: 18px; }
+  .cf-section-tabs .cf-tab { min-height: 40px; }
 }
 
 @media (max-width: 900px) {
@@ -890,3 +951,8 @@ a.cf-id:hover,
   --ag-odd-row-background-color: #ffffff;
   --ag-border-color: #e2e8f0;
 }
+
+.cf-all-destinations { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr)); gap: 4px; padding-block: 12px; max-height: 60vh; overflow-y: auto; }
+.cf-main, .cf-card, .cf-wrap { min-width: 0; }
+.cf-main > *, .cf-card { min-width: 0; max-width: 100%; }
+.cf-table-scroll { max-width: 100%; overflow-x: auto; }

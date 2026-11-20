@@ -17,8 +17,25 @@ const AGENT_NAV = [
 ];
 
 const ADMIN_NAV = [
-  ...AGENT_NAV,
+  ...AGENT_NAV.filter((item) => item.href !== "/my-bids"),
   { href: "/work-management", label: "Admin" },
+];
+
+const SHARED_LINKS = [
+  { href: "/contract-awards", label: "Contract awards" },
+  { href: "/negotiations", label: "Negotiations" },
+  { href: "/niche-directory", label: "Niche directory" },
+  { href: "/weekly-submissions", label: "Weekly submissions" },
+  { href: "/settings", label: "Settings" },
+];
+
+const MANAGER_LINKS = [
+  { href: "/hundred-k", label: "$100K+ by employee" },
+  { href: "/approvals", label: "Approvals" },
+  { href: "/bid-history", label: "Bid history & pipeline" },
+  { href: "/activity-log", label: "Activity log" },
+  { href: "/stats", label: "Stats" },
+  { href: "/team", label: "Team" },
 ];
 
 function isActive(pathname: string, href: string) {
@@ -46,6 +63,7 @@ export default function RootShell({ children }: { children: React.ReactNode }) {
   }
 
   const items = user?.role === "admin" ? ADMIN_NAV : AGENT_NAV;
+  const destinations = [...items, ...SHARED_LINKS, ...(user?.role === "admin" ? MANAGER_LINKS : [])];
   const showSearch = pathname === "/" && user?.role === "admin";
 
   const signOut = async () => {
@@ -75,24 +93,28 @@ export default function RootShell({ children }: { children: React.ReactNode }) {
               </span>
             </Link>
             <nav className="cf-navs cf-navs-desktop" aria-label="Primary">
-              {items.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`cf-nav${isActive(pathname, item.href) ? " cf-nav-on" : ""}`}
-                  aria-current={isActive(pathname, item.href) ? "page" : undefined}
-                >
-                  {item.label}
-                </Link>
-              ))}
+              {items.map((item) => {
+                const active = isActive(pathname, item.href);
+                const inAdmin = item.href === "/work-management" && MANAGER_LINKS.some(({ href }) => isActive(pathname, href));
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`cf-nav${active || inAdmin ? " cf-nav-on" : ""}`}
+                    aria-current={active ? "page" : undefined}
+                  >
+                    {item.label}
+                  </Link>
+                );
+              })}
             </nav>
             <div className="cf-hdr-right">
               <button
                 type="button"
-                className="cf-icon-btn cf-menu-btn"
+                className="cf-icon-btn"
                 aria-label={menuOpen ? "Close menu" : "Open menu"}
                 aria-expanded={menuOpen}
-                onClick={() => setMenuOpen((open) => !open)}
+                onClick={() => { setMenuOpen((open) => !open); setAccountOpen(false); }}
               >
                 {menuOpen ? <X size={20} strokeWidth={1.75} /> : <Menu size={20} strokeWidth={1.75} />}
               </button>
@@ -108,7 +130,7 @@ export default function RootShell({ children }: { children: React.ReactNode }) {
               )}
               {user ? (
                 <div style={{ position: "relative" }}>
-                  <button type="button" className="cf-me" aria-expanded={accountOpen} aria-haspopup="menu" onClick={() => setAccountOpen((open) => !open)}>
+                  <button type="button" className="cf-me" aria-label={getUserDisplayName(user)} aria-expanded={accountOpen} aria-haspopup="menu" onClick={() => setAccountOpen((open) => !open)}>
                     <span className="cf-av cf-av-me">{getUserInitials(user)}</span>
                     <span>
                       <span className="cf-me-n">{getUserDisplayName(user)}</span>
@@ -126,8 +148,8 @@ export default function RootShell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
           {menuOpen ? (
-            <nav className="cf-nav-drawer cf-wrap" aria-label="Primary mobile" style={{ flexDirection: "column", paddingBottom: 12 }}>
-              {items.map((item) => (
+            <nav className="cf-all-destinations cf-wrap" aria-label="All pages">
+              {destinations.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}

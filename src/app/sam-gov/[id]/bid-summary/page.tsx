@@ -12,6 +12,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Loading from "@/app/loading";
+import { PageBand, PageMain } from "@/components/design/PageFrame";
 import DOMPurify from "dompurify";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { CollapsibleSection } from "@/components/ui/collapsible-section";
@@ -220,7 +221,7 @@ function renderProductLineItems(items: any): React.ReactNode {
               <span className="text-xs font-medium text-muted-foreground">
                 Product {idx + 1}
               </span>
-              <span className="font-mono text-sm font-semibold text-primary">
+              <span className="min-w-0 font-mono text-sm font-semibold text-primary [overflow-wrap:anywhere]">
                 {String(partNo)}
               </span>
               {item?.brand && (
@@ -821,7 +822,7 @@ export default function BidSummaryPage() {
       };
 
       return (
-        <main className="flex flex-col items-center justify-center min-h-[60vh] p-6 space-y-6">
+        <PageMain className="cf-workspace items-center justify-center min-h-[50vh]">
           <div className="w-full max-w-md space-y-4">
             <div className="flex items-center gap-3">
               <FileText className="h-6 w-6 text-primary animate-pulse" />
@@ -853,7 +854,7 @@ export default function BidSummaryPage() {
               This may take a minute or two. You can leave this page and come back.
             </p>
           </div>
-        </main>
+        </PageMain>
       );
     }
     return <Loading />;
@@ -861,7 +862,7 @@ export default function BidSummaryPage() {
 
   if (error) {
     return (
-      <main className="flex flex-col items-center justify-center p-6">
+      <PageMain className="cf-workspace items-center">
         <Alert variant="destructive" className="w-full max-w-lg">
           <Terminal className="h-4 w-4" />
           <AlertTitle>Error</AlertTitle>
@@ -874,13 +875,13 @@ export default function BidSummaryPage() {
             Go Back
           </Button>
         </Alert>
-      </main>
+      </PageMain>
     );
   }
 
   if (!summary) {
     return (
-      <main className="flex flex-1 items-center justify-center p-6">
+      <PageMain className="cf-workspace items-center">
         <p>Bid summary could not be loaded.</p>
         <Button
           onClick={() => router.back()}
@@ -889,7 +890,7 @@ export default function BidSummaryPage() {
         >
           Go Back
         </Button>
-      </main>
+      </PageMain>
     );
   }
 
@@ -905,42 +906,37 @@ export default function BidSummaryPage() {
     });
 
   return (
-    <main className="container mx-auto p-6 space-y-6 max-w-5xl animate-fadeIn">
-      {/* Top bar: Back + Reanalyze */}
-      <div className="flex items-center justify-between gap-2">
-        <Button onClick={() => router.back()} variant="outline" size="sm" className="gap-2">
-          <ArrowLeft className="h-4 w-4" />
-          Back
-        </Button>
-        {summary?.analysisJobId && (
-          <Button
-            onClick={handleReanalyze}
-            disabled={isReanalyzing}
-            variant="outline"
-            size="sm"
-            className="gap-2"
-            title="Wipe the cached summary, rebuild the vector store, and re-extract every section."
-          >
-            <RefreshCw className={`h-4 w-4 ${isReanalyzing ? "animate-spin" : ""}`} />
-            {isReanalyzing ? "Reanalyzing..." : "Reanalyze"}
-          </Button>
-        )}
-      </div>
-
-      {/* Header */}
-      <div className="space-y-2">
-        <h1 className="text-3xl font-bold flex items-center gap-3">
-          <FileText className="text-primary h-8 w-8" />
-          Contract Bid Summary
-        </h1>
-        {summary.title && (
-          <p className="text-lg text-muted-foreground">{summary.title}</p>
-        )}
-      </div>
-
+    <>
+      <PageBand
+        eyebrow="SAM.gov"
+        title="Contract bid summary"
+        lead={summary.title}
+        actions={
+          <div className="cf-workspace flex flex-wrap gap-2">
+            <Button onClick={() => router.back()} variant="outline" size="sm" className="gap-2">
+              <ArrowLeft className="h-4 w-4" />
+              Back
+            </Button>
+            {summary?.analysisJobId && (
+              <Button
+                onClick={handleReanalyze}
+                disabled={isReanalyzing}
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                title="Wipe the cached summary, rebuild the vector store, and re-extract every section."
+              >
+                <RefreshCw className={`h-4 w-4 ${isReanalyzing ? "animate-spin" : ""}`} />
+                {isReanalyzing ? "Reanalyzing..." : "Reanalyze"}
+              </Button>
+            )}
+          </div>
+        }
+      />
+      <PageMain className="cf-workspace">
       {/* Meta Info Card */}
-      <Card className="bg-primary/5 border-primary/20">
-        <CardContent className="p-4">
+      <Card className="cf-card">
+        <CardContent className="p-5 sm:p-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
             {summary.id && (
               <div>
@@ -978,15 +974,15 @@ export default function BidSummaryPage() {
 
       {/* Description section (always shown when available) */}
       {descriptionHtml && (
-        <Card>
+        <Card className="cf-card">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+            <CardTitle className="cf-h2 flex items-center gap-2">
               <FileText className="h-5 w-5 text-primary" />
               Description
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <DescriptionBlock content={descriptionHtml} isHtml={true} />
+            <div className="min-w-0 overflow-x-auto"><DescriptionBlock content={descriptionHtml} isHtml={true} /></div>
           </CardContent>
         </Card>
       )}
@@ -1004,6 +1000,7 @@ export default function BidSummaryPage() {
                 key={key}
                 title={title}
                 icon={icon}
+                className="cf-card"
                 defaultOpen={isProducts}
               >
                 <div className="pt-2">
@@ -1016,16 +1013,16 @@ export default function BidSummaryPage() {
       )}
 
       {/* Chat Interface */}
-      <Card className="border-2 border-primary/20">
+      <Card className="cf-card">
         <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-xl">
+          <CardTitle className="cf-h2 flex items-center gap-2">
             <MessageCircle className="text-primary h-5 w-5" />
             Contract Assistant
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Messages Container */}
-          <div className="h-96 overflow-y-auto rounded-lg bg-muted/30 p-4 space-y-4 border">
+          <div className="min-h-28 max-h-80 overflow-y-auto rounded-lg bg-muted/30 p-4 space-y-4 border">
             {chatMessages.map((msg: ChatMessage, index: number) => (
               <div
                 key={index}
@@ -1034,7 +1031,7 @@ export default function BidSummaryPage() {
               >
                 <div
                   className={`flex-shrink-0 h-8 w-8 rounded-full flex items-center justify-center ${msg.role === "agent"
-                      ? "bg-primary text-primary-foreground"
+                      ? "bg-[var(--cf-cyan)] text-[var(--cf-cyan-ink)]"
                       : "bg-secondary text-secondary-foreground"
                     }`}
                 >
@@ -1047,7 +1044,7 @@ export default function BidSummaryPage() {
                 <div
                   className={`max-w-[75%] rounded-2xl px-4 py-2.5 ${msg.role === "agent"
                       ? "bg-card border shadow-sm"
-                      : "bg-primary text-primary-foreground"
+                      : "bg-[var(--cf-cyan)] text-[var(--cf-cyan-ink)]"
                     }`}
                 >
                   <p className="text-sm leading-relaxed">{msg.content}</p>
@@ -1056,7 +1053,7 @@ export default function BidSummaryPage() {
             ))}
             {isSendingMessage && (
               <div className="flex gap-3">
-                <div className="flex-shrink-0 h-8 w-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center">
+                <div className="flex-shrink-0 h-8 w-8 rounded-full bg-[var(--cf-cyan)] text-[var(--cf-cyan-ink)] flex items-center justify-center">
                   <Bot className="h-4 w-4" />
                 </div>
                 <div className="bg-card border shadow-sm rounded-2xl px-4 py-2.5">
@@ -1078,9 +1075,10 @@ export default function BidSummaryPage() {
               onKeyDown={handleKeyPress}
               placeholder="Ask about this contract..."
               disabled={isSendingMessage}
-              className="flex-1"
+              className="cf-input min-w-0 flex-1"
+              aria-label="Ask about this contract"
             />
-            <Button
+            <Button aria-label="Send question"
               onClick={handleSendMessage}
               disabled={!chatInput.trim() || isSendingMessage}
               size="icon"
@@ -1094,8 +1092,8 @@ export default function BidSummaryPage() {
 
       {/* Action Buttons */}
       <div className="flex flex-wrap gap-4 justify-end pt-4">
-        <Button asChild variant="outline" size="lg">
-          <Link href={`/sam-gov/${id}/quotenegotiation`}>
+        <Button asChild size="lg">
+          <Link href={"/sam-gov/" + encodeURIComponent(String(id)) + "/quotenegotiation"}>
             <Handshake className="mr-2 h-4 w-4" />
             Quote Negotiation
           </Link>
@@ -1109,6 +1107,7 @@ export default function BidSummaryPage() {
           <AlertDescription>{submissionError}</AlertDescription>
         </Alert>
       )}
-    </main>
+      </PageMain>
+    </>
   );
 }

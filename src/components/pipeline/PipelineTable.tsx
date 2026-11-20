@@ -34,20 +34,6 @@ const sheetCell = "whitespace-nowrap";
 
 type Variant = "full" | "hundred-k" | "person" | "my-bids" | "history" | "ledger";
 
-function statusLabel(status: string) {
-  if (status === "Finding Supplier") return "Finding supplier";
-  if (status === "Waiting Approval") return "Waiting approval";
-  if (status === "Approved for Submission") return "Approved for submission";
-  if (status === "Bid No Approved") return "Bid not approved";
-  return status || "—";
-}
-
-function statusPill(status: string) {
-  if (status === "Waiting Approval" || status === "Approved for Submission") return "cf-pill-app";
-  if (status === "Bid submitted") return "cf-pill-sub";
-  if (status === "Bid No Approved" || status === "Bid got removed" || status === "Couldnt get quote") return "cf-pill-lost";
-  return "cf-pill-sup";
-}
 
 function outcomePill(outcome: string | null | undefined) {
   if (outcome === "won") return "cf-pill-won";
@@ -246,7 +232,7 @@ export function PipelineTable({
               const dueUrgent = row.days_remaining != null && row.days_remaining <= 11;
               return (
                 <tr key={row.id}>
-                  <td><span className={`cf-pill ${statusPill(row.internal_status)}`}>{statusLabel(row.internal_status)}</span></td>
+                  <td><span className="cf-pill" style={{ ...statusStyle(row.internal_status), alignSelf: "center" }}>{formatStatus(row.internal_status)}</span></td>
                   <td>
                     <Link className="cf-id" href={`/bids/${row.id}`}>{row.solicitation_number || row.bid_id}</Link>
                     <div className="cf-meta">{row.title || "—"}</div>
@@ -273,7 +259,7 @@ export function PipelineTable({
         <table className="cf-table">
           <thead>
             <tr>
-              <th>Solicitation</th>
+              <th>Solicitation</th><th>Bid ID</th><th>Approver</th>
               <th>Portal</th>
               <th>Agent</th>
               <th>Status</th>
@@ -296,9 +282,10 @@ export function PipelineTable({
                     <Link className="cf-id" href={`/bids/${row.id}`}>{row.solicitation_number || row.bid_id}</Link>
                     <div className="cf-meta">{row.title || "—"}</div>
                   </td>
+                  <td>{row.bid_id}</td><td>{row.approved_by_name || "—"}</td>
                   <td>{row.portal || "—"}</td>
                   <td>{row.agent_name || "—"}</td>
-                  <td><span className={`cf-pill ${statusPill(row.internal_status)}`}>{statusLabel(row.internal_status)}</span></td>
+                  <td><span className="cf-pill" style={{ ...statusStyle(row.internal_status), alignSelf: "center" }}>{formatStatus(row.internal_status)}</span></td>
                   <td className="cf-num" style={{ color: row.supplier_cost == null ? "var(--cf-text-3)" : undefined }}>{formatMoney(row.supplier_cost)}</td>
                   <td className="cf-num" style={{ color: price == null ? "var(--cf-text-3)" : undefined }}>{formatMoney(price)}</td>
                   <td className="cf-num" style={{ color: row.gross_profit == null ? "var(--cf-text-3)" : row.gross_profit < 0 ? "#BE123C" : "#047857" }}>{formatMoney(row.gross_profit)}</td>

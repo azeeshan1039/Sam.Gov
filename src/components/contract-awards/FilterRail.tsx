@@ -92,9 +92,9 @@ export function FilterRail({ value, onChange, onApply, onReset, busy }: FilterRa
     set(k, (v === ANY_VALUE ? "" : v) as any);
 
   return (
-    <aside className="w-80 shrink-0 border-r border-slate-200 bg-white overflow-y-auto">
+    <aside className="w-full shrink-0 overflow-y-auto border-b border-slate-200 bg-white lg:max-h-[calc(100dvh-13rem)] lg:w-80 lg:border-b-0 lg:border-r">
       <div className="sticky top-0 z-10 border-b border-slate-200 bg-white px-3 py-2.5">
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2 [&>input]:min-w-0">
           <h2 className="mr-auto text-sm font-semibold text-slate-900">Filters</h2>
           <Button
             type="button"
@@ -107,22 +107,22 @@ export function FilterRail({ value, onChange, onApply, onReset, busy }: FilterRa
           >
             <RotateCcw className="h-3.5 w-3.5" />
           </Button>
-          <Button
+          <button
             type="button"
-            size="sm"
             onClick={onApply}
             disabled={busy}
-            className="h-8"
+            className="cf-btn cf-btn-primary cf-btn-sm disabled:pointer-events-none disabled:opacity-50"
           >
             {busy ? "Querying…" : "Apply"}
-          </Button>
+          </button>
         </div>
       </div>
 
       <Section title="Search">
         <Field label="Keyword" hint="Free-text across all fields.">
           <Input
-            value={value.q}
+            aria-label="Q"
+              value={value.q}
             placeholder="e.g. freezer, x-ray, software"
             onChange={(e) => set("q", e.target.value)}
           />
@@ -131,14 +131,16 @@ export function FilterRail({ value, onChange, onApply, onReset, busy }: FilterRa
 
       <Section title="Dates">
         <Field label="Date signed">
-          <div className="flex items-center gap-2">
+          <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1 [&>input]:min-w-0 [&>input]:px-2">
             <Input
+              aria-label="Date signed from"
               type="date"
               value={value.dateSignedFrom}
               onChange={(e) => set("dateSignedFrom", e.target.value)}
             />
             <span className="text-xs text-slate-500">to</span>
             <Input
+              aria-label="Date signed to"
               type="date"
               value={value.dateSignedTo}
               onChange={(e) => set("dateSignedTo", e.target.value)}
@@ -146,14 +148,16 @@ export function FilterRail({ value, onChange, onApply, onReset, busy }: FilterRa
           </div>
         </Field>
         <Field label="Current completion date">
-          <div className="flex items-center gap-2">
+          <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1 [&>input]:min-w-0 [&>input]:px-2">
             <Input
+              aria-label="Current completion date from"
               type="date"
               value={value.currentCompletionDateFrom}
               onChange={(e) => set("currentCompletionDateFrom", e.target.value)}
             />
             <span className="text-xs text-slate-500">to</span>
             <Input
+              aria-label="Current completion date to"
               type="date"
               value={value.currentCompletionDateTo}
               onChange={(e) => set("currentCompletionDateTo", e.target.value)}
@@ -165,7 +169,7 @@ export function FilterRail({ value, onChange, onApply, onReset, busy }: FilterRa
             value={selectVal("fiscalYear")}
             onValueChange={onSelect("fiscalYear")}
           >
-            <SelectTrigger>
+            <SelectTrigger aria-label="Fiscal year">
               <SelectValue placeholder="Any year" />
             </SelectTrigger>
             <SelectContent>
@@ -182,8 +186,9 @@ export function FilterRail({ value, onChange, onApply, onReset, busy }: FilterRa
 
       <Section title="Dollar amounts">
         <Field label="Dollars obligated">
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 items-center gap-2 [&>input]:min-w-0">
             <Input
+              aria-label="Dollars obligated min"
               type="number"
               placeholder="Min"
               value={value.dollarsObligatedMin}
@@ -191,6 +196,7 @@ export function FilterRail({ value, onChange, onApply, onReset, busy }: FilterRa
             />
             <span className="text-xs text-slate-500">to</span>
             <Input
+              aria-label="Dollars obligated max"
               type="number"
               placeholder="Max"
               value={value.dollarsObligatedMax}
@@ -199,8 +205,9 @@ export function FilterRail({ value, onChange, onApply, onReset, busy }: FilterRa
           </div>
         </Field>
         <Field label="Total ultimate contract value">
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 items-center gap-2 [&>input]:min-w-0">
             <Input
+              aria-label="Total ultimate contract value min"
               type="number"
               placeholder="Min"
               value={value.totalUltimateContractValueMin}
@@ -210,6 +217,7 @@ export function FilterRail({ value, onChange, onApply, onReset, busy }: FilterRa
             />
             <span className="text-xs text-slate-500">to</span>
             <Input
+              aria-label="Total ultimate contract value max"
               type="number"
               placeholder="Max"
               value={value.totalUltimateContractValueMax}
@@ -249,7 +257,7 @@ export function FilterRail({ value, onChange, onApply, onReset, busy }: FilterRa
             value={selectVal("productOrServiceType")}
             onValueChange={onSelect("productOrServiceType")}
           >
-            <SelectTrigger>
+            <SelectTrigger aria-label="Product or service type">
               <SelectValue placeholder="Any" />
             </SelectTrigger>
             <SelectContent>
@@ -264,7 +272,7 @@ export function FilterRail({ value, onChange, onApply, onReset, busy }: FilterRa
             value={selectVal("awardOrIDV")}
             onValueChange={onSelect("awardOrIDV")}
           >
-            <SelectTrigger>
+            <SelectTrigger aria-label="Award or idv">
               <SelectValue placeholder="Any" />
             </SelectTrigger>
             <SelectContent>
@@ -279,7 +287,8 @@ export function FilterRail({ value, onChange, onApply, onReset, busy }: FilterRa
       <Section title="Awardee">
         <Field label="Legal business name">
           <Input
-            value={value.awardeeLegalBusinessName}
+            aria-label="Awardee legal business name"
+              value={value.awardeeLegalBusinessName}
             placeholder="Partial match"
             onChange={(e) =>
               set("awardeeLegalBusinessName", e.target.value)
@@ -311,7 +320,7 @@ export function FilterRail({ value, onChange, onApply, onReset, busy }: FilterRa
             value={selectVal("awardeeStateCode")}
             onValueChange={onSelect("awardeeStateCode")}
           >
-            <SelectTrigger>
+            <SelectTrigger aria-label="Awardee state code">
               <SelectValue placeholder="Any state" />
             </SelectTrigger>
             <SelectContent>
@@ -326,20 +335,23 @@ export function FilterRail({ value, onChange, onApply, onReset, busy }: FilterRa
         </Field>
         <Field label="City">
           <Input
-            value={value.awardeeCityName}
+            aria-label="Awardee city name"
+              value={value.awardeeCityName}
             onChange={(e) => set("awardeeCityName", e.target.value)}
           />
         </Field>
         <Field label="ZIP">
           <Input
-            value={value.awardeeZipCode}
+            aria-label="Awardee zip code"
+              value={value.awardeeZipCode}
             onChange={(e) => set("awardeeZipCode", e.target.value)}
             placeholder="5 or 9 digits"
           />
         </Field>
         <Field label="Country code" hint="3-char ISO code (e.g. USA).">
           <Input
-            value={value.awardeeCountryCode}
+            aria-label="Awardee country code"
+              value={value.awardeeCountryCode}
             onChange={(e) =>
               set("awardeeCountryCode", e.target.value.toUpperCase())
             }
@@ -354,7 +366,7 @@ export function FilterRail({ value, onChange, onApply, onReset, busy }: FilterRa
             value={selectVal("placeOfPerformStateCode")}
             onValueChange={onSelect("placeOfPerformStateCode")}
           >
-            <SelectTrigger>
+            <SelectTrigger aria-label="Place of perform state code">
               <SelectValue placeholder="Any state" />
             </SelectTrigger>
             <SelectContent>
@@ -369,19 +381,22 @@ export function FilterRail({ value, onChange, onApply, onReset, busy }: FilterRa
         </Field>
         <Field label="City">
           <Input
-            value={value.placeOfPerformCityName}
+            aria-label="Place of perform city name"
+              value={value.placeOfPerformCityName}
             onChange={(e) => set("placeOfPerformCityName", e.target.value)}
           />
         </Field>
         <Field label="ZIP">
           <Input
-            value={value.placeOfPerformZipCode}
+            aria-label="Place of perform zip code"
+              value={value.placeOfPerformZipCode}
             onChange={(e) => set("placeOfPerformZipCode", e.target.value)}
           />
         </Field>
         <Field label="Country code">
           <Input
-            value={value.placeOfPerformCountryCode}
+            aria-label="Place of perform country code"
+              value={value.placeOfPerformCountryCode}
             onChange={(e) =>
               set("placeOfPerformCountryCode", e.target.value.toUpperCase())
             }
@@ -393,14 +408,16 @@ export function FilterRail({ value, onChange, onApply, onReset, busy }: FilterRa
       <Section title="Agency" defaultOpen={false}>
         <Field label="Contracting subtier">
           <Input
-            value={value.contractingSubtierName}
+            aria-label="Contracting subtier name"
+              value={value.contractingSubtierName}
             placeholder="Partial match"
             onChange={(e) => set("contractingSubtierName", e.target.value)}
           />
         </Field>
         <Field label="Funding subtier">
           <Input
-            value={value.fundingSubtierName}
+            aria-label="Funding subtier name"
+              value={value.fundingSubtierName}
             placeholder="Partial match"
             onChange={(e) => set("fundingSubtierName", e.target.value)}
           />
@@ -413,7 +430,7 @@ export function FilterRail({ value, onChange, onApply, onReset, busy }: FilterRa
             value={selectVal("typeOfSetAsideName")}
             onValueChange={onSelect("typeOfSetAsideName")}
           >
-            <SelectTrigger>
+            <SelectTrigger aria-label="Type of set aside name">
               <SelectValue placeholder="Any" />
             </SelectTrigger>
             <SelectContent>
@@ -431,7 +448,7 @@ export function FilterRail({ value, onChange, onApply, onReset, busy }: FilterRa
             value={selectVal("extentCompetedName")}
             onValueChange={onSelect("extentCompetedName")}
           >
-            <SelectTrigger>
+            <SelectTrigger aria-label="Extent competed name">
               <SelectValue placeholder="Any" />
             </SelectTrigger>
             <SelectContent>
@@ -449,7 +466,7 @@ export function FilterRail({ value, onChange, onApply, onReset, busy }: FilterRa
             value={selectVal("typeOfContractPricingName")}
             onValueChange={onSelect("typeOfContractPricingName")}
           >
-            <SelectTrigger>
+            <SelectTrigger aria-label="Type of contract pricing name">
               <SelectValue placeholder="Any" />
             </SelectTrigger>
             <SelectContent>
@@ -467,7 +484,7 @@ export function FilterRail({ value, onChange, onApply, onReset, busy }: FilterRa
             value={selectVal("closedStatus")}
             onValueChange={onSelect("closedStatus")}
           >
-            <SelectTrigger>
+            <SelectTrigger aria-label="Closed status">
               <SelectValue placeholder="Any" />
             </SelectTrigger>
             <SelectContent>
@@ -482,7 +499,7 @@ export function FilterRail({ value, onChange, onApply, onReset, busy }: FilterRa
             value={selectVal("multiyearContractName")}
             onValueChange={onSelect("multiyearContractName")}
           >
-            <SelectTrigger>
+            <SelectTrigger aria-label="Multiyear contract name">
               <SelectValue placeholder="Any" />
             </SelectTrigger>
             <SelectContent>

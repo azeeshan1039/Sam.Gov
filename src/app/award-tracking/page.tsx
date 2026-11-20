@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowDown, ArrowUp, ArrowUpDown, Download } from "lucide-react";
 import { getStoredUser, type AuthUser } from "@/lib/auth";
@@ -59,7 +59,7 @@ function outcomePill(outcome: string) {
 
 export default function AwardTrackingPage() {
   return (
-    <Suspense fallback={<div className="space-y-6 p-6 lg:p-8"><Skeleton className="h-8 w-48" /><Skeleton className="h-64 w-full" /></div>}>
+    <Suspense fallback={<PageMain><Skeleton className="h-8 w-48" /><Skeleton className="h-64 w-full" /></PageMain>}>
       <AwardTracking />
     </Suspense>
   );
@@ -101,8 +101,12 @@ function AwardTracking() {
     return () => clearTimeout(timer);
   }, [search]);
 
+  const pending = useRef<AbortController | null>(null);
   const load = useCallback(async () => {
     if (!user) return;
+    pending.current?.abort();
+    const controller = new AbortController();
+    pending.current = controller;
     setPage(1);
     setLoading(true);
     setError(null);
@@ -118,19 +122,20 @@ function AwardTracking() {
       if (dateTo) query.set("date_to", dateTo);
       query.set("sort", sort);
       query.set("dir", dir);
-      const response = await fetch(`/api/backend/pipeline/award-tracking?${query}`, { cache: "no-store" });
+      const response = await fetch(`/api/backend/pipeline/award-tracking?${query}`, { cache: "no-store", signal: controller.signal });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error || `Failed to load award tracking (${response.status})`);
-      setData(body as AwardTrackingResponse);
+      if (!controller.signal.aborted) setData(body as AwardTrackingResponse);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load award tracking");
+      if (!controller.signal.aborted) setError(err instanceof Error ? err.message : "Failed to load award tracking");
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) setLoading(false);
     }
   }, [user, queryText, agent, outcome, portal, size, checkpointState, dateFrom, dateTo, sort, dir]);
 
   useEffect(() => {
-    if (user) load();
+    if (user) void load();
+    return () => pending.current?.abort();
   }, [user, load]);
 
   // Deep links from a notification or the dashboard flag (/award-tracking?checkpoint_state=…&bid=<id>)
@@ -170,7 +175,7 @@ function AwardTracking() {
   }, [selected]);
 
   if (!user) {
-    return <div className="space-y-6 p-6 lg:p-8"><Skeleton className="h-8 w-48" /><Skeleton className="h-64 w-full" /></div>;
+    return <PageMain><Skeleton className="h-8 w-48" /><Skeleton className="h-64 w-full" /></PageMain>;
   }
 
   return (
@@ -249,8 +254,8 @@ function AwardTracking() {
           </div>
         </div>
         {loading && !data ? <Skeleton className="h-40 w-full" /> : (
-          <div style={{ overflowX: "auto" }}>
-            <table className="cf-table">
+          <div style={{ overflowX: "auto", position: "relative" }} tabIndex={0}>
+            <table className="cf-table" aria-busy={loading}>
               <thead>
                 <tr>
                   <th>Bid</th>
@@ -260,7 +265,7 @@ function AwardTracking() {
                   <th>Size</th>
                   <SortHead label="Checkpoints" sortKey="checkpoint" sort={sort} dir={dir} onSort={toggleSort} />
                   <SortHead label="Outcome" sortKey="outcome" sort={sort} dir={dir} onSort={toggleSort} />
-                  <SortHead label="Awarded to" sortKey="awarded_amount" sort={sort} dir={dir} onSort={toggleSort} accessibleName="Awarded $" />
+                  <SortHead label="Awarded to / amount" sortKey="awarded_amount" sort={sort} dir={dir} onSort={toggleSort} accessibleName="Awarded $" />
                   <th><span className="sr-only">Action</span></th>
                 </tr>
               </thead>
@@ -293,7 +298,7 @@ function AwardTracking() {
                       <td>
                         <span className={`cf-pill ${outcomePill(item.award_outcome)}`}>{formatOutcomeLabel(item.award_outcome)}</span>
                         {item.sam_info?.result === "found" && !item.sam_info.applied ? (
-                          <span className="sr-only" aria-label="SAM.gov award information available" />
+                          <span className="cf-tag" aria-label="SAM.gov award information available">SAM.gov award information available</span>
                         ) : null}
                       </td>
                       <td>
@@ -306,9 +311,7 @@ function AwardTracking() {
                         ) : null}
                       </td>
                       <td>
-                        {item.checkpoint_state === "due" ? <button type="button" className="cf-btn cf-btn-primary cf-btn-sm" onClick={() => setSelected(item)}>Update</button> : null}
-                        {item.flagged && item.checkpoint_state !== "due" ? <button type="button" className="cf-btn cf-btn-secondary cf-btn-sm" onClick={() => setSelected(item)}>Review</button> : null}
-                        {item.can_record && item.checkpoint_state !== "due" && !item.flagged ? <button type="button" className="sr-only" onClick={() => setSelected(item)}>Record check</button> : null}
+                        <button type="button" className={"cf-btn cf-btn-sm " + (hot ? "cf-btn-primary" : "cf-btn-secondary")} onClick={() => setSelected(item)}>{item.can_record ? "Record check" : "View"}</button>
                       </td>
                     </tr>
                   );

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { getStoredUser, type AuthUser } from "@/lib/auth";
 import { AdminTabs, PageBand, PageMain } from "@/components/design/PageFrame";
+import { PipelineTable } from "@/components/pipeline/PipelineTable";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatMoney, requesterQuery, type PipelineItem } from "@/lib/pipeline";
 
@@ -95,7 +96,7 @@ export default function ApprovalsPage() {
       const response = await fetch(`/api/backend/pipeline/bids/${item.id}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ status, ...(status === "Bid No Approved" && { reason: note.trim() }) }),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || "Unable to update this bid.");
@@ -110,10 +111,10 @@ export default function ApprovalsPage() {
 
   if (!user) {
     return (
-      <div className="space-y-6 p-6 lg:p-8">
+      <PageMain>
         <Skeleton className="h-8 w-48" />
         <Skeleton className="h-64 w-full" />
-      </div>
+      </PageMain>
     );
   }
 
@@ -157,7 +158,7 @@ export default function ApprovalsPage() {
           ) : decision?.kind === "sent" ? (
             <section className="cf-card" style={{ flex: "1 1 520px", padding: 24 }}>
               <div className="cf-banner cf-banner-warn" role="status">
-                <div style={{ flex: 1 }}><div style={{ fontWeight: 500 }}>Sent back · status is Bid not approved</div><div>The status change is what the agent sees on the bid.</div></div>
+                <div style={{ flex: 1 }}><div style={{ fontWeight: 500 }}>Sent back · status is Bid not approved</div><div>The agent can read your instructions in the bid history.</div></div>
                 <button type="button" className="cf-btn cf-btn-secondary cf-btn-sm" onClick={() => setDecision(null)}>Next in queue</button>
               </div>
             </section>
@@ -229,6 +230,11 @@ export default function ApprovalsPage() {
           </ul>
         )}
       </section>
+      <details className="cf-card p-4">
+        <summary className="cursor-pointer">Compare approval and supplier queues</summary>
+        <h3>Awaiting approval</h3><PipelineTable items={awaitingApproval} />
+        <h3>Needs supplier quote</h3><PipelineTable items={needsSupplier} />
+      </details>
       </PageMain>
     </>
   );

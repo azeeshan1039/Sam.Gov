@@ -227,7 +227,7 @@ export default function RegisterPage() {
             </form>
             <p className="text-sm text-slate-600 mt-4">
               Already registered?{" "}
-              <Link href="/login" className="text-blue-600 hover:underline">
+              <Link href="/login" style={{ textDecoration: "underline" }} className="text-blue-600 hover:underline">
                 Login here
               </Link>
             </p>

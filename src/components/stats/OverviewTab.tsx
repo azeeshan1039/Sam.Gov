@@ -4,10 +4,8 @@ import dynamic from "next/dynamic";
 import Highcharts from "highcharts";
 import { Trophy } from "lucide-react";
 import {
-  PORTALS,
-  PORTAL_COLORS,
-  PORTAL_SHORT,
-  displayName,
+  portalColor,
+  submittedPortals,
   formatMoney,
   type StatsPayload,
 } from "@/lib/stats";
@@ -28,7 +26,7 @@ const PLACE_STYLES = [
   {
     label: "2nd Place",
     ring: "border-slate-300 bg-slate-50",
-    badge: "bg-slate-400 text-white",
+    badge: "bg-slate-600 text-white",
     icon: "🥈",
   },
   {
@@ -39,15 +37,8 @@ const PLACE_STYLES = [
   },
 ];
 
-function portalLine(stats: StatsPayload) {
-  return PORTALS.map((portal) => {
-    const found = stats.bid_by_portal.portals.find((p) => p.name === portal);
-    return `${PORTAL_SHORT[portal]}: ${found?.count ?? 0}`;
-  }).join(" · ");
-}
-
 function EmployeeBarChart({ stats }: { stats: StatsPayload }) {
-  const categories = stats.employees.map((e) => displayName(e.name));
+  const categories = stats.employees.map((e) => e.name);
   const data = stats.employees.map((e) => e.month_total);
   const options: Highcharts.Options = {
     chart: {
@@ -56,7 +47,7 @@ function EmployeeBarChart({ stats }: { stats: StatsPayload }) {
       height: 320,
       style: { fontFamily: "inherit" },
     },
-    title: { text: undefined },
+    title: { text: "Monthly bids by employee. " + categories.map((name, i) => name + " " + data[i]).join(", "), floating: true, style: { display: "none" } },
     xAxis: {
       categories,
       crosshair: true,
@@ -93,14 +84,11 @@ function EmployeeBarChart({ stats }: { stats: StatsPayload }) {
 
 function PortalDonut({ stats }: { stats: StatsPayload }) {
   const total = stats.bid_by_portal.total;
-  const data = PORTALS.map((portal) => {
-    const found = stats.bid_by_portal.portals.find((p) => p.name === portal);
-    return {
-      name: portal,
-      y: found?.count ?? 0,
-      color: PORTAL_COLORS[portal],
-    };
-  });
+  const data = submittedPortals(stats).map(({ name, count }) => ({
+    name,
+    y: count,
+    color: portalColor(name),
+  }));
   const options: Highcharts.Options = {
     chart: {
       type: "pie",
@@ -129,6 +117,10 @@ function PortalDonut({ stats }: { stats: StatsPayload }) {
     credits: { enabled: false },
     series: [{ type: "pie", name: "Bids", data }],
   };
+  if (data.length === 0) {
+    return <p className="text-sm text-slate-600">No submissions for this month.</p>;
+  }
+
   return (
     <div>
       <div className="h-[280px] w-full">
@@ -182,7 +174,7 @@ export function OverviewTab({
   }
 
   const goal = stats.monthly_goal;
-  const places = [0, 1, 2].map((i) => stats.leaderboard[i] || null);
+  const places = stats.leaderboard.slice(0, 3);
 
   return (
     <div className="space-y-5">
@@ -191,7 +183,7 @@ export function OverviewTab({
           <p className="text-sm font-medium text-slate-500">Monthly Goal</p>
           <p className="mt-2 text-2xl font-bold text-slate-900">
             {goal.achieved.toLocaleString()}{" "}
-            <span className="text-base font-medium text-slate-400">
+            <span className="text-base font-medium text-slate-600">
               / {goal.monthly.toLocaleString()} Target
             </span>
           </p>
@@ -209,7 +201,7 @@ export function OverviewTab({
           <p className="mt-2 text-2xl font-bold text-slate-900">
             {formatMoney(stats.total_submission_value)}
           </p>
-          <p className="mt-2 text-xs text-slate-400">Total Dollar Amount of Submissions MTD</p>
+          <p className="mt-2 text-xs text-slate-600">Total Dollar Amount of Submissions MTD</p>
         </div>
 
         <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -217,7 +209,7 @@ export function OverviewTab({
           <p className="mt-2 text-2xl font-bold text-slate-900">
             {stats.bid_by_portal.total.toLocaleString()} Bids
           </p>
-          <p className="mt-2 text-xs text-slate-500">{portalLine(stats)}</p>
+          <p className="mt-2 text-xs text-slate-500">{submittedPortals(stats).map(({ name, count }) => name + ": " + count).join(" · ") || "No submissions for this month."}</p>
         </div>
 
         <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -245,7 +237,7 @@ export function OverviewTab({
             <p className="text-xs text-slate-500">Top 3 by total bid value this month</p>
           </div>
         </div>
-        {places.every((p) => !p) ? (
+        {places.length === 0 ? (
           <p className="text-sm text-slate-500">No submitted bid values this month.</p>
         ) : (
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
@@ -261,21 +253,15 @@ export function OverviewTab({
                       {style.icon} {style.label}
                     </span>
                   </div>
-                  {row ? (
-                    <>
-                      <p className="mt-3 text-lg font-bold text-slate-900">
-                        {displayName(row.name)}
-                      </p>
-                      <p className="mt-1 text-sm text-slate-500">
-                        Total Bid Value:{" "}
-                        <span className="font-semibold text-slate-800">
-                          {formatMoney(row.amount)}
-                        </span>
-                      </p>
-                    </>
-                  ) : (
-                    <p className="mt-3 text-sm text-slate-400">—</p>
-                  )}
+                  <p className="mt-3 text-lg font-bold text-slate-900">
+                    {row.name}
+                  </p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Total Bid Value:{" "}
+                    <span className="font-semibold text-slate-800">
+                      {formatMoney(row.amount)}
+                    </span>
+                  </p>
                 </div>
               );
             })}

@@ -99,7 +99,10 @@ export default function NotificationBell() {
                 </p>
                 <p className="mt-1 text-sm font-medium text-slate-900">{alert.title}</p>
                 <p className="mt-0.5 text-sm text-slate-600">{alert.reason}</p>
-                <p className="mt-1 text-xs text-slate-400">{formatAlertTime(alert.created_at)}</p>
+                {alert.solicitation_number && !alert.reason.includes(alert.solicitation_number) && (
+                  <p className="mt-1 text-xs text-slate-600">Solicitation {alert.solicitation_number}</p>
+                )}
+                <p className="mt-1 text-xs text-slate-600">{formatAlertTime(alert.created_at)}</p>
               </button>
             ))}
           </div>

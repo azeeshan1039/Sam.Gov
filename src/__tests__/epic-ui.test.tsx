@@ -7,7 +7,7 @@ import TeamPage from "@/app/team/page";
 import WorkManagementPage from "@/app/work-management/page";
 import Sidebar from "@/components/Sidebar";
 import { getStoredUser, type AuthUser } from "@/lib/auth";
-import UnclaimedBidsPage from "@/app/unclaimed-bids/page";
+import OpportunitiesPage from "@/app/opportunities/page";
 import NicheDirectoryPage from "@/app/niche-directory/page";
 import BidDetailPage from "@/app/bids/[id]/page";
 import { BID_STATUSES } from "@/lib/pipeline";
@@ -190,7 +190,7 @@ describe("KAN-18, KAN-19, and KAN-22 dashboard views", () => {
     expect(screen.getByRole("heading", { name: "Pipeline by stage" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Latest submissions" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Financial summary" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Company pulse" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Company pulse" })).toBeInTheDocument();
     expect(await screen.findByText("SOL-STALE")).toBeInTheDocument();
   });
 
@@ -215,11 +215,11 @@ describe("KAN-18, KAN-19, and KAN-22 dashboard views", () => {
     expect(screen.queryByText("Duplicate flags")).not.toBeInTheDocument();
     expect(screen.queryByText("Pickup rules")).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Agent leaderboard" })).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Team leaderboard" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Team leaderboard" })).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Suggested for you" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Find opportunities" })).toBeInTheDocument();
     const urls = fetchMock.mock.calls.map((call) => urlOf(call[0] as RequestInfo | URL));
-    expect(urls.some((url) => /duplicates|auth\/team|dashboard-pulse/.test(url))).toBe(false);
+    expect(urls.some((url) => /duplicates|auth\/team|dashboard-pulse|stats\/leaderboard/.test(url))).toBe(false);
   });
 });
 
@@ -420,7 +420,7 @@ describe("KAN-40 manager duplicate resolution", () => {
 describe("KAN-26 unclaimed SAM.gov pool", () => {
   test("renders only opportunities confirmed available by the batched ownership overlay", async () => {
     mockedGetStoredUser.mockReturnValue(agent);
-    let availabilityBody: { opportunities: Array<{ ncode?: string }> } | null = null;
+    const availabilityBody: { opportunities: Array<{ ncode?: string }> } = { opportunities: [] };
     global.fetch = jest.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = urlOf(input);
       if (url === "/api/sam-gov") return response([
@@ -428,7 +428,7 @@ describe("KAN-26 unclaimed SAM.gov pool", () => {
         { id: "TAKEN-1", title: "Claimed SAM bid", closingDate: "2026-10-21", solicitationNumber: "SOL-TAKEN", ncode: "339112" },
       ]);
       if (url.includes("opportunities/availability")) {
-        availabilityBody = JSON.parse(String(init?.body));
+        availabilityBody.opportunities = JSON.parse(String(init?.body)).opportunities;
         return response({ opportunities: [
           { external_notice_id: "OPEN-1", available: true },
           { external_notice_id: "TAKEN-1", available: false },
@@ -437,11 +437,11 @@ describe("KAN-26 unclaimed SAM.gov pool", () => {
       throw new Error(`Unexpected request: ${url}`);
     }) as jest.Mock;
 
-    render(<UnclaimedBidsPage />);
+    render(<OpportunitiesPage />);
     expect(await screen.findByText("Available SAM bid")).toBeInTheDocument();
     expect(screen.getByText(/541519 .* Other Computer Related Services/)).toBeInTheDocument();
     expect(screen.queryByText("Claimed SAM bid")).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Review and pick up" })).toHaveAttribute("href", "/sam-gov/OPEN-1");
+    expect(screen.getByRole("link", { name: "Pick up" })).toHaveAttribute("href", "/sam-gov/OPEN-1");
     expect(availabilityBody?.opportunities.map((item) => item.ncode)).toEqual(["541519", "339112"]);
   });
 
@@ -465,7 +465,7 @@ describe("KAN-26 unclaimed SAM.gov pool", () => {
       throw new Error(`Unexpected request: ${url}`);
     }) as jest.Mock;
 
-    render(<UnclaimedBidsPage />);
+    render(<OpportunitiesPage />);
     expect(await screen.findByText("SAM bid 1000")).toBeInTheDocument();
     expect(chunkSizes).toEqual([1000, 1]);
   });
@@ -505,7 +505,7 @@ describe("KAN-83 niche directory", () => {
     }) as jest.Mock;
 
     render(<NicheDirectoryPage />);
-    expect(await screen.findByText("541519 · Other Computer Related Services")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "541519 · Other Computer Related Services" })).toBeInTheDocument();
     expect(screen.getAllByText("50%").length).toBeGreaterThan(0);
     expect(screen.getByText("Agent One, Agent Two")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /SOL-7/i })).toHaveAttribute("href", "/sam-gov/NOTICE-7");

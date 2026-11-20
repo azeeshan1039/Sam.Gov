@@ -80,7 +80,7 @@ async function updateStatus(page: Page, status: string, costs?: { cost: string; 
   await expect(page.getByText("Status updated.")).toBeVisible();
   // The page shows the message before it reloads the bid (finding F12); wait for the reload.
   await page.waitForLoadState("networkidle").catch(() => undefined);
-  await expect(page.locator("span.rounded-full", { hasText: status }).first()).toBeVisible();  // current-status badge
+  await expect(page.locator(".cf-band .cf-pill").filter({ hasText: status }).first()).toBeVisible();  // current-status badge
   const select = page.getByLabel("New status");  // agents lose the editor once the bid is completed
   if (await select.count()) await expect(select).toHaveValue(status);
 }
@@ -166,10 +166,10 @@ test("@critical agent records a Won outcome from the bid page and sees history a
   await expect(page.getByText("Award amount $74,000.00")).toBeVisible();
   const timeline = page.getByRole("list", { name: "Award checkpoints" });
   await expect(timeline).toContainText("Not needed (outcome known)");
-  await expect(page.getByText(/Pending → Won · 45-day check · \$74,000.00/)).toBeVisible();
+  await expect(page.getByRole("listitem").filter({ hasText: /Pending → Won · 45-day check · \$74,000.00/ })).toBeVisible();
 
   await visit(page, "/bids/5");  // FS-WON-120, already Won
-  await expect(page.getByText(/Pending → Won · 90-day check/)).toBeVisible();
+  await expect(page.getByRole("listitem").filter({ hasText: /Pending → Won · 90-day check/ })).toBeVisible();
 
   await visit(page, "/award-tracking");
   const row = page.getByRole("row", { name: /FS-SEPTA-046/ });
@@ -181,7 +181,7 @@ test("@critical agent records a Won outcome from the bid page and sees history a
 
   const other = await login(browser, "qa.two@example.test");
   await visit(other.page, "/bids/3");  // Agent Two's own Lost bid
-  await expect(other.page.getByText("Awarded to Rival Medical Inc for $240,000.00")).toBeVisible();
+  await expect(other.page.locator("p").filter({ hasText: "Awarded to Rival Medical Inc for $240,000.00" })).toBeVisible();
   await expect(other.page.getByRole("button", { name: "Save outcome" })).toBeVisible();
   expect(other.problems).toEqual([]);
 });
@@ -208,17 +208,18 @@ test("@critical manager filters and sorts real award records", async ({ browser 
   const { page, problems } = await login(browser, "qa.admin@example.test");
   await visit(page, "/award-tracking");
   const rows = page.locator('tr[data-testid^="award-row-"]');
-  await expect(rows).toHaveCount(9);
+  await expect(page.getByText("SHOWING 1–8 OF 9")).toBeVisible();
+  await expect(rows).toHaveCount(8);
 
   async function choose(label: string, option: string) {
     await page.getByRole("combobox", { name: label }).click();
     await page.getByRole("option", { name: option, exact: true }).click();
     await page.waitForLoadState("networkidle").catch(() => undefined);
   }
-  // Solicitation # is the first line of the second cell in each award row.
+  // The solicitation links to the bid workspace.
   async function names() {
     return page.locator('tr[data-testid^="award-row-"]').evaluateAll((trs) =>
-      trs.map((tr) => tr.querySelectorAll("td")[1]?.querySelector("div")?.textContent?.trim() || ""));
+      trs.map((tr) => tr.querySelector("a[href^='/bids/']")?.textContent?.trim() || ""));
   }
   async function expectNames(expected: string[], ordered = false) {
     await expect.poll(async () => (ordered ? await names() : (await names()).sort()), { timeout: 15_000 })
@@ -260,17 +261,21 @@ test("@critical manager filters and sorts real award records", async ({ browser 
   await page.getByLabel("Search award records").fill("legacy");
   await expect(rows).toHaveCount(1);
   await page.getByLabel("Search award records").fill("");
-  await expect(rows).toHaveCount(9);
+  await expect(page.getByText("SHOWING 1–8 OF 9")).toBeVisible();
+  await expect(rows).toHaveCount(8);
 
   await page.getByRole("button", { name: "Outcome" }).click();
   await page.waitForLoadState("networkidle").catch(() => undefined);
   const rank: Record<string, number> = { Won: 0, Lost: 1, Pending: 2, Unknown: 3 };
-  const outcomes = () => rows.evaluateAll((trs) =>
-    trs.map((tr) => tr.querySelectorAll("td")[7]?.querySelector("span")?.textContent?.trim() || ""));
-  await expect.poll(async () => {
-    const order = (await outcomes()).map((outcome) => rank[outcome]);
-    return order.length === 9 && order.every((value, index) => index === 0 || order[index - 1] <= value);
-  }, { timeout: 15_000 }).toBe(true);  // Won → Lost → Pending → Unknown
+  const outcomes = () => rows.locator(".cf-pill").allTextContents();
+  await expect(rows.first().locator(".cf-pill")).toHaveText("Won");
+  const firstPage = await outcomes();
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await expect(page.getByText("SHOWING 9–9 OF 9")).toBeVisible();
+  const order = [...firstPage, ...await outcomes()].map(label => rank[label.trim()]);
+  expect(order).toHaveLength(9);
+  expect(order.every((value, index) => value !== undefined && (index === 0 || order[index - 1] <= value))).toBe(true);
+  await page.getByRole("button", { name: "Previous", exact: true }).click();
   await page.getByRole("button", { name: "Awarded $" }).click();
   await page.waitForLoadState("networkidle").catch(() => undefined);
   await expect.poll(async () => (await names())[0]).toBe("FS-LOST-061");  // $240,000 is the largest awarded amount

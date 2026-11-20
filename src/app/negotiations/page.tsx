@@ -1,15 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { format } from 'date-fns';
-import { AlertCircle, ArrowRight, Building2, CheckCircle2, Clock, Handshake } from 'lucide-react';
+import { format, isValid } from 'date-fns';
+import { ArrowRight, Search } from 'lucide-react';
 import { getStoredUser, type AuthUser } from '@/lib/auth';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { PageBand, PageMain } from '@/components/design/PageFrame';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 interface NegotiationSession {
   id: number;
@@ -17,15 +15,17 @@ interface NegotiationSession {
   opportunity_title: string;
   status: string;
   created_at: string;
-  target_price: number;
-  suppliers: {
-    id: number;
-    company_name: string;
-    status: string;
-    negotiation_round: number;
-    final_price?: number;
-  }[];
+  suppliers: unknown[];
 }
+
+const SESSION_STATUS = new Map([
+  ['active', { label: 'Active', tone: 'sup' }],
+  ['negotiating', { label: 'Active', tone: 'sup' }],
+  ['bid_submitted', { label: 'Bid submitted', tone: 'sub' }],
+  ['completed', { label: 'Completed', tone: 'won' }],
+  ['cancelled', { label: 'Cancelled', tone: 'lost' }],
+  ['pending', { label: 'Pending', tone: 'app' }],
+]);
 
 export default function NegotiationsPage() {
   const router = useRouter();
@@ -45,157 +45,93 @@ export default function NegotiationsPage() {
 
   useEffect(() => {
     if (!user) return;
-
+    const controller = new AbortController();
     const fetchSessions = async () => {
       try {
         const response = await fetch(
-          `/api/sam-gov/sessions?company_id=${user.company_id}&requester_user_id=${user.id}`,
-          {
-          cache: 'no-store',
-          }
+          '/api/sam-gov/sessions?company_id=' + user.company_id + '&requester_user_id=' + user.id,
+          { cache: 'no-store', signal: controller.signal }
         );
-
-        if (response.ok) {
-          const data = await response.json();
-          if (data.sessions && data.sessions.length > 0) {
-            setSessions(data.sessions);
-          }
-        }
-      } catch (err) {
-        setError('Could not load negotiations from server');
+        if (!response.ok) throw new Error('Could not load negotiations from the server.');
+        const data = await response.json();
+        if (!controller.signal.aborted) setSessions(data.sessions ?? []);
+      } catch {
+        if (!controller.signal.aborted) setError('Could not load negotiations from the server.');
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     };
-
-    fetchSessions();
+    void fetchSessions();
+    return () => controller.abort();
   }, [user]);
 
-  const getStatusBadge = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'active':
-      case 'negotiating':
-        return <Badge className="bg-blue-100 text-blue-700 border-blue-300"><Clock className="w-3 h-3 mr-1" />Active</Badge>;
-      case 'bid_submitted':
-        return <Badge className="bg-purple-100 text-purple-700 border-purple-300"><CheckCircle2 className="w-3 h-3 mr-1" />Bid Submitted</Badge>;
-      case 'completed':
-        return <Badge className="bg-green-100 text-green-700 border-green-300"><CheckCircle2 className="w-3 h-3 mr-1" />Completed</Badge>;
-      case 'cancelled':
-        return <Badge className="bg-red-100 text-red-700 border-red-300"><AlertCircle className="w-3 h-3 mr-1" />Cancelled</Badge>;
-      case 'pending':
-        return <Badge className="bg-yellow-100 text-yellow-700 border-yellow-300"><AlertCircle className="w-3 h-3 mr-1" />Pending</Badge>;
-      default:
-        return <Badge variant="outline">{status}</Badge>;
-    }
-  };
-
-  const navigateToNegotiation = (session: NegotiationSession) => {
-    router.push(`/sam-gov/${session.opportunity_id}/quotenegotiation`);
-  };
-
-  if (!user || loading) {
-    return (
-      <div className="p-6 lg:p-8 space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <Skeleton className="h-8 w-48 mb-2" />
-            <Skeleton className="h-4 w-64" />
-          </div>
-        </div>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="space-y-4">
-              {[1, 2, 3].map((i) => (
-                <Skeleton key={i} className="h-16 w-full" />
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
   return (
-    <div className="p-6 lg:p-8 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Handshake className="h-6 w-6" />
-            Active Negotiations
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            Manage your ongoing vendor negotiations and RFQ processes
-          </p>
-        </div>
-        <Button onClick={() => router.push('/sam-gov')}>
-          <Building2 className="mr-2 h-4 w-4" />
-          Browse Opportunities
-        </Button>
-      </div>
-
-      {error && (
-        <div className="rounded border border-destructive bg-destructive/10 p-3 text-sm text-destructive">
-          {error}
-        </div>
-      )}
-
-      {sessions.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <Handshake className="mb-4 h-12 w-12 text-muted-foreground" />
-            <h3 className="mb-2 text-lg font-medium">No Active Negotiations</h3>
-            <p className="mb-4 text-center text-muted-foreground">
-              You have not started any vendor negotiations yet.
-              <br />
-              Browse opportunities and start negotiating with vendors.
-            </p>
-            <Button onClick={() => router.push('/sam-gov')}>Browse SAM.gov Opportunities</Button>
-          </CardContent>
-        </Card>
-      ) : (
-        <Card>
-          <CardHeader>
-            <CardTitle>Negotiation Sessions</CardTitle>
-            <CardDescription>
-              Click on a session to view details and continue negotiating.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Opportunity</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Vendors</TableHead>
-                  <TableHead>Started</TableHead>
-                  <TableHead className="text-right">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sessions.map((session) => (
-                  <TableRow
-                    key={session.id}
-                    className="cursor-pointer hover:bg-muted/50"
-                    onClick={() => navigateToNegotiation(session)}
-                  >
-                    <TableCell className="max-w-md truncate font-medium">
-                      {session.opportunity_title}
-                    </TableCell>
-                    <TableCell>{getStatusBadge(session.status)}</TableCell>
-                    <TableCell>{session.suppliers?.length || 0} vendor(s)</TableCell>
-                    <TableCell>{format(new Date(session.created_at), 'MMM d, yyyy')}</TableCell>
-                    <TableCell className="text-right">
-                      <Button variant="ghost" size="sm">
-                        View <ArrowRight className="ml-1 h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      )}
-    </div>
+    <>
+      <PageBand
+        title="Negotiations"
+        lead="Review vendor outreach and continue your RFQs."
+        actions={
+          <Link className="cf-btn cf-btn-primary" href="/opportunities?view=all">
+            <Search size={16} aria-hidden />Browse opportunities
+          </Link>
+        }
+      />
+      <PageMain>
+        {error ? <div role="alert" className="cf-banner cf-banner-bad">{error}</div> : (
+          <section className="cf-card overflow-hidden" aria-labelledby="negotiation-sessions">
+            <div className="px-6 py-5">
+              <h2 id="negotiation-sessions" className="cf-h2">Negotiation sessions</h2>
+              {!loading && sessions.length > 0 ? (
+                <p className="cf-sub">{sessions.length} {sessions.length === 1 ? 'session' : 'sessions'}</p>
+              ) : null}
+            </div>
+            {loading ? (
+              <div className="px-6 pb-6" role="status" aria-label="Loading negotiations">
+                <Skeleton className="h-32 w-full" />
+              </div>
+            ) : sessions.length === 0 ? (
+              <p className="cf-sub px-6 pb-6">No vendor negotiations yet.</p>
+            ) : (
+              <div className="cf-table-scroll" role="region" aria-label="Negotiation sessions table" tabIndex={0}>
+                <table className="cf-table min-w-[570px]">
+                  <thead>
+                    <tr>
+                      <th scope="col">Opportunity</th>
+                      <th scope="col">Status</th>
+                      <th scope="col">Vendors</th>
+                      <th scope="col">Started</th>
+                      <th scope="col" className="cf-num">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sessions.map((session) => {
+                      const href = '/sam-gov/' + encodeURIComponent(session.opportunity_id) + '/quotenegotiation';
+                      const title = session.opportunity_title || session.opportunity_id;
+                      const status = SESSION_STATUS.get(session.status.toLowerCase());
+                      const started = new Date(session.created_at);
+                      return (
+                        <tr key={session.id}>
+                          <td className="max-w-md break-words">
+                            <Link className="cf-link font-medium" href={href}>{title}</Link>
+                          </td>
+                          <td><span className={'cf-pill cf-pill-' + (status?.tone ?? 'pool')}>{status?.label ?? session.status}</span></td>
+                          <td className="cf-mono">{session.suppliers?.length ?? 0}</td>
+                          <td className="whitespace-nowrap">{isValid(started) ? format(started, 'MMM d, yyyy') : '—'}</td>
+                          <td className="text-right">
+                            <Link className="cf-btn cf-btn-secondary cf-btn-sm" href={href} aria-label={'View negotiation for ' + title}>
+                              View <ArrowRight size={14} aria-hidden />
+                            </Link>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        )}
+      </PageMain>
+    </>
   );
 }

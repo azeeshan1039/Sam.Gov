@@ -3,15 +3,13 @@
 import { useMemo, useState } from "react";
 import { Pencil, Search } from "lucide-react";
 import {
-  PORTALS,
-  PORTAL_COLORS,
-  displayName,
+  portalColor,
+  submittedPortals,
   formatMoney,
   initials,
   portalCount,
   type ColumnGroup,
   type EmployeeStatsRow,
-  type PortalName,
   type StatsPayload,
 } from "@/lib/stats";
 import { Input } from "@/components/ui/input";
@@ -23,16 +21,9 @@ const GROUPS: { id: ColumnGroup; label: string }[] = [
   { id: "all", label: "All Columns" },
   { id: "weekly", label: "Weekly Submissions (W1–W5)" },
   { id: "historical", label: "Historical & Goals" },
-  { id: "portals", label: "Portals (SAM, SEPTA, Unison, Nassau)" },
+  { id: "portals", label: "Portals" },
   { id: "values", label: "Bid Values & Thresholds" },
 ];
-
-const PORTAL_TEXT: Record<PortalName, string> = {
-  "SAM.GOV": "text-blue-600",
-  SEPTA: "text-green-600",
-  Unison: "text-amber-600",
-  Nassau: "text-violet-600",
-};
 
 function show(group: ColumnGroup, set: ColumnGroup) {
   return group === "all" || group === set;
@@ -44,7 +35,7 @@ function EmployeeCell({ row }: { row: EmployeeStatsRow }) {
       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-800 text-[11px] font-semibold text-white">
         {initials(row.name)}
       </span>
-      <span className="font-medium text-slate-900">{displayName(row.name)}</span>
+      <span className="font-medium text-slate-900">{row.name}</span>
       {!row.is_active && <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-600">Inactive</span>}
     </div>
   );
@@ -76,7 +67,11 @@ export function EmployeeDataTab({
     return <Skeleton className="h-96 w-full" />;
   }
 
+  const portals = submittedPortals(stats).map(({ name }) => name);
   const weekCount = stats.week_labels.length;
+  const columnCount = 2 + (show(group, "weekly") ? weekCount : 0) +
+    (show(group, "historical") ? 4 : 0) + (show(group, "portals") ? portals.length : 0) +
+    (show(group, "values") ? 6 : 0);
 
   return (
     <div className="space-y-4">
@@ -137,12 +132,12 @@ export function EmployeeDataTab({
                 </>
               )}
               {show(group, "portals") &&
-                PORTALS.map((portal) => (
+                portals.map((portal) => (
                   <TableHead key={portal} className="whitespace-nowrap">
                     <span className="inline-flex items-center gap-1.5">
                       <span
                         className="h-2 w-2 rounded-full"
-                        style={{ backgroundColor: PORTAL_COLORS[portal] }}
+                        style={{ backgroundColor: portalColor(portal) }}
                       />
                       {portal}
                     </span>
@@ -164,7 +159,7 @@ export function EmployeeDataTab({
           <TableBody>
             {rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={20} className="py-8 text-center text-sm text-slate-500">
+                <TableCell colSpan={columnCount} className="py-8 text-center text-sm text-slate-500">
                   {query ? "No employees match that name." : "No team members yet."}
                 </TableCell>
               </TableRow>
@@ -202,10 +197,10 @@ export function EmployeeDataTab({
                       </>
                     )}
                     {show(group, "portals") &&
-                      PORTALS.map((portal) => (
+                      portals.map((portal) => (
                         <TableCell
                           key={`${row.user_id}-${portal}`}
-                          className={cn("tabular-nums font-medium", PORTAL_TEXT[portal])}
+                          className="tabular-nums font-medium"
                         >
                           {portalCount(row, portal)}
                         </TableCell>

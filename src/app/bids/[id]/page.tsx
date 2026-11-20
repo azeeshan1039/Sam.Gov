@@ -7,6 +7,7 @@ import { getStoredUser, type AuthUser } from "@/lib/auth";
 import { BidStepper, PageMain } from "@/components/design/PageFrame";
 import {
   BID_STATUSES,
+  statusStyle,
   formatMoney,
   type BidConversationEvent,
   type BidStatus,
@@ -252,7 +253,7 @@ export default function BidDetailPage() {
     }
   }
 
-  if (!bid) return <div className="p-6 lg:p-8">{message || "Loading bid…"}</div>;
+  if (!bid) return <PageMain>{message || "Loading bid…"}</PageMain>;
 
   const agentCanEdit = user?.role === "admin" || (
     BID_STATUSES[bid.internal_status as BidStatus]?.classification === "active" &&
@@ -298,7 +299,6 @@ export default function BidDetailPage() {
   const approvedPrice = bid.expected_submitted_price;
   const priceDiffers = approved && approvedPrice != null && Number.isFinite(typedPrice) && submittedPrice.trim() !== "" && Math.abs(typedPrice - approvedPrice) > 0.009;
   const dueText = dueStamp(bid.due_date, daysLeft);
-  const pillClass = waiting || sentBack ? "cf-pill-app" : submitted ? "cf-pill-sub" : released ? "cf-pill-lost" : "cf-pill-sup";
   const quoteStep = !waiting && !approved && !submitted && !released;
   const stepWhen = (next: string) => {
     const hit = (bid.status_history || []).find((event) => event.new_status === next);
@@ -318,24 +318,30 @@ export default function BidDetailPage() {
         <div className="cf-wrap cf-band-in">
           <div style={{ display: "flex", flexDirection: "column", gap: 6, flex: "1 1 320px", minWidth: 0 }}>
             <nav aria-label="Breadcrumb" className="cf-mono" style={{ fontSize: 12, color: "var(--cf-text-3)", display: "flex", gap: 8, letterSpacing: "0.04em" }}>
-              <Link href="/my-bids">MY BIDS</Link>
+              <Link href={user?.role === "admin" ? "/bid-history" : "/my-bids"}>{user?.role === "admin" ? "PIPELINE" : "MY BIDS"}</Link>
               <span aria-hidden="true">/</span>
               <span>{bid.solicitation_number || bid.bid_id}</span>
             </nav>
             <h1 className="cf-h1" style={{ overflowWrap: "anywhere" }}>{bid.title || bid.bid_id}</h1>
             <div className="cf-mono" style={{ fontSize: 12, color: "var(--cf-text-2)", letterSpacing: "0.03em", overflowWrap: "anywhere" }}>
               {submitted
-                ? `${bid.solicitation_number || bid.bid_id} · ${(bid.portal || "SAM.GOV").toUpperCase()}${bid.naics_code ? ` · NAICS ${bid.naics_code}` : ""}`
-                : `${bid.solicitation_number || bid.bid_id} · ${(bid.portal || "SAM.GOV").toUpperCase()} · QTY — · DUE ${dueText}`}
+                ? `${bid.solicitation_number || bid.bid_id} · ${(bid.portal || "—").toUpperCase()}${bid.naics_code ? ` · NAICS ${bid.naics_code}` : ""}`
+                : `${bid.solicitation_number || bid.bid_id} · ${(bid.portal || "—").toUpperCase()} · QTY — · DUE ${dueText}`}
             </div>
           </div>
           <div style={{ display: "flex", flexWrap: "nowrap", gap: 12, alignItems: "center", flex: "none", alignSelf: "flex-end", marginLeft: "auto" }}>
-            <span className={`cf-pill ${pillClass}`} style={{ alignSelf: "center" }}>{bid.internal_status}</span>
+            <span className="cf-pill" style={{ ...statusStyle(bid.internal_status), alignSelf: "center" }}>{bid.internal_status}</span>
             {bid.bid_url ? <a className="cf-btn cf-btn-secondary" href={bid.bid_url} target="_blank" rel="noreferrer" style={{ minHeight: 40 }}>View on SAM.gov ↗</a> : null}
           </div>
         </div>
       </section>
       <PageMain>
+        <nav aria-label="On this page" className="flex flex-wrap items-center gap-4">
+          {workspace.rfq_href && <Link className="cf-btn cf-btn-primary" href={workspace.rfq_href}>Open RFQ negotiation</Link>}
+          {[["vendors", "Vendors"], ["negotiation", "Negotiation"], ["bid-emails", "Emails"], ["notes", "Remarks & notes"], ["history", "History"]].map(([id, label]) => (
+            <a className="cf-link" key={id} href={"#" + id}>{label}</a>
+          ))}
+        </nav>
       <BidStepper status={bid.internal_status} captions={awardCaptions} />
 
       {deadlinePassed ? (
@@ -381,7 +387,7 @@ export default function BidDetailPage() {
               <p className="cf-sub">{bid.title || bid.bid_id} is no longer an active bid on your list.</p>
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                 <Link className="cf-btn cf-btn-primary" href="/opportunities">Find another opportunity</Link>
-                <Link className="cf-btn cf-btn-secondary" href="/my-bids">My bids</Link>
+                <Link className="cf-btn cf-btn-secondary" href={user?.role === "admin" ? "/bid-history" : "/my-bids"}>{user?.role === "admin" ? "Pipeline" : "My bids"}</Link>
               </div>
             </section>
           ) : null}
@@ -424,7 +430,7 @@ export default function BidDetailPage() {
 
           <section className="cf-card" style={{ padding: 24, display: "flex", flexDirection: "column", gap: 16 }}>
             <h2 className="cf-h3">Current status</h2>
-            <span className={`cf-pill ${pillClass}`} style={{ alignSelf: "flex-start" }}>{bid.internal_status}</span>
+            <span className="cf-pill" style={{ ...statusStyle(bid.internal_status), alignSelf: "flex-start" }}>{bid.internal_status}</span>
             {agentCanEdit ? (
               <div className="cf-grid2">
                 <label className="cf-field">New status
@@ -493,6 +499,7 @@ export default function BidDetailPage() {
                 {(bid.status_history || []).map((event) => (
                   <li key={event.id}>
                     <div style={{ fontWeight: 500 }}>{event.old_status} → {event.new_status}</div>
+                    {event.reason && <p>{event.reason}</p>}
                     <div className="cf-mono cf-meta">{event.changed_by_name || "—"} · {event.changed_at_eastern}</div>
                   </li>
                 ))}
@@ -760,6 +767,7 @@ export default function BidDetailPage() {
               {(bid.status_history || []).map((event) => (
                 <li key={event.id} className="border-l-2 pl-4">
                   <p className="font-medium">{event.old_status} → {event.new_status}</p>
+                  {event.reason && <p>{event.reason}</p>}
                   <p className="text-xs text-slate-600">{event.changed_by_name} · {new Date(event.changed_at_eastern).toLocaleString("en-US", { timeZone: "America/New_York", timeZoneName: "short" })}</p>
                 </li>
               ))}

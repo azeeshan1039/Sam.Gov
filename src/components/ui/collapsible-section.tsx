@@ -24,16 +24,18 @@ export function CollapsibleSection({
     return (
         <div className={cn("border rounded-lg bg-card shadow-sm", className)}>
             <button
+                type="button"
+                aria-expanded={isOpen}
                 onClick={() => setIsOpen(!isOpen)}
                 className="w-full flex items-center justify-between p-4 text-left hover:bg-muted/50 transition-colors rounded-t-lg"
             >
-                <div className="flex items-center gap-2 font-semibold text-lg">
+                <div className="flex min-w-0 items-center gap-2 font-semibold text-lg [&>svg]:shrink-0">
                     {icon}
                     {title}
                 </div>
                 <ChevronDown
                     className={cn(
-                        "h-5 w-5 text-muted-foreground transition-transform duration-200",
+                        "h-5 w-5 shrink-0 text-muted-foreground transition-transform duration-200",
                         isOpen ? "rotate-180" : ""
                     )}
                 />

@@ -133,7 +133,7 @@ test("@critical an agent records a lost outcome at the due checkpoint", async ({
   await page.goto("/award-tracking");
   const row = page.getByTestId("award-row-1");
   await expect(row.getByText("Day 45 · Due · 1/4")).toBeVisible();
-  await expect(page.getByRole("status")).toContainText("award check(s) need your update");
+  await expect(page.getByRole("status")).toHaveText(/award checks? (is|are) due/);
   await row.getByRole("button", { name: "Record check" }).click();
 
   const dialog = page.getByRole("dialog");
@@ -188,7 +188,10 @@ test("@critical the dashboard 90-day flag opens that bid's checkpoint", async ({
   const backend = new AwardBackend();
   await authenticate(page, manager);
   await page.route("**/api/sam-gov/dashboard-stats**", (route) => route.fulfill({ json: { stats: {} } }));
-  await page.route("**/api/backend/stats/leaderboard", (route) => route.fulfill({ json: { leaderboard: [] } }));
+  await page.route("**/api/sam-gov", (route) => route.fulfill({ json: [] }));
+  await page.route("**/api/backend/stats/leaderboard*", (route) => route.fulfill({ json: { by_amount: [], by_count: [] } }));
+  await page.route("**/api/backend/stats?*", (route) => route.fulfill({ json: {} }));
+  await page.route("**/api/backend/pipeline?*", (route) => route.fulfill({ json: { items: [] } }));
   await page.route("**/api/backend/opportunities/duplicates", (route) => route.fulfill({ json: { incidents: [] } }));
   await page.route("**/api/backend/opportunities/stale", (route) => route.fulfill({ json: { bids: [] } }));
   await page.route("**/api/backend/auth/team", (route) => route.fulfill({ json: { members: [] } }));

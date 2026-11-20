@@ -1,19 +1,13 @@
-export const PORTALS = ["SAM.GOV", "SEPTA", "Unison", "Nassau"] as const;
-export type PortalName = (typeof PORTALS)[number];
+const PORTAL_COLORS = new Map([
+  ["SAM.GOV", "#2563eb"],
+  ["SEPTA", "#16a34a"],
+  ["Unison", "#f59e0b"],
+  ["Nassau", "#7c3aed"],
+]);
 
-export const PORTAL_COLORS: Record<PortalName, string> = {
-  "SAM.GOV": "#2563eb",
-  SEPTA: "#16a34a",
-  Unison: "#f59e0b",
-  Nassau: "#7c3aed",
-};
-
-export const PORTAL_SHORT: Record<PortalName, string> = {
-  "SAM.GOV": "SAM",
-  SEPTA: "SEPTA",
-  Unison: "Unison",
-  Nassau: "Nassau",
-};
+export function portalColor(name: string) {
+  return PORTAL_COLORS.get(name) ?? "#64748b";
+}
 
 export type ColumnGroup = "all" | "weekly" | "historical" | "portals" | "values";
 
@@ -88,8 +82,8 @@ export function formatMoney(value: number | null | undefined) {
   });
 }
 
-export function displayName(name: string) {
-  return name.trim().split(/\s+/)[0] || name;
+export function submittedPortals(stats: StatsPayload) {
+  return stats.bid_by_portal.portals.filter((portal) => portal.count > 0);
 }
 
 export function initials(name: string) {
@@ -101,6 +95,6 @@ export function initials(name: string) {
   return one.slice(0, 2).toUpperCase();
 }
 
-export function portalCount(row: EmployeeStatsRow, portal: PortalName) {
+export function portalCount(row: EmployeeStatsRow, portal: string) {
   return Number(row.portals?.[portal] ?? 0);
 }

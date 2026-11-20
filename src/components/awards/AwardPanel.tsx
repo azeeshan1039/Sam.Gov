@@ -203,7 +203,7 @@ export function AwardPanel({
   const limitReached = award.lookup.eligible && award.lookup.remaining_today <= 0;
   const lostError = Boolean(error && outcome === "lost");
   const submittedLabel = award.submitted_on
-    ? new Date(`${award.submitted_on}T00:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }).toUpperCase()
+    ? new Date(`${award.submitted_on}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }).toUpperCase()
     : null;
 
   return (
@@ -289,6 +289,9 @@ export function AwardPanel({
         <p className="cf-meta">Last check: {info.message}</p>
       ) : null}
 
+      {award.award_outcome === "won" && award.awarded_amount != null && (
+        <p className="cf-sub">Award amount {formatMoney(award.awarded_amount)}</p>
+      )}
       {award.award_outcome === "lost" && (award.awarded_to || award.awarded_amount != null) && (
         <p className="cf-sub">Awarded to <strong>{award.awarded_to || "—"}</strong> for <strong>{formatMoney(award.awarded_amount)}</strong></p>
       )}

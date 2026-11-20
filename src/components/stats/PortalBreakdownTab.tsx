@@ -3,26 +3,16 @@
 import { useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import {
-  PORTALS,
-  PORTAL_COLORS,
-  displayName,
+  portalColor,
+  submittedPortals,
   initials,
   portalCount,
   type EmployeeStatsRow,
-  type PortalName,
   type StatsPayload,
 } from "@/lib/stats";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { cn } from "@/lib/utils";
-
-const PORTAL_TEXT: Record<PortalName, string> = {
-  "SAM.GOV": "text-blue-600",
-  SEPTA: "text-green-600",
-  Unison: "text-amber-600",
-  Nassau: "text-violet-600",
-};
 
 export function PortalBreakdownTab({
   stats,
@@ -44,16 +34,13 @@ export function PortalBreakdownTab({
   }
 
   const total = stats.bid_by_portal.total;
-  const slices = PORTALS.map((portal) => {
-    const found = stats.bid_by_portal.portals.find((p) => p.name === portal);
-    const count = found?.count ?? 0;
-    return {
-      name: portal,
-      count,
-      pct: total > 0 ? Math.round((count / total) * 100) : 0,
-      color: PORTAL_COLORS[portal],
-    };
-  });
+  const slices = submittedPortals(stats).map(({ name, count }) => ({
+    name,
+    count,
+    pct: Math.round((count / total) * 100),
+    color: portalColor(name),
+  }));
+  const portals = slices.map(({ name }) => name);
 
   return (
     <div className="space-y-4">
@@ -64,6 +51,7 @@ export function PortalBreakdownTab({
             {total.toLocaleString()} submitted bids this month
           </p>
           <div className="mt-6 space-y-3">
+            {slices.length === 0 && <p className="text-sm text-slate-600">No submissions for this month.</p>}
             {slices.map((slice) => (
               <div key={slice.name}>
                 <div className="mb-1 flex items-center justify-between text-sm">
@@ -120,12 +108,12 @@ export function PortalBreakdownTab({
           <TableHeader>
             <TableRow className="bg-slate-50/80">
               <TableHead>Employee</TableHead>
-              {PORTALS.map((portal) => (
+              {portals.map((portal) => (
                 <TableHead key={portal}>
                   <span className="inline-flex items-center gap-1.5">
                     <span
                       className="h-2 w-2 rounded-full"
-                      style={{ backgroundColor: PORTAL_COLORS[portal] }}
+                      style={{ backgroundColor: portalColor(portal) }}
                     />
                     {portal}
                   </span>
@@ -137,7 +125,7 @@ export function PortalBreakdownTab({
           <TableBody>
             {rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="py-8 text-center text-sm text-slate-500">
+                <TableCell colSpan={portals.length + 2} className="py-8 text-center text-sm text-slate-500">
                   {query ? "No employees match that name." : "No team members yet."}
                 </TableCell>
               </TableRow>
@@ -149,13 +137,13 @@ export function PortalBreakdownTab({
                       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-800 text-[11px] font-semibold text-white">
                         {initials(row.name)}
                       </span>
-                      <span className="font-medium">{displayName(row.name)}</span>
+                      <span className="font-medium">{row.name}</span>
                     </div>
                   </TableCell>
-                  {PORTALS.map((portal) => (
+                  {portals.map((portal) => (
                     <TableCell
                       key={portal}
-                      className={cn("tabular-nums font-medium", PORTAL_TEXT[portal])}
+                      className="tabular-nums font-medium"
                     >
                       {portalCount(row, portal)}
                     </TableCell>

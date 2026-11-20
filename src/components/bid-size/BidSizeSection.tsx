@@ -132,15 +132,16 @@ export function agentChartOptions(report: SizeReport): Highcharts.Options {
 /** Bid Value vs. Size (KAN-60/61): distribution, trend and per-agent split of submitted bids. */
 export function BidSizeSection({
   report,
-  companyMode,
+  scope,
   interval,
   onIntervalChange,
 }: {
   report: SizeReport | null | undefined;
-  companyMode: boolean;
+  scope: "company" | "employee" | "self";
   interval: "week" | "month";
   onIntervalChange: (interval: "week" | "month") => void;
 }) {
+  const companyMode = scope === "company";
   if (!report) {
     return (
       <section className="cf-card" style={{ padding: "22px 24px" }}>
@@ -156,7 +157,7 @@ export function BidSizeSection({
         <div>
           <h2 id="bid-size-heading" className="cf-h2" style={{ fontSize: 20 }}>Bid value vs. size</h2>
           <p className="cf-sub">
-            {companyMode ? "Company-wide" : "Your"} submitted bids by size bucket · {report.count} bids · {formatMoney(report.total)}
+            {{ company: "Company-wide", employee: "This agent's", self: "Your" }[scope]} submitted bids by size bucket · {report.count} bids · {formatMoney(report.total)}
           </p>
         </div>
         <div className="cf-seg-wrap" role="group" aria-label="Time grouping">

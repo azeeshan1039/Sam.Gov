@@ -156,7 +156,7 @@ export default function AgentBidDataPage() {
           </div>
         ))}
       </section>
-      <BidSizeSection report={sizeReport} companyMode={companyMode} interval={trendInterval} onIntervalChange={changeInterval} />
+      <BidSizeSection report={sizeReport} scope={companyMode ? "company" : user?.role === "admin" ? "employee" : "self"} interval={trendInterval} onIntervalChange={changeInterval} />
       {companyMode ? (
         <p className="cf-sub">Choose an agent to see their individual active, released and completed bids.</p>
       ) : <>
@@ -169,8 +169,8 @@ export default function AgentBidDataPage() {
             <h2 className="cf-h2">Historical / released / reassigned</h2>
             {historical.length === 0 ? <p className="cf-sub">No bids were released or reassigned away from you in this period.</p> : null}
           </div>
-          <Link className="cf-link" href="/my-bids">See active and completed bids in My bids</Link>
-          <div style={{ flex: "1 1 100%" }}><PipelineTable items={historical} variant="person" empty="No released or reassigned bids." /></div>
+          <Link className="cf-link" href={user?.role === "admin" ? "/bid-history" : "/my-bids"}>{user?.role === "admin" ? "Open pipeline" : "See active and completed bids in My bids"}</Link>
+          <div style={{ flex: "1 1 100%", minWidth: 0 }}><PipelineTable items={historical} variant="person" empty="No released or reassigned bids." /></div>
         </section>
         <section className="cf-card" aria-labelledby="done-h" style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
           <div style={{ padding: "18px 24px 14px", display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
@@ -180,11 +180,7 @@ export default function AgentBidDataPage() {
             </div>
             <span className="cf-mono cf-meta">{completed.length} BIDS</span>
           </div>
-          {completed.length === 0 ? (
-            <p className="cf-meta" style={{ padding: "4px 24px 20px" }}>No completed bids.</p>
-          ) : (
-            <PipelineTable items={completed} variant="history" empty="No completed bids." />
-          )}
+          <PipelineTable items={completed} variant="history" empty="No completed bids." />
         </section>
       </>}
       </PageMain>

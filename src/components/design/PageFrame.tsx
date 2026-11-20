@@ -15,7 +15,7 @@ export function PageBand({
   return (
     <section className="cf-band">
       <div className="cf-wrap cf-band-in">
-        <div>
+        <div className="min-w-0 [overflow-wrap:anywhere]">
           {eyebrow ? <div className="cf-eyebrow">{eyebrow}</div> : null}
           <h1 className="cf-h1">{title}</h1>
           {lead ? <div className="cf-lead">{lead}</div> : null}
@@ -26,23 +26,25 @@ export function PageBand({
   );
 }
 
-export function PageMain({ children }: { children: ReactNode }) {
-  return <main className="cf-wrap cf-main">{children}</main>;
+export function PageMain({ children, className }: { children: ReactNode; className?: string }) {
+  return <main className={className ? "cf-wrap cf-main " + className : "cf-wrap cf-main"}>{children}</main>;
 }
 
 const ADMIN_TABS = [
   { href: "/work-management", label: "Work management" },
   { href: "/bid-history", label: "Bid history & pipeline" },
+  { href: "/hundred-k", label: "$100K+ by employee" },
   { href: "/approvals", label: "Approvals" },
+  { href: "/activity-log", label: "Status activity" },
   { href: "/team", label: "Team" },
 ];
 
 export function AdminTabs({ current, approvalCount }: { current: string; approvalCount?: number }) {
   return (
     <div style={{ borderBottom: "1px solid var(--cf-line)" }}>
-      <nav aria-label="Admin" className="cf-wrap" style={{ display: "flex", flexWrap: "wrap", gap: 28 }}>
+      <nav aria-label="Admin" className="cf-wrap cf-section-tabs">
         {ADMIN_TABS.map((tab) => {
-          const on = current === tab.href || (tab.href === "/bid-history" && (current === "/pipeline" || current === "/hundred-k"));
+          const on = current === tab.href;
           return (
             <Link key={tab.href} href={tab.href} className={`cf-tab${on ? " cf-tab-on" : ""}`} aria-current={on ? "page" : undefined}>
               {tab.label}
@@ -63,7 +65,7 @@ const REPORT_TABS = [
 export function ReportTabs({ current }: { current: string }) {
   return (
     <div style={{ borderBottom: "1px solid var(--cf-line)" }}>
-      <nav aria-label="Reports" className="cf-wrap" style={{ display: "flex", flexWrap: "wrap", gap: 28 }}>
+      <nav aria-label="Reports" className="cf-wrap cf-section-tabs">
         {REPORT_TABS.map((tab) => {
           const on = current === tab.href;
           return (

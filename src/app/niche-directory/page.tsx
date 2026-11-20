@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Tags, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { getStoredUser, type AuthUser } from "@/lib/auth";
+import { PageBand, PageMain } from "@/components/design/PageFrame";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -140,31 +141,29 @@ export default function NicheDirectoryPage() {
   };
 
   return (
-    <div className="space-y-6 p-6 lg:p-8">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold"><Tags className="h-6 w-6" />Niche directory</h1>
-          <p className="mt-1 text-muted-foreground">Company NAICS niches, active owners, and related bids.</p>
-        </div>
-        <Button variant="outline" onClick={load} disabled={loading}><RefreshCw className="mr-2 h-4 w-4" />Refresh</Button>
-      </div>
-
+    <>
+      <PageBand
+        title="Niche directory"
+        lead="Company NAICS niches, active owners, and related bids."
+        actions={<button type="button" className="cf-btn cf-btn-secondary disabled:opacity-50" onClick={load} disabled={loading}><RefreshCw size={16} aria-hidden />Refresh</button>}
+      />
+      <PageMain className="cf-workspace">
       {error && <div className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
-      <Card>
+      <Card className="cf-card">
         <CardHeader>
           <CardTitle className="text-base">Niche performance</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4 text-sm">
           <div className="flex flex-wrap items-end gap-3">
             <div>
-              <label className="text-xs font-medium text-muted-foreground">From</label>
-              <input className="mt-1 h-9 rounded border px-3" type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
+              <label htmlFor="niche-date-from" className="cf-lbl">From</label>
+              <input className="mt-1 h-9 rounded border px-3" id="niche-date-from" type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
             </div>
             <div>
-              <label className="text-xs font-medium text-muted-foreground">To</label>
-              <input className="mt-1 h-9 rounded border px-3" type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
+              <label htmlFor="niche-date-to" className="cf-lbl">To</label>
+              <input className="mt-1 h-9 rounded border px-3" id="niche-date-to" type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
             </div>
-            <Button variant="outline" onClick={load} disabled={loading}>Apply</Button>
+            <Button onClick={load} disabled={loading}>Apply</Button>
           </div>
           {performance ? (
             <>
@@ -199,13 +198,13 @@ export default function NicheDirectoryPage() {
         </CardContent>
       </Card>
       {loading ? <p className="text-sm text-muted-foreground">Loading niche ownership…</p> : items.length === 0 ? (
-        <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">No NAICS niches have been assigned yet.</CardContent></Card>
+        <Card className="cf-card"><CardContent className="py-10 text-center text-sm text-muted-foreground">No NAICS niches have been assigned yet.</CardContent></Card>
       ) : (
         <div className="grid gap-4 lg:grid-cols-2">
           {items.map((item) => (
-            <Card key={item.naics_code}>
+            <Card className="cf-card" key={item.naics_code}>
               <CardHeader>
-                <CardTitle className="text-base">{item.naics_code}{item.naics_description ? ` · ${item.naics_description}` : ""}</CardTitle>
+                <CardTitle role="heading" aria-level={2} className="text-base">{item.naics_code}{item.naics_description ? ` · ${item.naics_description}` : ""}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4 text-sm">
                 <div className="flex flex-wrap gap-2 text-muted-foreground">
@@ -269,6 +268,7 @@ export default function NicheDirectoryPage() {
           ))}
         </div>
       )}
-    </div>
+      </PageMain>
+    </>
   );
 }

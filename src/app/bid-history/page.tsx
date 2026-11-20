@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Download } from "lucide-react";
@@ -38,6 +38,7 @@ export default function BidHistoryPage() {
   const [status, setStatus] = useState(ALL);
   const [outcome, setOutcome] = useState(ALL);
   const [size, setSize] = useState(ALL);
+  const [sort, setSort] = useState("recent");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [loading, setLoading] = useState(true);
@@ -97,6 +98,11 @@ export default function BidHistoryPage() {
     if (user) load();
   }, [user, load]);
 
+  const orderedItems = useMemo(() => sort === "due"
+    ? [...items].sort((left, right) =>
+        (left.due_date || "9999-12-31").localeCompare(right.due_date || "9999-12-31") || right.id - left.id)
+    : items, [items, sort]);
+
   const filtersActive =
     Boolean(queryText) ||
     portal !== ALL ||
@@ -109,10 +115,10 @@ export default function BidHistoryPage() {
 
   if (!user) {
     return (
-      <div className="space-y-6 p-6 lg:p-8">
+      <PageMain>
         <Skeleton className="h-8 w-48" />
         <Skeleton className="h-64 w-full" />
-      </div>
+      </PageMain>
     );
   }
 
@@ -121,9 +127,9 @@ export default function BidHistoryPage() {
       <PageBand
         eyebrow={`ADMIN · ${items.length} BIDS LOGGED`}
         title="Bid history & pipeline"
-        lead="$100K+, approvals and by-person are views of this one list."
+        lead="Browse and filter the company’s logged bids."
         actions={(
-          <button type="button" className="cf-btn cf-btn-secondary" onClick={() => exportHistory(items)}>
+          <button type="button" className="cf-btn cf-btn-secondary" onClick={() => exportHistory(orderedItems)}>
             <Download size={16} strokeWidth={1.75} />Export CSV
           </button>
         )}
@@ -154,12 +160,9 @@ export default function BidHistoryPage() {
           <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
             <div>
               <h2 id="all-h" className="cf-h2">All logged bids</h2>
-              <p className="cf-sub">{loading ? "Loading…" : `${items.length} bids · most recent first`}</p>
+              <p className="cf-sub">{loading ? "Loading…" : `${items.length} bids`}</p>
             </div>
             <div className="cf-seg-wrap" role="group" aria-label="Bid history view">
-              <Link className="cf-seg cf-seg-on" href="/bid-history">All bids</Link>
-              <Link className="cf-seg" href="/hundred-k">$100K+</Link>
-              <Link className="cf-seg" href="/approvals">Approvals</Link>
               <Link className="cf-seg" href="/agent-bid-data">By person</Link>
             </div>
           </div>
@@ -173,12 +176,13 @@ export default function BidHistoryPage() {
             <FilterSelect label="Status" value={status} onChange={setStatus} options={[{ value: ALL, label: "All statuses" }, ...statuses.map((name) => ({ value: name, label: formatStatus(name) }))]} />
             <FilterSelect label="Outcome" value={outcome} onChange={setOutcome} options={[{ value: ALL, label: "All outcomes" }, { value: "won", label: formatOutcome("won") }, { value: "lost", label: formatOutcome("lost") }, { value: "pending", label: formatOutcome("pending") }, { value: "no_quote", label: "No quote" }]} />
             <FilterSelect label="Size" value={size} onChange={setSize} options={[{ value: ALL, label: "All sizes" }, { value: "lte_50k", label: "≤ $50k" }, { value: "gte_50k", label: "≥ $50k" }, { value: "gte_100k", label: "≥ $100k" }]} />
+            <FilterSelect label="Sort by" value={sort} onChange={setSort} options={[{ value: "recent", label: "Most recent" }, { value: "due", label: "Due soonest" }]} />
             <div className="cf-flt" style={{ flex: "1 1 150px" }}><label htmlFor="bh-f">Assigned from</label><input id="bh-f" className="cf-date" type="date" aria-label="Assign from" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} /></div>
             <div className="cf-flt" style={{ flex: "1 1 150px" }}><label htmlFor="bh-t">Assigned to</label><input id="bh-t" className="cf-date" type="date" aria-label="Assign to" value={dateTo} onChange={(event) => setDateTo(event.target.value)} /></div>
           </div>
         </div>
         {loading ? <Skeleton className="h-40 w-full" /> : (
-          <PipelineTable items={items} variant="ledger" empty={filtersActive ? "No bids match these filters." : "No bids have been logged yet."} />
+          <PipelineTable items={orderedItems} variant="ledger" empty={filtersActive ? "No bids match these filters." : "No bids have been logged yet."} />
         )}
       </section>
       </PageMain>

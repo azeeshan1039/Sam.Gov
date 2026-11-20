@@ -157,7 +157,7 @@ export function ComposeEmailDialog({
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{target?.title || "New email"}</DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-slate-700">
             {connected
               ? <>Sending as <strong>{account?.gmail_address}</strong>. The message goes from your Gmail account and is saved to this bid.</>
               : "Connect your Gmail account before sending email from Contract Finder."}

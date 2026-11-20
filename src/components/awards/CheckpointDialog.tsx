@@ -24,7 +24,7 @@ export function CheckpointDialog({
         <DialogHeader>
           <DialogTitle>Award check · {item?.solicitation_number || item?.bid_id}</DialogTitle>
           <DialogDescription className="text-slate-600">
-            {item?.title || "Submitted bid"} · <Link className="text-blue-600 hover:underline" href={`/bids/${item?.id}`}>Open bid</Link>
+            {item?.title || "Submitted bid"} · <Link className="text-blue-700 underline" href={`/bids/${item?.id}`}>Open bid</Link>
           </DialogDescription>
         </DialogHeader>
         {item && <AwardPanel bidId={item.id} focusCheckpoint={focusCheckpoint} onSaved={onSaved} />}

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { Download } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { PageBand, PageMain } from "@/components/design/PageFrame";
 import {
   Select,
   SelectContent,
@@ -140,30 +140,18 @@ export default function ContractAwardsPage() {
   };
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] flex-col">
-      <header className="flex items-center justify-between gap-4 border-b border-slate-200 bg-white px-6 py-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">
-            Contract Awards
-          </h1>
-        </div>
-        <div className="flex items-center gap-4">
-          {totalRecords !== null && (
-            <p className="text-xs text-slate-600">
-              Showing {results.length.toLocaleString()} of{" "}
-              <span className="font-medium">
-                {totalRecords.toLocaleString()}
-              </span>{" "}
-              matching records
-            </p>
-          )}
-          <div className="flex items-center gap-2">
+    <>
+      <PageBand
+        title="Contract awards"
+        lead={totalRecords !== null ? "Showing " + results.length.toLocaleString() + " of " + totalRecords.toLocaleString() + " matching records" : undefined}
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
             <Select
               value={capChoice}
               onValueChange={(v) => setCapChoice(v as CapChoice)}
               disabled={downloading}
             >
-              <SelectTrigger className="h-9 w-[160px]">
+              <SelectTrigger aria-label="CSV record limit" className="cf-select" style={{ width: 154, maxWidth: "100%" }}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -174,9 +162,9 @@ export default function ContractAwardsPage() {
                 ))}
               </SelectContent>
             </Select>
-            <Button
+            <button
               type="button"
-              variant="outline"
+              className="cf-btn cf-btn-secondary disabled:opacity-50"
               onClick={downloadCsv}
               disabled={downloading || !hasSearched || results.length === 0}
             >
@@ -186,12 +174,12 @@ export default function ContractAwardsPage() {
                 : `Download CSV (${formatCount(
                     resolveCap(capChoice, totalRecords)
                   )})`}
-            </Button>
+            </button>
           </div>
-        </div>
-      </header>
-
-      <div className="flex min-h-0 flex-1">
+        }
+      />
+      <PageMain>
+        <div className="cf-card flex min-w-0 flex-col overflow-hidden lg:min-h-[28rem] lg:flex-row">
         <FilterRail
           value={filters}
           onChange={setFilters}
@@ -205,16 +193,17 @@ export default function ContractAwardsPage() {
           }}
           busy={loading}
         />
-        <main className="flex min-w-0 flex-1 flex-col bg-slate-50">
+        <section aria-label="Contract award results" className="flex min-w-0 flex-1 flex-col bg-slate-50">
           {!hasSearched ? (
             <div className="m-6 rounded-md border border-dashed border-slate-300 p-10 text-center text-sm text-slate-500">
-              Set filters in the left rail, then click Apply to query GSA.
+              Set your filters and select Apply to search contract awards.
             </div>
           ) : (
             <ResultsTable rows={results} loading={loading} error={error} />
           )}
-        </main>
-      </div>
-    </div>
+        </section>
+        </div>
+      </PageMain>
+    </>
   );
 }

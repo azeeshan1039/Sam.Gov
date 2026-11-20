@@ -61,7 +61,7 @@ export default function WeeklySubmissionsPage() {
           </select>
         </div>
       </div>
-      <div style={{ overflowX: "auto" }}>
+      <div tabIndex={0} style={{ overflowX: "auto" }}>
         <table className="cf-table">
           <thead><tr><th>Agent</th><th className="cf-num">Bids</th><th className="cf-num">Submitted price</th><th className="cf-num">Gross profit</th></tr></thead>
           <tbody>

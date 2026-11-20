@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Activity, ArrowLeft, ArrowRight, RefreshCw } from "lucide-react";
+import { ArrowLeft, ArrowRight, RefreshCw } from "lucide-react";
 import { getStoredUser, type AuthUser } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
+import { AdminTabs, PageBand, PageMain } from "@/components/design/PageFrame";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -19,6 +20,7 @@ interface ActivityEvent {
   title: string | null;
   changed_by_name: string | null;
   old_status: string;
+  reason?: string | null;
   new_status: string;
   changed_at_eastern: string;
 }
@@ -83,28 +85,30 @@ export default function ActivityLogPage() {
   const lastItem = Math.min((page + 1) * PAGE_SIZE, total);
 
   if (!user) {
-    return <div className="space-y-6 p-6 lg:p-8"><Skeleton className="h-8 w-56" /><Skeleton className="h-64 w-full" /></div>;
+    return <PageMain><Skeleton className="h-8 w-56" /><Skeleton className="h-64 w-full" /></PageMain>;
   }
 
   return (
-    <main className="space-y-6 p-6 lg:p-8">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold"><Activity className="h-6 w-6" />Status activity</h1>
-          <p className="mt-1 text-muted-foreground">Company-wide chronological log of bid status changes.</p>
-        </div>
-        <Button variant="outline" onClick={() => void load()} disabled={loading}>
-          <RefreshCw aria-hidden="true" className="h-4 w-4" />Refresh
-        </Button>
-      </div>
-
-      {error && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded border border-destructive bg-destructive/10 p-3 text-sm text-destructive">
+    <>
+      <PageBand
+        eyebrow="Admin"
+        title="Status activity"
+        lead="Company-wide history of bid status changes."
+        actions={
+          <button type="button" className="cf-btn cf-btn-secondary disabled:opacity-50" onClick={() => void load()} disabled={loading}>
+            <RefreshCw size={16} aria-hidden />Refresh
+          </button>
+        }
+      />
+      <AdminTabs current="/activity-log" />
+      <PageMain className="cf-workspace">
+      {error && <div role="alert" className="cf-banner cf-banner-bad flex-wrap justify-between">
         <span>{error}</span><Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>Try again</Button>
       </div>}
 
-      <Card>
+      <Card className="cf-card">
         <CardHeader>
-          <CardTitle>All status changes</CardTitle>
+          <h2 className="cf-h2">All status changes</h2>
           <CardDescription aria-live="polite">
             {loading ? "Loading activity…" : total ? `Showing ${firstItem}–${lastItem} of ${total} events` : "No status changes have been recorded yet."}
           </CardDescription>
@@ -119,13 +123,14 @@ export default function ActivityLogPage() {
                 return <li key={event.id} className="py-4 first:pt-0 last:pb-0">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0 space-y-1">
-                      <p className="font-medium">
-                        <Link className="text-primary underline-offset-4 hover:underline" href={`/bids/${event.bid_id}`}>
+                      <p className="font-medium break-words">
+                        <Link className="cf-link underline underline-offset-4" href={`/bids/${event.bid_id}`}>
                           {event.solicitation_number || event.bid || `Bid ${event.bid_id}`}
                         </Link>
                         <span className="font-normal">: {event.old_status} → {event.new_status}</span>
                       </p>
-                      {event.title && <p className="truncate text-sm text-muted-foreground">{event.title}</p>}
+                      {event.title && <p className="cf-meta break-words">{event.title}</p>}
+                      {event.reason && <p className="cf-sub break-words">{event.reason}</p>}
                       <p className="text-sm text-muted-foreground">Changed by {event.changed_by_name || "Unknown user"}</p>
                     </div>
                     <time className="shrink-0 text-sm text-muted-foreground" dateTime={event.changed_at_eastern || undefined}>{when} ET</time>
@@ -147,6 +152,7 @@ export default function ActivityLogPage() {
           </> : !loading && !error ? <p className="py-6 text-sm text-muted-foreground">Status changes will appear here as bids move through the workflow.</p> : null}
         </CardContent>
       </Card>
-    </main>
+      </PageMain>
+    </>
   );
 }

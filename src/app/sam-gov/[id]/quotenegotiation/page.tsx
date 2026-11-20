@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { PageBand, PageMain } from "@/components/design/PageFrame";
 import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -952,6 +953,8 @@ Procurement Team`
         if (response.ok) {
           const data = await response.json();
           results.set(supplier.id, data);
+        } else {
+          setError('Compliance check failed for ' + supplier.company_name + '. Please retry.');
         }
       }
 
@@ -967,10 +970,10 @@ Procurement Team`
   const generateBidPackage = async () => {
     if (!negotiationSession || !selectedVendorForBid || !opportunity) return;
 
-    setGeneratingPdf(true);
     const selectedSupplier = negotiationSession.suppliers.find(s => s.id === selectedVendorForBid);
     if (!selectedSupplier) return;
 
+    setGeneratingPdf(true);
     const compliance = complianceResults.get(selectedVendorForBid);
     const savedData = localStorage.getItem(`summary-${opportunityId}`);
     const opportunityData = savedData ? { ...JSON.parse(savedData), ...opportunity } : opportunity;
@@ -997,7 +1000,8 @@ Procurement Team`
         })
       });
 
-      if (response.ok) {
+      if (!response.ok) throw new Error('Bid package service returned ' + response.status);
+      {
         const contentType = response.headers.get('content-type');
 
         if (contentType?.includes('application/pdf')) {
@@ -1191,39 +1195,41 @@ Procurement Team`
 
   if (!opportunity) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Card>
+      <PageMain className="cf-workspace items-center">
+        <Card className="cf-card">
           <CardHeader>
-            <CardTitle>Opportunity Not Found</CardTitle>
+            <CardTitle className="cf-h2">Opportunity not found</CardTitle>
           </CardHeader>
           <CardContent>
             <Button onClick={() => router.back()}>Go Back</Button>
           </CardContent>
         </Card>
-      </div>
+      </PageMain>
     );
   }
 
   const currentDraft = currentSupplierId ? supplierDrafts.get(currentSupplierId) : null;
 
   return (
-    <main className="flex-1 p-6 bg-gradient-to-br from-secondary/20 to-background">
-      <div className="container mx-auto max-w-6xl">
-        <Button
-          onClick={() => router.back()}
-          variant="outline"
-          className="mb-6"
-        >
-          <Icons.arrowRight className="mr-2 h-4 w-4 rotate-180" />
-          Back to Details
-        </Button>
-
-        <div className="grid gap-6 md:grid-cols-3">
+    <>
+      <PageBand
+        eyebrow="RFQ workspace"
+        title="Quote negotiation"
+        lead={opportunity.title}
+        actions={
+          <button type="button" className="cf-btn cf-btn-secondary" onClick={() => router.back()}>
+            <Icons.arrowRight className="h-4 w-4 rotate-180" aria-hidden />
+            Back
+          </button>
+        }
+      />
+      <PageMain className="cf-workspace">
+        <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,2.4fr)]">
           {/* Opportunity Summary */}
-          <div className="md:col-span-1">
-            <Card className="h-full">
+          <div className="min-w-0">
+            <Card className="cf-card">
               <CardHeader>
-                <CardTitle className="text-lg">Opportunity Summary</CardTitle>
+                <CardTitle className="cf-h2">Opportunity summary</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 <div>
@@ -1269,12 +1275,12 @@ Procurement Team`
           </div>
 
           {/* Main Content Area */}
-          <div className="md:col-span-2">
+          <div className="min-w-0">
             {!negotiationSession && !showVendorSelection ? (
               // Initial setup card
-              <Card>
+              <Card className="cf-card">
                 <CardHeader>
-                  <CardTitle>Start Bidding Process</CardTitle>
+                  <CardTitle className="cf-h2">Start Bidding Process</CardTitle>
                   <CardDescription>
                     Set your target price and requirements to begin automated supplier negotiations
                   </CardDescription>
@@ -1345,7 +1351,7 @@ Procurement Team`
                     </div>
                   </div>
 
-                  <div className="flex justify-end space-x-4">
+                  <div className="flex flex-wrap justify-end gap-3">
                     <Button
                       variant="outline"
                       onClick={() => router.back()}
@@ -1374,9 +1380,9 @@ Procurement Team`
               </Card>
             ) : !negotiationSession && showVendorSelection ? (
               // Vendor selection card
-              <Card>
+              <Card className="cf-card">
                 <CardHeader>
-                  <CardTitle>Select Vendors</CardTitle>
+                  <CardTitle className="cf-h2">Select Vendors</CardTitle>
                   <CardDescription>
                     Review AI-suggested vendors and add your own. Select the vendors you want to contact.
                   </CardDescription>
@@ -1583,9 +1589,9 @@ Procurement Team`
               </Card>
             ) : showInitialReview ? (
               // Initial message review/edit
-              <Card>
+              <Card className="cf-card">
                 <CardHeader>
-                  <CardTitle>Review Initial Messages</CardTitle>
+                  <CardTitle className="cf-h2">Review Initial Messages</CardTitle>
                   <CardDescription>
                     Review and customize your initial request for quote before sending to suppliers
                   </CardDescription>
@@ -1662,7 +1668,7 @@ Procurement Team`
                         </Alert>
                       )}
 
-                      <div className="flex justify-between items-center mt-6">
+                      <div className="mt-6 flex flex-wrap justify-between items-center gap-3">
                         <div className="flex gap-2">
                           <Button
                             variant="outline"
@@ -1753,9 +1759,9 @@ Procurement Team`
               </Card>
             ) : (
               // Negotiation tabs
-              <Card>
+              <Card className="cf-card">
                 <CardHeader>
-                  <CardTitle>Negotiation in Progress</CardTitle>
+                  <CardTitle className="cf-h2">Negotiation in Progress</CardTitle>
                   <CardDescription>
                     Managing negotiations with {negotiationSession?.suppliers?.length ?? 0} suppliers
                   </CardDescription>
@@ -1799,9 +1805,9 @@ Procurement Team`
 
                       return (
                         <TabsContent key={supplier.id} value={idx.toString()}>
-                          <Card>
+                          <Card className="cf-card">
                             <CardHeader>
-                              <div className="flex justify-between items-start">
+                              <div className="flex flex-wrap justify-between items-start gap-3">
                                 <div>
                                   <CardTitle className="text-lg flex items-center gap-2">
                                     {supplier.company_name}
@@ -1833,7 +1839,7 @@ Procurement Team`
                               </div>
                             </CardHeader>
                             <CardContent>
-                              <ScrollArea className="h-[400px] pr-4">
+                              <ScrollArea className="pr-3 [&_[data-radix-scroll-area-viewport]]:max-h-80">
                                 <div className="space-y-4">
                                   {supplier.messages.length === 0 && (
                                     <Alert>
@@ -1928,7 +1934,7 @@ Procurement Team`
 
                                 {actionState.type === 'need_draft' && (
                                   <>
-                                    <Alert className="min-w-[16rem] flex-1" variant="default">
+                                    <Alert className="min-w-0 basis-56 flex-1" variant="default">
                                       <AlertDescription>
                                         Supplier has responded. Generate your counter-offer.
                                       </AlertDescription>
@@ -1970,7 +1976,7 @@ Procurement Team`
                                 )}
 
                                 {actionState.type === 'stopped' && (
-                                  <Alert className="min-w-[16rem] flex-1">
+                                  <Alert className="min-w-0 basis-56 flex-1">
                                     <AlertDescription>
                                       Negotiation stopped. Further vendor emails stay in the thread and do not open another round.
                                     </AlertDescription>
@@ -1978,7 +1984,7 @@ Procurement Team`
                                 )}
 
                                 {actionState.type === 'best_offer' && (
-                                  <Alert className="min-w-[16rem] flex-1">
+                                  <Alert className="min-w-0 basis-56 flex-1">
                                     <AlertDescription>
                                       The third reply is the best offer. This negotiation is closed.
                                     </AlertDescription>
@@ -2056,8 +2062,8 @@ Procurement Team`
                   {/* Vendor Comparison Table */}
                   <div>
                     <h3 className="text-lg font-semibold mb-3">Vendor Comparison</h3>
-                    <div className="border rounded-lg overflow-hidden">
-                      <table className="w-full">
+                    <div className="cf-table-scroll rounded-lg border" role="region" aria-label="Vendor comparison table" tabIndex={0}>
+                      <table className="cf-table min-w-[560px]">
                         <thead className="bg-muted">
                           <tr>
                             <th className="px-4 py-3 text-left text-sm font-medium">Select</th>
@@ -2083,12 +2089,13 @@ Procurement Team`
                               >
                                 <td className="px-4 py-3">
                                   <Checkbox
+                                    aria-label={"Select " + supplier.company_name}
                                     checked={selectedVendorForBid === supplier.id}
                                     onCheckedChange={(checked) => setSelectedVendorForBid(checked ? supplier.id : null)}
                                   />
                                 </td>
                                 <td className="px-4 py-3">
-                                  <div className="flex items-center gap-2">
+                                  <div className="flex flex-wrap items-center gap-2">
                                     <span className="font-medium">{supplier.company_name}</span>
                                     {isRecommended && (
                                       <Badge className="bg-green-100 text-green-700 border-green-300">
@@ -2167,7 +2174,7 @@ Procurement Team`
                         </CardContent>
                       </Card>
 
-                      <Card>
+                      <Card className="cf-card">
                         <CardHeader className="pb-2">
                           <CardTitle className="text-base flex items-center gap-2">
                             <AlertTriangle className="h-4 w-4 text-yellow-600" />
@@ -2195,7 +2202,7 @@ Procurement Team`
                   )}
 
                   {!bidSubmitted && (
-                    <Card>
+                    <Card className="cf-card">
                       <CardHeader className="pb-3">
                         <CardTitle className="text-base">Submission financials</CardTitle>
                         <CardDescription>
@@ -2251,7 +2258,7 @@ Procurement Team`
 
                   {/* Compliance Details for Selected Vendor */}
                   {selectedVendorForBid && complianceResults.get(selectedVendorForBid) && (
-                    <Card>
+                    <Card className="cf-card">
                       <CardHeader className="pb-2">
                         <CardTitle className="text-base flex items-center gap-2">
                           <ShieldCheck className="h-4 w-4 text-primary" />
@@ -2290,7 +2297,7 @@ Procurement Team`
                       </AlertDescription>
                     </Alert>
                   ) : (
-                    <div className="flex justify-between items-center">
+                    <div className="flex flex-wrap justify-between items-center gap-3">
                       <Button
                         variant="outline"
                         onClick={() => setShowReviewSection(false)}
@@ -2298,7 +2305,7 @@ Procurement Team`
                         Back to Negotiations
                       </Button>
 
-                      <div className="flex gap-3">
+                      <div className="flex flex-wrap gap-3">
                         <Button
                           variant="outline"
                           onClick={generateBidPackage}
@@ -2364,7 +2371,7 @@ Procurement Team`
           }
           setDraftModalOpen(open);
         }}>
-          <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+          <DialogContent className="cf-workspace max-h-[80vh] w-[calc(100%-2rem)] max-w-3xl overflow-y-auto rounded-xl break-words">
             <DialogHeader>
               <DialogTitle>Review & Edit Your Response</DialogTitle>
               <DialogDescription>
@@ -2466,7 +2473,7 @@ Procurement Team`
             </DialogFooter>
           </DialogContent>
         </Dialog>
-      </div>
-    </main>
+      </PageMain>
+    </>
   );
 }

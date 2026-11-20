@@ -15,6 +15,7 @@ export type BidStatus = keyof typeof BID_STATUSES;
 export interface StatusHistoryEvent {
   id: number;
   old_status: string;
+  reason?: string | null;
   new_status: string;
   changed_by_user_id: number;
   changed_by_name: string | null;
@@ -184,7 +185,7 @@ export function formatStatus(status: string | null | undefined) {
 
 export function statusStyle(status: string | null | undefined) {
   const definition = status ? BID_STATUSES[status as BidStatus] : undefined;
-  return definition ? { backgroundColor: definition.color, color: "white" } : undefined;
+  return definition ? { backgroundColor: definition.color, color: ["Bid submitted", "Waiting Approval", "Approved for Submission", "Bid No Approved"].includes(status || "") ? "#101820" : "#fff" } : undefined;
 }
 
 export function hundredKRowClass(status: string | null | undefined) {

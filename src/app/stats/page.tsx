@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { BarChart3 } from "lucide-react";
+import { PageBand, PageMain } from "@/components/design/PageFrame";
 import { getStoredUser, type AuthUser } from "@/lib/auth";
 import { etMonthKey, etMonthOptions } from "@/lib/eastern";
 import { type EmployeeStatsRow, type StatsPayload } from "@/lib/stats";
@@ -18,7 +18,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { cn } from "@/lib/utils";
 
 const OverviewTab = dynamic(
   () => import("@/components/stats/OverviewTab").then((mod) => mod.OverviewTab),
@@ -102,10 +101,10 @@ export default function StatsPage() {
 
   if (!user) {
     return (
-      <div className="space-y-6 p-6 lg:p-8">
+      <PageMain>
         <Skeleton className="h-8 w-64" />
         <Skeleton className="h-64 w-full" />
-      </div>
+      </PageMain>
     );
   }
 
@@ -114,60 +113,33 @@ export default function StatsPage() {
     : months.find((m) => m.value === monthKey)?.label || monthKey;
 
   return (
-    <div className="space-y-6 p-6 lg:p-8">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold text-slate-900">
-            <BarChart3 className="h-6 w-6" />
-            Bid Performance & Sales Dashboard
-          </h1>
-          <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-slate-500">
-            <span>
-              Active Period: <span className="font-medium text-slate-700">{periodLabel}</span>
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-emerald-500" />
-              Live Sync Active
-            </span>
-          </div>
-        </div>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <div className="flex flex-wrap gap-1.5">
-            {MAIN_TABS.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => setTab(item.id)}
-                className={cn(
-                  "rounded-full px-4 py-1.5 text-sm font-medium transition-colors",
-                  tab === item.id
-                    ? "bg-slate-900 text-white"
-                    : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-                )}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
-          <div className="flex items-center gap-2">
-            <Select value={monthKey} onValueChange={setMonthKey}>
-              <SelectTrigger className="w-44">
-                <SelectValue placeholder="Select month" />
-              </SelectTrigger>
-              <SelectContent>
-                {months.map((m) => (
-                  <SelectItem key={m.value} value={m.value}>
-                    {m.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
+    <>
+      <PageBand
+        eyebrow="Reports"
+        title="Bid performance and sales"
+        lead={periodLabel}
+        actions={
+          <Select value={monthKey} onValueChange={setMonthKey}>
+            <SelectTrigger aria-label="Reporting month" className="cf-select w-44"><SelectValue placeholder="Select month" /></SelectTrigger>
+            <SelectContent>
+              {months.map((month) => <SelectItem key={month.value} value={month.value}>{month.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        }
+      />
+      <div className="border-b" style={{ borderColor: "var(--cf-line)" }}>
+        <nav className="cf-wrap flex flex-wrap gap-x-7" aria-label="Stats views">
+          {MAIN_TABS.map((item) => (
+            <button key={item.id} type="button" onClick={() => setTab(item.id)}
+              className={tab === item.id ? "cf-tab cf-tab-on" : "cf-tab"} aria-pressed={tab === item.id}>
+              {item.label}
+            </button>
+          ))}
+        </nav>
       </div>
-
+      <PageMain className="cf-workspace">
       {error && (
-        <div className="rounded border border-destructive bg-destructive/10 p-3 text-sm text-destructive">
+        <div role="alert" className="cf-banner cf-banner-bad">
           {error}
         </div>
       )}
@@ -193,6 +165,7 @@ export default function StatsPage() {
         currentGoal={editRow?.monthly_goal ?? 50}
         onSaved={fetchStats}
       />
-    </div>
+      </PageMain>
+    </>
   );
 }

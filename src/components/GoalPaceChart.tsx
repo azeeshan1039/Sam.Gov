@@ -75,7 +75,7 @@ export default function GoalPaceChart({
       spacing: [8, 8, 8, 8],
       style: { fontFamily: '"Geist Mono", ui-monospace, monospace' },
     },
-    title: { text: undefined },
+    title: { text: `Cumulative bids submitted in ${monthLabel}: ${submitted} by day ${day} against a goal pace of ${paceToday}; forecast about ${forecast} by month end versus a goal of ${goal}.`, floating: true, style: { display: "none" } },
     credits: { enabled: false },
     legend: { enabled: false },
     xAxis: {

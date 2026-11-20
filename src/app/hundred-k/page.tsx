@@ -66,10 +66,10 @@ export default function HundredKPage() {
 
   if (!user) {
     return (
-      <div className="space-y-6 p-6 lg:p-8">
+      <PageMain>
         <Skeleton className="h-8 w-48" />
         <Skeleton className="h-64 w-full" />
-      </div>
+      </PageMain>
     );
   }
 
@@ -77,7 +77,7 @@ export default function HundredKPage() {
     <>
       <PageBand title="$100K+ bids" lead={`Opportunities with gross sales ≥ ${formatMoney(HUNDRED_K_THRESHOLD)}, grouped by employee.`} />
       <AdminTabs current="/hundred-k" />
-      <PageMain>
+      <PageMain className="cf-workspace">
       {error && (
         <div className="rounded border border-destructive bg-destructive/10 p-3 text-sm text-destructive">
           {error}
@@ -86,7 +86,7 @@ export default function HundredKPage() {
       {loading ? (
         <Skeleton className="h-64 w-full" />
       ) : tabEmployees.length === 0 ? (
-        <Card>
+        <Card className="cf-card">
           <CardContent className="py-10 text-sm text-muted-foreground">
             No team members yet.
           </CardContent>
@@ -102,9 +102,9 @@ export default function HundredKPage() {
           </TabsList>
           {tabEmployees.map((emp) => (
             <TabsContent key={emp.user_id} value={String(emp.user_id)}>
-              <Card>
+              <Card className="cf-card">
                 <CardHeader>
-                  <CardTitle>{emp.name}</CardTitle>
+                  <CardTitle className="cf-h2">{emp.name}</CardTitle>
                   <CardDescription>
                     {emp.items.length} high-value solicitation(s)
                   </CardDescription>

@@ -17,7 +17,7 @@ export default function WeeklyBars({
       spacing: [12, 8, 8, 8],
       style: { fontFamily: '"Geist Mono", ui-monospace, monospace' },
     },
-    title: { text: undefined },
+    title: { text: `Bids per week: ${weeks.map((week) => `${week.label} ${week.count}`).join(", ")}; weekly goal ${goal}.`, floating: true, style: { display: "none" } },
     credits: { enabled: false },
     legend: { enabled: false },
     xAxis: {

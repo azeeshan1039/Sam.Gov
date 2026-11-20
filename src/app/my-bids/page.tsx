@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { PipelineTable } from "@/components/pipeline/PipelineTable";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Bell, Search } from "lucide-react";
@@ -8,7 +9,7 @@ import { getStoredUser, type AuthUser } from "@/lib/auth";
 import { PageBand, PageMain } from "@/components/design/PageFrame";
 import MyBidsAlerts from "@/components/notifications/MyBidsAlerts";
 import { Skeleton } from "@/components/ui/skeleton";
-import { requesterQuery, type PipelineItem } from "@/lib/pipeline";
+import { formatStatus, statusStyle, requesterQuery, type PipelineItem } from "@/lib/pipeline";
 import type { AwardTrackingItem } from "@/lib/awards";
 import { easternTodayUtc } from "@/lib/eastern-date";
 
@@ -32,20 +33,6 @@ interface ActiveClaim {
 const ACTIVE_STATUSES = new Set(["Finding Supplier", "Waiting Approval", "Approved for Submission", "Bid No Approved"]);
 const PAGE_SIZE = 8;
 
-function statusLabel(status: string) {
-  if (status === "Finding Supplier") return "Finding supplier";
-  if (status === "Waiting Approval") return "Waiting approval";
-  if (status === "Approved for Submission") return "Approved for submission";
-  if (status === "Bid No Approved") return "Bid not approved";
-  return status || "—";
-}
-
-function statusPill(status: string) {
-  if (status === "Waiting Approval" || status === "Approved for Submission") return "cf-pill-app";
-  if (status === "Bid submitted") return "cf-pill-sub";
-  if (status === "Bid No Approved" || status === "Bid got removed" || status === "Couldnt get quote") return "cf-pill-lost";
-  return "cf-pill-sup";
-}
 
 function shortDate(value: string | null | undefined) {
   if (!value) return "—";
@@ -167,7 +154,14 @@ export default function MyBidsPage() {
 
   useEffect(() => {
     if (!highlightId || loading) return;
-    document.getElementById(`pipeline-row-${highlightId}`)?.scrollIntoView({ block: "center" });
+    const index = items.findIndex((item) => item.id === highlightId);
+    if (index < 0) return;
+    setTab("all");
+    setPortal("all");
+    setQuery("");
+    setPage(Math.floor(index / PAGE_SIZE) + 1);
+    const frame = requestAnimationFrame(() => document.getElementById(`summary-row-${highlightId}`)?.scrollIntoView?.({ block: "center" }));
+    return () => cancelAnimationFrame(frame);
   }, [highlightId, loading, items]);
 
   if (!user) {
@@ -295,8 +289,8 @@ export default function MyBidsPage() {
                 return (
                   <Link key={item.id} className="cf-card cf-active-card" href={`/bids/${item.id}`}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-                      <span className={`cf-pill ${statusPill(item.internal_status)}`} style={{ alignSelf: "center" }}>{statusLabel(item.internal_status)}</span>
-                      <span className="cf-id-dim">{item.solicitation_number || item.bid_id} · {(item.portal || "SAM.gov").toUpperCase()}</span>
+                      <span className="cf-pill" style={{ ...statusStyle(item.internal_status), alignSelf: "center" }}>{formatStatus(item.internal_status)}</span>
+                      <span className="cf-id-dim">{item.solicitation_number || item.bid_id} · {(item.portal || "—").toUpperCase()}</span>
                     </div>
                     <div style={{ font: "500 19px var(--cf-display)" }}>{item.title || "Untitled bid"}</div>
                     <div className="cf-kv3">
@@ -376,8 +370,8 @@ export default function MyBidsPage() {
                     const dueUrgent = item.days_remaining != null && item.days_remaining <= 11;
                     const href = item.internal_status === "Bid submitted" ? `/bids/${item.id}` : `/bids/${item.id}`;
                     return (
-                      <tr key={item.id} id={`pipeline-row-${item.id}`} style={highlightId === item.id ? { background: "rgba(251,191,36,.18)" } : undefined}>
-                        <td><span className={`cf-pill ${statusPill(item.internal_status)}`}>{statusLabel(item.internal_status)}</span></td>
+                      <tr key={item.id} id={`summary-row-${item.id}`} style={highlightId === item.id ? { background: "rgba(251,191,36,.18)" } : undefined}>
+                        <td><span className="cf-pill" style={{ ...statusStyle(item.internal_status), alignSelf: "center" }}>{formatStatus(item.internal_status)}</span></td>
                         <td>
                           <Link className="cf-id" href={href} style={{ textDecoration: "underline" }}>{item.solicitation_number || item.bid_id}</Link>
                           <div className="cf-meta">{item.title || "—"}</div>
@@ -410,9 +404,12 @@ export default function MyBidsPage() {
             </div>
           </div>
         </section>
-        {/* The previous wide spreadsheet stays available if the design table needs the extra columns.
-        <PipelineTable items={items} variant="my-bids" empty="No bids assigned to you yet." highlightId={highlightId} />
-        */}
+        <details className="cf-card p-4">
+          <summary className="cursor-pointer font-medium">Full bid worksheet</summary>
+          <div className="cf-table-scroll" role="region" aria-label="Full bid worksheet" tabIndex={0}>
+            <PipelineTable items={visible} variant="my-bids" empty="No matching bids." highlightId={highlightId} />
+          </div>
+        </details>
       </PageMain>
     </>
   );
