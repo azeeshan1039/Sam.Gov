@@ -60,7 +60,12 @@ function replySubject(subject: string | null) {
  * Email conversations for one bid (KAN-76/77): synced threads, held/failed outbox,
  * possible matches to link, and compose/reply through the employee's Gmail.
  */
-export function BidEmailsPanel({ bidId, composeRequest, readOnly = false }: { bidId: number; composeRequest?: ComposeRequest | null; readOnly?: boolean }) {
+export function BidEmailsPanel({ bidId, composeRequest, readOnly = false, onMailChanged }: {
+  bidId: number;
+  composeRequest?: ComposeRequest | null;
+  readOnly?: boolean;
+  onMailChanged?: () => Promise<void>;
+}) {
   const [data, setData] = useState<BidEmailsResponse | null>(null);
   const [suggested, setSuggested] = useState<EmailThreadItem[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -114,7 +119,7 @@ export function BidEmailsPanel({ bidId, composeRequest, readOnly = false }: { bi
     setSyncing(false);
     if (!ok) { setError(body.error || "Sync failed."); await load(); return; }
     setNotice(`Sync complete: ${body.summary.stored} new bid email${body.summary.stored === 1 ? "" : "s"}${body.summary.unlinked ? `, ${body.summary.unlinked} need a bid chosen` : ""}.${body.summary.more_pending ? " More mail is waiting; press Sync now again." : ""}`);
-    await load();
+    await Promise.all([load(), onMailChanged?.()]);
   }
 
   async function patchThread(threadId: number, payload: Record<string, unknown>) {
@@ -179,6 +184,7 @@ export function BidEmailsPanel({ bidId, composeRequest, readOnly = false }: { bi
     if (outcome.kind === "held") { setCompose(null); setNotice("The email has high spam risk and is held for admin review. You can edit it from the list below."); }
     if (outcome.kind === "failed") { setCompose(null); setError(outcome.message.send_error || "The email was not sent."); }
     load();
+    if (outcome.kind === "sent") void onMailChanged?.();
   }
 
   if (!data) return <p className="text-sm text-slate-600">{error || "Loading emails…"}</p>;

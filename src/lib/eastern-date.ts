@@ -17,6 +17,13 @@ export function dateOnly(value: Date) {
   return value.toISOString().slice(0, 10);
 }
 
+export function opportunityDeadlinePassed(value?: string | null, now = new Date()) {
+  if (!value) return false;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value < dateOnly(easternTodayUtc(now));
+  const deadline = Date.parse(value.includes("T") && !/(Z|[+-]\d{2}:?\d{2})$/i.test(value) ? value + "Z" : value);
+  return Number.isFinite(deadline) && deadline <= +now;
+}
+
 export function formatUtcDateRange(start: Date, end: Date) {
   const formatter = new Intl.DateTimeFormat("en-US", {
     timeZone: "UTC",

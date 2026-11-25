@@ -107,7 +107,7 @@ export default function BidDetailPage() {
     else setUser(current);
   }, [router]);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (preserveStatusDraft = false) => {
     const response = await fetch(`/api/backend/pipeline/bids/${params.id}`, { cache: "no-store" });
     const data = await response.json();
     if (!response.ok) {
@@ -120,9 +120,11 @@ export default function BidDetailPage() {
     for (const vendor of next.workspace?.vendors || []) serverNotes[vendor.id] = vendor.notes || "";
     const fresh = { remarks: next.bid_remarks || "", research: next.research_notes || "", vendorNotes: serverNotes };
     setBid(next);
-    setStatus(next.internal_status as BidStatus);
-    setSupplierCost(next.supplier_cost?.toString() || "");
-    setSubmittedPrice(next.submitted_price?.toString() || "");
+    if (!preserveStatusDraft) {
+      setStatus(next.internal_status as BidStatus);
+      setSupplierCost(next.supplier_cost?.toString() || "");
+      setSubmittedPrice(next.submitted_price?.toString() || "");
+    }
     setRemarks((current) => (!previous || current === previous.remarks ? fresh.remarks : current));
     setResearchNotes((current) => (!previous || current === previous.research ? fresh.research : current));
     setNoteDrafts((current) => {
@@ -677,7 +679,7 @@ export default function BidDetailPage() {
                           <ol className="mt-2 space-y-2">
                             {events.map((event, index) => (
                               <li key={`${event.created_at}-${index}`} className="border-l-2 pl-3 text-sm">
-                                <p className="font-medium">{event.sender === "supplier" ? "Vendor" : "Employee"}</p>
+                                <p className="font-medium">{event.sender === "supplier" ? "Vendor" : "Employee"}{event.channel === "gmail" ? " · Gmail" : ""}</p>
                                 <p className="whitespace-pre-wrap">{event.content}</p>
                                 <p className="text-xs text-slate-600">
                                   {easternTime(event.created_at)}
@@ -733,7 +735,7 @@ export default function BidDetailPage() {
           <CardTitle>Emails</CardTitle>
           <CardDescription className="text-slate-600">Gmail conversations from connected mailboxes. Send from your own Gmail and review vendor replies here.</CardDescription>
         </CardHeader>
-        <CardContent><BidEmailsPanel bidId={bid.id} composeRequest={composeRequest} readOnly={!canEdit} /></CardContent>
+        <CardContent><BidEmailsPanel bidId={bid.id} composeRequest={composeRequest} readOnly={!canEdit} onMailChanged={() => load(true).catch(() => setMessage("Email updated, but bid details could not refresh."))} /></CardContent>
       </Card>
 
       <Card id="notes" className="cf-card scroll-mt-6 border-0 shadow-none">

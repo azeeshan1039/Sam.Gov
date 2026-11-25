@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { PageBand, PageMain } from "@/components/design/PageFrame";
 import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -22,6 +23,7 @@ import { format } from 'date-fns';
 import { Plus, Trash2, Building2, Mail, StickyNote, Trophy, ShieldCheck, FileDown, Send, AlertTriangle, CheckCircle2, Star, Sparkles } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { getStoredUser } from '@/lib/auth';
+import { formatMoney, type BidConversationEvent } from '@/lib/pipeline';
 
 interface Supplier {
   id: number;
@@ -33,6 +35,12 @@ interface Supplier {
   status: string;
   negotiation_round: number;
   rounds?: { round_number: number; price: number | null; status: string }[];
+  gmail_negotiation?: {
+    bid_id: number;
+    latest_price: number | null;
+    rounds: NonNullable<Supplier["rounds"]>;
+    messages: BidConversationEvent[];
+  };
   messages: Message[];
   metrics?: {
     initial_price: string;
@@ -1800,17 +1808,48 @@ Procurement Team`
                     </ScrollableTabsList>
 
                     {negotiationSession?.suppliers?.map((supplier, idx) => {
+                      const gmail = supplier.gmail_negotiation;
+                      const gmailHistory = gmail && (
+                          <Card className="cf-card">
+                            <CardHeader>
+                              <CardTitle>{supplier.company_name}</CardTitle>
+                              <CardDescription>Latest quote: {formatMoney(gmail.latest_price)}</CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                              <Link href={`/bids/${gmail.bid_id}#bid-emails`} className="cf-btn cf-btn-secondary">Open bid email conversation</Link>
+                              {supplier.status !== "stopped" && supplier.status !== "completed" && gmail.rounds.length < 3 && (
+                                <Button variant="outline" onClick={() => stopNegotiation(supplier.id)}>Stop negotiation</Button>
+                              )}
+                              <ol aria-label="Negotiation rounds" className="space-y-2">
+                                {gmail.rounds.map((round) => (
+                                  <li key={round.round_number}>
+                                    Round {round.round_number} · {formatMoney(round.price)} · {round.status === "best_offer" ? "Best offer" : round.status === "stopped" ? "Stopped" : "Received"}
+                                  </li>
+                                ))}
+                              </ol>
+                              <ol aria-label="Negotiation messages" className="space-y-3">
+                                {gmail.messages.map((message, index) => (
+                                  <li key={index} className="rounded border p-3">
+                                    <p className="text-sm font-medium">{message.sender === "supplier" ? "Vendor" : "Employee"} · {message.channel === "gmail" ? "Gmail" : "RFQ"}</p>
+                                    <p className="whitespace-pre-wrap text-sm">{message.content}</p>
+                                  </li>
+                                ))}
+                              </ol>
+                            </CardContent>
+                          </Card>
+                      );
                       const actionState = getSupplierActionState(supplier);
                       const hasPendingDraft = supplierDrafts.get(supplier.id)?.isPending;
 
                       return (
-                        <TabsContent key={supplier.id} value={idx.toString()}>
-                          <Card className="cf-card">
+                        <TabsContent key={supplier.id} value={idx.toString()} className="space-y-4">
+                          {gmailHistory}
+                          {(!gmail || supplier.messages.length > 0) && <Card className="cf-card">
                             <CardHeader>
                               <div className="flex flex-wrap justify-between items-start gap-3">
                                 <div>
                                   <CardTitle className="text-lg flex items-center gap-2">
-                                    {supplier.company_name}
+                                    {gmail ? "RFQ channel" : supplier.company_name}
                                     {supplier.is_manual && (
                                       <Badge variant="outline" className="text-xs">Manual</Badge>
                                     )}
@@ -1991,7 +2030,7 @@ Procurement Team`
                                   </Alert>
                                 )}
 
-                                {supplier.status !== 'completed' && supplier.status !== 'stopped' && supplier.negotiation_round < 3
+                                {!gmail && supplier.status !== 'completed' && supplier.status !== 'stopped' && supplier.negotiation_round < 3
                                   && (supplier.email_sent || supplier.messages.length > 0) && (
                                   <Button
                                     onClick={() => stopNegotiation(supplier.id)}
@@ -2009,7 +2048,7 @@ Procurement Team`
                                       variant="outline"
                                       size="sm"
                                     >
-                                      Accept supplier quote
+                                      {gmail ? "Accept RFQ channel quote" : "Accept supplier quote"}
                                     </Button>
                                     <p className="max-w-xs text-xs text-slate-600">
                                       Records this supplier quote only. The customer award is recorded later in Award Tracking.
@@ -2018,7 +2057,7 @@ Procurement Team`
                                 )}
                               </div>
                             </CardContent>
-                          </Card>
+                          </Card>}
                         </TabsContent>
                       );
                     })}

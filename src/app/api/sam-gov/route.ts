@@ -1,8 +1,7 @@
 
 import { NextResponse } from 'next/server';
-import { getSamGovOpportunities } from '@/services/sam-gov';
+import { getSamGovCatalog } from '@/services/sam-gov';
 import fetch from 'node-fetch'; // Explicitly import fetch
-import type { SamGovOpportunity } from '@/types/sam-gov'; // Updated import
 
 /**
  * Downloads files from a list of URLs and extracts text content.
@@ -37,8 +36,11 @@ export async function GET(request: Request) {
   });
 
   try {
-    const opportunities: SamGovOpportunity[] = await getSamGovOpportunities(searchParamsObject);
-    return NextResponse.json(opportunities);
+    const catalog = await getSamGovCatalog(searchParamsObject);
+    const headers = new Headers({ 'X-SAM-Gov-Source': catalog.source, 'Cache-Control': 'no-store' });
+    if (catalog.lastFetched != null) headers.set('X-SAM-Gov-Last-Fetched', new Date(catalog.lastFetched).toISOString());
+    if (catalog.issue) headers.set('X-SAM-Gov-Issue', catalog.issue);
+    return NextResponse.json(catalog.opportunities, { headers });
   } catch (error: any) {
     console.error("Error in SAM.gov API route:", error);
     return NextResponse.json({ error: error.message || 'Failed to fetch SAM.gov opportunities' }, { status: 500 });

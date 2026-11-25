@@ -424,14 +424,16 @@ describe("KAN-26 unclaimed SAM.gov pool", () => {
     global.fetch = jest.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = urlOf(input);
       if (url === "/api/sam-gov") return response([
-        { id: "OPEN-1", title: "Available SAM bid", closingDate: "2026-10-20", solicitationNumber: "SOL-OPEN", ncode: "541519", naicsDescription: "Other Computer Related Services" },
-        { id: "TAKEN-1", title: "Claimed SAM bid", closingDate: "2026-10-21", solicitationNumber: "SOL-TAKEN", ncode: "339112" },
+        { id: "OPEN-1", title: "Available SAM bid", closingDate: new Date(Date.now() + 86400000).toISOString(), solicitationNumber: "SOL-OPEN", ncode: "541519", naicsDescription: "Other Computer Related Services" },
+        { id: "TAKEN-1", title: "Claimed SAM bid", closingDate: new Date(Date.now() + 86400000).toISOString(), solicitationNumber: "SOL-TAKEN", ncode: "339112" },
+        { id: "EXPIRED-1", title: "Expired SAM bid", closingDate: "2000-01-01", solicitationNumber: "SOL-EXPIRED", ncode: "541512" },
       ]);
       if (url.includes("opportunities/availability")) {
         availabilityBody.opportunities = JSON.parse(String(init?.body)).opportunities;
         return response({ opportunities: [
           { external_notice_id: "OPEN-1", available: true },
           { external_notice_id: "TAKEN-1", available: false },
+          { external_notice_id: "EXPIRED-1", available: true },
         ] });
       }
       throw new Error(`Unexpected request: ${url}`);
@@ -442,7 +444,11 @@ describe("KAN-26 unclaimed SAM.gov pool", () => {
     expect(screen.getByText(/541519 .* Other Computer Related Services/)).toBeInTheDocument();
     expect(screen.queryByText("Claimed SAM bid")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Pick up" })).toHaveAttribute("href", "/sam-gov/OPEN-1");
-    expect(availabilityBody?.opportunities.map((item) => item.ncode)).toEqual(["541519", "339112"]);
+    expect(screen.queryByText("Expired SAM bid")).not.toBeInTheDocument();
+    expect(availabilityBody?.opportunities.map((item) => item.ncode)).toEqual(["541519", "339112", "541512"]);
+    await userEvent.click(screen.getByRole("button", { name: "All SAM.gov" }));
+    expect(await screen.findByText("Expired SAM bid")).toBeInTheDocument();
+    expect(screen.getByText("Deadline passed")).toBeInTheDocument();
   });
 
   test("checks the full SAM.gov catalog in API-sized chunks", async () => {
@@ -450,7 +456,7 @@ describe("KAN-26 unclaimed SAM.gov pool", () => {
     const catalog = Array.from({ length: 1001 }, (_, index) => ({
       id: `NOTICE-${index}`,
       title: `SAM bid ${index}`,
-      closingDate: "2026-10-20",
+      closingDate: new Date(Date.now() + 86400000).toISOString(),
       solicitationNumber: `SOL-${index}`,
     }));
     const chunkSizes: number[] = [];

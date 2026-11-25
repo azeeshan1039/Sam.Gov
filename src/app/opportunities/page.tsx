@@ -7,6 +7,7 @@ import { Bookmark, Building2, Clock, Inbox, Lock, RefreshCw, Search, Sparkles, U
 import { getStoredUser } from "@/lib/auth";
 import { isProductRfq } from "@/lib/ai-suggestion-prefilter";
 import { presentOpportunityAvailability, type OpportunityAvailability } from "@/lib/opportunity-availability";
+import { opportunityDeadlinePassed } from "@/lib/eastern-date";
 import type { SamGovOpportunity } from "@/types/sam-gov";
 
 type SearchMode = "any_words" | "all_words" | "exact_phrase";
@@ -109,6 +110,7 @@ function OpportunityCatalog() {
   const [country, setCountry] = useState("");
   const [updated, setUpdated] = useState("");
   const [activeOnly, setActiveOnly] = useState(false);
+  const [catalogWarning, setCatalogWarning] = useState<string | null>(null);
   const [tab, setTab] = useState<TabKey>(requestedView === "all" ? "all" : "unclaimed");
   const [page, setPage] = useState(1);
   const [saved, setSaved] = useState<SavedSearch[]>([]);
@@ -140,6 +142,14 @@ function OpportunityCatalog() {
       if (!res.ok) throw new Error(data.error || "Unable to load SAM.gov opportunities.");
       const catalog = data as SamGovOpportunity[];
       if (controller.signal.aborted) return;
+      const source = res.headers?.get("X-SAM-Gov-Source");
+      const fetched = res.headers?.get("X-SAM-Gov-Last-Fetched");
+      const fetchedAt = fetched ? new Date(fetched) : null;
+      setSyncedAt(fetchedAt && Number.isFinite(+fetchedAt) ? fetchedAt : null);
+      setCatalogWarning(source === "stale"
+        ? "Showing cached notices. SAM.gov could not be refreshed."
+        : source === "unavailable" ? "The SAM.gov catalog is temporarily unavailable."
+        : source === "partial" ? "SAM.gov returned a partial set of notices." : null);
       setItems(catalog);
       const checked: Record<string, OpportunityAvailability> = {};
       for (let offset = 0; offset < catalog.length; offset += 1000) {
@@ -161,7 +171,6 @@ function OpportunityCatalog() {
       }
       if (controller.signal.aborted) return;
       setAvailability(checked);
-      setSyncedAt(new Date());
     } catch (err) {
       if (controller.signal.aborted) return;
       setAvailability({});
@@ -240,7 +249,7 @@ function OpportunityCatalog() {
 
   const inPool = (item: SamGovOpportunity) => {
     const row = availability[item.id];
-    return row && presentOpportunityAvailability(row).state === "available";
+    return row && presentOpportunityAvailability(row).state === "available" && !opportunityDeadlinePassed(item.closingDate);
   };
   const unclaimed = filtered.filter(inPool);
   const closeSoon = unclaimed.filter((item) => {
@@ -324,7 +333,7 @@ function OpportunityCatalog() {
             </div>
             <button className="cf-btn cf-btn-secondary" type="button" onClick={load} disabled={loading}>
               <RefreshCw size={16} strokeWidth={1.75} />
-              Refresh · <span className="cf-mono" style={{ fontSize: 12 }}>{minutesAgo == null ? "not synced" : `synced ${minutesAgo} min ago`}</span>
+              Refresh · <span className="cf-mono" style={{ fontSize: 12 }}>{minutesAgo == null ? "no refresh time" : `fetched ${minutesAgo} min ago`}</span>
             </button>
           </div>
           <form
@@ -379,6 +388,7 @@ function OpportunityCatalog() {
           </div>
         </section>
 
+        {catalogWarning && <p role="status" className="cf-banner cf-banner-warn">{catalogWarning}</p>}
         <nav aria-label="Opportunity lists" style={{ display: "flex", flexWrap: "wrap", gap: 28, borderBottom: "1px solid var(--cf-line)" }}>
           {([
             ["unclaimed", "Unclaimed", String(unclaimed.length)],
@@ -517,6 +527,7 @@ function OpportunityCatalog() {
                 const claim = availability[item.id];
                 const claimed = claim && claim.available === false;
                 const remaining = daysUntil(item.closingDate);
+                const expired = opportunityDeadlinePassed(item.closingDate);
                 const { fitReason, fitScore } = item as AiSuggestion;
                 const location = [item.location?.city?.name, item.location?.state?.name, item.location?.country?.name].filter(Boolean).join(", ");
                 return (
@@ -548,11 +559,11 @@ function OpportunityCatalog() {
                     <div style={{ minWidth: 130, display: "flex", flexDirection: "column", gap: 3 }}>
                       <span className="cf-lbl">Closes</span>
                       <span style={{ fontWeight: 500, color: claimed ? "var(--cf-text-2)" : "var(--cf-text)" }}>{formatWhen(item.closingDate)}</span>
-                      <span className="cf-mono" style={{ fontSize: 12, fontWeight: 500, color: !claimed && remaining != null && remaining >= 0 && remaining <= 8 ? "#BE123C" : "var(--cf-text-2)" }}>{remaining == null ? "" : remaining < 0 ? "CLOSED" : `${remaining} DAYS LEFT`}</span>
+                      <span className="cf-mono" style={{ fontSize: 12, fontWeight: 500, color: !claimed && remaining != null && remaining >= 0 && remaining <= 8 ? "#BE123C" : "var(--cf-text-2)" }}>{expired ? "CLOSED" : remaining == null ? "" : `${Math.max(0, remaining)} DAYS LEFT`}</span>
                     </div>
                     <div style={{ display: "flex", gap: 8 }}>
                       {item.link ? <a className="cf-btn cf-btn-secondary" href={item.link} target="_blank" rel="noreferrer">SAM.gov ↗</a> : null}
-                      {!claim ? <span className="cf-meta">Availability unknown</span> : claimed ? <button className="cf-btn cf-btn-secondary" type="button" disabled style={{ background: "var(--cf-surface-3)", color: "var(--cf-text-3)", cursor: "not-allowed" }}>Claimed</button> : <Link className="cf-btn cf-btn-primary" href={`/sam-gov/${encodeURIComponent(item.id)}`}>Pick up</Link>}
+                      {expired ? <span className="cf-pill cf-pill-pool">Deadline passed</span> : !claim ? <span className="cf-meta">Availability unknown</span> : claimed ? <button className="cf-btn cf-btn-secondary" type="button" disabled style={{ background: "var(--cf-surface-3)", color: "var(--cf-text-3)", cursor: "not-allowed" }}>Claimed</button> : <Link className="cf-btn cf-btn-primary" href={`/sam-gov/${encodeURIComponent(item.id)}`}>Pick up</Link>}
                     </div>
                   </article>
                 );

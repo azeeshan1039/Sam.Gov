@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { getStoredUser } from '@/lib/auth';
 import { AdminTabs, PageBand, PageMain } from '@/components/design/PageFrame';
 import { Skeleton } from '@/components/ui/skeleton';
+import { opportunityDeadlinePassed } from '@/lib/eastern-date';
 
 interface Person { id: number; full_name: string; email?: string }
 interface AssignmentHistoryEvent {
@@ -24,6 +25,7 @@ interface Opportunity {
   solicitation_number?: string;
   title: string;
   expected_bid_value?: number;
+  response_deadline?: string | null;
   state: string;
   assignee?: Person | null;
   assignment_history?: AssignmentHistoryEvent[];
@@ -134,6 +136,7 @@ export default function WorkManagementPage() {
   };
 
   const assignFromPool = async (opportunity: Opportunity) => {
+    if (opportunityDeadlinePassed(opportunity.response_deadline)) return setError('The response deadline has passed.');
     const agentId = Number(targetByOpportunity[opportunity.id]);
     if (!agentId) return setError('Select an agent before assigning.');
     const response = await fetch('/api/backend/opportunities/assign', {
@@ -283,7 +286,7 @@ export default function WorkManagementPage() {
                       </select>
                       <input className="cf-input" style={{ width: 180 }} aria-label="Reason for next action" placeholder="Reason (needed to override)" value={reasonByOpportunity[item.id] || ""} onChange={(event) => setReasonByOpportunity({ ...reasonByOpportunity, [item.id]: event.target.value })} />
                       <label className="cf-meta" style={{ display: "inline-flex", gap: 6, alignItems: "center" }}><input type="checkbox" checked={Boolean(overrideByOpportunity[item.id])} onChange={(event) => setOverrideByOpportunity({ ...overrideByOpportunity, [item.id]: event.target.checked })} />Override limits</label>
-                      {item.state === "assigned" ? <button type="button" className="cf-btn cf-btn-primary cf-btn-sm" onClick={() => reassign(item)}>Reassign</button> : <button type="button" className="cf-btn cf-btn-primary cf-btn-sm" onClick={() => assignFromPool(item)}>Assign</button>}
+                      {item.state === "assigned" ? <button type="button" className="cf-btn cf-btn-primary cf-btn-sm" onClick={() => reassign(item)}>Reassign</button> : opportunityDeadlinePassed(item.response_deadline) ? <span className="cf-meta">Deadline passed</span> : <button type="button" className="cf-btn cf-btn-primary cf-btn-sm" onClick={() => assignFromPool(item)}>Assign</button>}
                       {item.state === "assigned" ? <button type="button" className="cf-btn cf-btn-ghost cf-btn-sm" onClick={() => release(item)}>Return to pool</button> : null}
                     </div>
                   ) : <span className="cf-mono cf-meta">CLOSED WORK — HISTORY KEPT</span>}

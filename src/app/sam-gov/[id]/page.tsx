@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import Loading from '@/app/loading';
 import { Icons } from '@/components/icons';
 import { format, parseISO } from 'date-fns';
+import { opportunityDeadlinePassed } from '@/lib/eastern-date';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
@@ -237,6 +238,10 @@ function OpportunityDetail({ id }: { id: string }) {
 
   const claimOpportunity = async () => {
     if (!opportunity || !currentUser) return;
+    if (opportunityDeadlinePassed(opportunity.closingDate)) {
+      setClaimError("The response deadline has passed.");
+      return;
+    }
     const value = Number(expectedBidValue);
     if (!Number.isFinite(value) || value < 0 || expectedBidValue.trim() === '') {
       setClaimError('Enter the expected submitted price before assigning this opportunity.');
@@ -319,6 +324,7 @@ function OpportunityDetail({ id }: { id: string }) {
     return parts.join(', ') || 'N/A';
   };
 
+  const deadlinePassed = opportunityDeadlinePassed(opportunity.closingDate);
   const closingDate = opportunity.closingDate ? parseISO(opportunity.closingDate) : null;
   const closingDays = closingDate ? Math.ceil((closingDate.getTime() - Date.now()) / 86400000) : null;
   const formattedClosingDate = closingDate ? format(closingDate, 'MMM d, yyyy') : '—';
@@ -350,7 +356,7 @@ function OpportunityDetail({ id }: { id: string }) {
           </div>
           <div style={{ display: "flex", flexWrap: "nowrap", gap: 12, alignItems: "center", flex: "none", alignSelf: "flex-end", marginLeft: "auto" }}>
             <span className={`cf-pill ${availabilityPresentation?.state === "claimed" ? "cf-pill-sup" : availabilityPresentation?.state === "terminal" ? "cf-pill-pool" : "cf-pill-pool"}`} style={{ alignSelf: "center" }}>
-              {ownedByCurrentAgent ? "Yours · finding supplier" : availabilityPresentation?.state === "available" ? "Unclaimed" : availabilityPresentation?.label ?? (availabilityFailed ? "Availability unavailable" : "Checking availability")}
+              {ownedByCurrentAgent ? "Yours · finding supplier" : deadlinePassed ? "Deadline passed" : availabilityPresentation?.state === "available" ? "Unclaimed" : availabilityPresentation?.label ?? (availabilityFailed ? "Availability unavailable" : "Checking availability")}
             </span>
             {opportunity.link && opportunity.link !== "#" ? <a className="cf-btn cf-btn-secondary" href={opportunity.link} target="_blank" rel="noreferrer" style={{ minHeight: 40 }}>View on SAM.gov ↗</a> : <button type="button" className="cf-btn cf-btn-secondary" onClick={() => router.back()}>Back</button>}
           </div>
@@ -420,8 +426,10 @@ function OpportunityDetail({ id }: { id: string }) {
               <div className="cf-lbl" style={{ color: availabilityPresentation?.state === "claimed" ? "#0E7490" : availabilityPresentation?.state === "terminal" ? "#BE123C" : "#0E7490" }}>
                 {availabilityPresentation?.state === "claimed" ? "Already picked up" : availabilityPresentation?.state === "terminal" ? "Closed in the company workflow" : availabilityPresentation ? "Unclaimed · no one on your team has this" : "Company availability"}
               </div>
-              <h2 className="cf-h2" style={{ fontSize: 22 }}>{availabilityPresentation?.state === "claimed" ? (ownedByCurrentAgent ? "This bid is yours" : "Someone else has this bid") : availabilityPresentation?.state === "terminal" ? "This bid is closed" : availabilityPresentation ? "Pick up this bid" : availabilityFailed ? "Availability unavailable" : "Checking availability"}</h2>
-              {availabilityPresentation?.state === "available" ? (
+              <h2 className="cf-h2" style={{ fontSize: 22 }}>{availabilityPresentation?.state === "claimed" ? (ownedByCurrentAgent ? "This bid is yours" : "Someone else has this bid") : deadlinePassed || availabilityPresentation?.state === "terminal" ? "This bid is closed" : availabilityPresentation ? "Pick up this bid" : availabilityFailed ? "Availability unavailable" : "Checking availability"}</h2>
+              {deadlinePassed && availabilityPresentation?.state !== "claimed" ? (
+                <p className="cf-meta">The response deadline has passed.</p>
+              ) : availabilityPresentation?.state === "available" ? (
                 <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 10 }}>
                   {["It's reserved for you and hidden from teammates' pickup lists.", "Next step is finding a supplier and adding their quote.", "Bids with no progress for 3 days are flagged to your manager."].map((line) => (
                     <li key={line} style={{ display: "flex", gap: 10, fontSize: 14, color: "var(--cf-text-2)", lineHeight: 1.45 }}><Check size={16} strokeWidth={2} color="#0891B2" style={{ flex: "none", marginTop: 2 }} />{line}</li>
@@ -433,7 +441,7 @@ function OpportunityDetail({ id }: { id: string }) {
                 <button type="button" className="cf-btn cf-btn-secondary" onClick={() => refreshAvailability(opportunity)}>Retry availability</button>
               ) : null}
               {ownedByCurrentAgent ? <Link className="cf-btn cf-btn-primary" href={`/sam-gov/${id}/bid-summary`} style={{ width: "100%" }}>Continue this bid</Link> : null}
-              {(availabilityPresentation?.state === "available") && currentUser ? (
+              {availabilityPresentation?.state === "available" && !deadlinePassed && currentUser ? (
                 <>
                   <label className="cf-field">Expected submitted price
                     <input className="cf-input" aria-label="Expected submitted price" type="number" min="0" step="0.01" value={expectedBidValue} onChange={(event) => setExpectedBidValue(event.target.value)} placeholder="Expected bid value" />

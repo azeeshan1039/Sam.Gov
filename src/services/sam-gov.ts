@@ -2,6 +2,7 @@
 import type { SamGovOpportunity } from '@/types/sam-gov'; // Updated import
 import fs from 'fs/promises'; // This will now only be used on the server (in API route)
 import path from 'path';
+import { tmpdir } from 'os';
 
 // Define the cache file path relative to the src directory
 const CACHE_FILE_PATH = path.join(process.cwd(), 'src', 'data', '.sam_gov_cache.json');
@@ -12,31 +13,23 @@ interface SamGovCache {
   lastFetched: number;
 }
 
-const singleDummyOpportunityForRateLimit: SamGovOpportunity = {
-  id: 'DUMMY_RL_001',
-  title: 'Service Temporarily Unavailable due to High Traffic',
-  ncode: '000000',
-  department: 'System Alert',
-  subtier: 'Please try refreshing in a few minutes.',
-  office: 'N/A',
-  location: {
-    city: { name: 'N/A' },
-    state: { name: 'N/A' },
-    zip: '00000',
-    country: { name: 'N/A' },
-  },
-  closingDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // Tomorrow
-  type: 'Special Notice',
-  link: '#',
-  officeAddress: 'N/A',
-  description: 'We are experiencing high demand on the SAM.gov API. To ensure fair access, your request has been temporarily paused. This is a placeholder listing. Please try again later.',
-  resourceLinks: []
-};
+const runtimeCachePath = process.env.VERCEL ? path.join(tmpdir(), 'contract-finder-sam-gov.json') : CACHE_FILE_PATH;
+let memoryCache: SamGovCache | null = null;
 
+export interface SamGovCatalog {
+  opportunities: SamGovOpportunity[];
+  lastFetched: number | null;
+  source: 'live' | 'cache' | 'stale' | 'unavailable' | 'partial';
+  issue?: 'missing_key' | 'rate_limited' | 'upstream_error';
+}
 
 async function readCache(): Promise<SamGovCache | null> {
   try {
-    const fileContent = await fs.readFile(CACHE_FILE_PATH, 'utf-8');
+    if (memoryCache) return memoryCache;
+    const fileContent = await fs.readFile(runtimeCachePath, 'utf-8').catch((error) => {
+      if (error.code === 'ENOENT' && runtimeCachePath !== CACHE_FILE_PATH) return fs.readFile(CACHE_FILE_PATH, 'utf-8');
+      throw error;
+    });
     return JSON.parse(fileContent);
   } catch (error: any) {
     if (error.code === 'ENOENT') {
@@ -49,10 +42,10 @@ async function readCache(): Promise<SamGovCache | null> {
 }
 
 async function writeCache(cache: SamGovCache): Promise<void> {
+  memoryCache = cache;
   try {
-    // Ensure the src/data directory exists
-    await fs.mkdir(path.dirname(CACHE_FILE_PATH), { recursive: true });
-    await fs.writeFile(CACHE_FILE_PATH, JSON.stringify(cache, null, 2), 'utf-8');
+    await fs.mkdir(path.dirname(runtimeCachePath), { recursive: true });
+    await fs.writeFile(runtimeCachePath, JSON.stringify(cache, null, 2), 'utf-8');
     console.log("SAM.gov cache updated successfully.");
   } catch (error) {
     console.error("Error writing cache file:", error);
@@ -78,118 +71,56 @@ function getOneYearBackDate(): string {
   return `${mm}/${dd}/${yyyy}`;
 }
 
-export async function getSamGovOpportunities(
-  searchCriteria: Record<string, any>
-): Promise<SamGovOpportunity[]> {
-  const currentTime = Date.now();
-  let samGovCacheFromFile = await readCache();
+export async function getSamGovOpportunities(searchCriteria: Record<string, any>): Promise<SamGovOpportunity[]> {
+  return (await getSamGovCatalog(searchCriteria)).opportunities;
+}
 
-  if (samGovCacheFromFile && (currentTime - samGovCacheFromFile.lastFetched < CACHE_DURATION_MS) && samGovCacheFromFile.data.length > 0) {
-    console.log("Serving SAM.gov opportunities from valid file cache.");
-    return applyFilters(samGovCacheFromFile.data, searchCriteria);
-  }
+export async function getSamGovCatalog(searchCriteria: Record<string, any>): Promise<SamGovCatalog> {
+  const cached = await readCache();
+  const result = (snapshot: SamGovCache | null, source: SamGovCatalog['source'], issue?: SamGovCatalog['issue']): SamGovCatalog => ({
+    opportunities: applyFilters(snapshot?.data || [], searchCriteria),
+    lastFetched: snapshot?.lastFetched ?? null,
+    source,
+    issue,
+  });
+  if (cached && Date.now() - cached.lastFetched < CACHE_DURATION_MS) return result(cached, 'cache');
+  const fallback = (issue: SamGovCatalog['issue']) => result(cached, cached ? 'stale' : 'unavailable', issue);
+  const apiKey = process.env.SAM_GOV_API_KEY?.trim() || process.env.NEXT_PUBLIC_SAM_GOV_API_KEY?.trim();
+  if (!apiKey) return fallback('missing_key');
 
-  console.log("File cache is stale, empty, or non-existent. Attempting to fetch fresh SAM.gov opportunities from API.");
-  const apiKey = process.env.SAM_GOV_API_KEY ?? process.env.NEXT_PUBLIC_SAM_GOV_API_KEY;
-  if (!apiKey) {
-    console.warn('SAM_GOV_API_KEY or NEXT_PUBLIC_SAM_GOV_API_KEY is not set. Using existing cache or returning empty.');
-    return applyFilters(samGovCacheFromFile?.data || [], searchCriteria);
-  }
-
-  const baseUrl = 'https://api.sam.gov/opportunities/v2/search';
-  const defaultParams: Record<string, any> = {
-    api_key: apiKey,
-    ptype: 'o,k',
-    postedFrom: getOneYearBackDate(),
-    postedTo: getCurrentDate(),
-    limit: '1000'
-  };
-
-  let allFetchedOpportunitiesData: any[] = [];
-  let offset = 0;
+  const data: SamGovOpportunity[] = [];
   const limit = 1000;
-  let hasMore = true;
-  let pagesFetched = 0;
-  const maxPages = 2;
-
-  console.log(`Fetching SAM.gov opportunities (max ${maxPages} pages)...`);
-
-  while (hasMore && pagesFetched < maxPages) {
-    const params = { ...defaultParams, offset: String(offset) };
-    const queryString = new URLSearchParams(params).toString();
-    const url = `${baseUrl}?${queryString}`;
-
-    console.log(`Fetching page ${pagesFetched + 1} (offset: ${offset}) of max ${maxPages} pages...`);
-
+  let issue: SamGovCatalog['issue'];
+  for (let offset = 0; offset < limit * 2; offset += limit) {
+    const params = new URLSearchParams({
+      api_key: apiKey, ptype: 'o,k', postedFrom: getOneYearBackDate(), postedTo: getCurrentDate(),
+      limit: String(limit), offset: String(offset),
+    });
     try {
-      const response = await fetch(url);
+      const response = await fetch('https://api.sam.gov/opportunities/v2/search?' + params, { cache: 'no-store' });
       if (!response.ok) {
-        const errorBodyText = await response.text();
-        console.error(`SAM.gov API error on page ${pagesFetched + 1}: ${response.status} ${response.statusText}`, errorBodyText);
-
-        if (response.status === 429 && pagesFetched === 0) { // Only return dummy if 429 on *first* page attempt
-          console.warn("SAM.gov API rate limit exceeded on initial fetch. Returning a single dummy listing for this request.");
-          return applyFilters([singleDummyOpportunityForRateLimit], searchCriteria); // Do not update cache with this
-        }
-
-        // For other errors on the first page, or any error on subsequent pages
-        // If it's an error on the first page (and not 429), rely on potentially stale cache or empty.
-        if (pagesFetched === 0) {
-          console.warn("API error on first page. Using existing file cache (if any) or empty list.");
-          return applyFilters(samGovCacheFromFile?.data || [], searchCriteria);
-        }
-
-        // Error on subsequent pages: stop fetching. We'll process what we have.
-        hasMore = false;
+        console.warn('SAM.gov search failed with HTTP', response.status);
+        issue = response.status === 429 ? 'rate_limited' : 'upstream_error';
         break;
       }
-
-      const data = await response.json();
-      if (!data.opportunitiesData || !Array.isArray(data.opportunitiesData)) {
-        console.error(`Invalid data format from SAM.gov API on page ${pagesFetched + 1}.`);
-        if (pagesFetched === 0) {
-          console.warn("Invalid data on first page. Using existing file cache (if any) or empty list.");
-          return applyFilters(samGovCacheFromFile?.data || [], searchCriteria);
-        }
-        hasMore = false;
+      const payload = await response.json();
+      const page = payload.opportunitiesData;
+      if (!Array.isArray(page)) {
+        issue = 'upstream_error';
         break;
       }
-
-      allFetchedOpportunitiesData.push(...data.opportunitiesData);
-
-      if (data.opportunitiesData.length < limit) {
-        hasMore = false;
-      } else {
-        offset += limit;
-      }
-    } catch (error: any) {
-      console.error(`Network error fetching data from SAM.gov API on page ${pagesFetched + 1}:`, error);
-      if (pagesFetched === 0) {
-        console.warn("Network error on first page. Using existing file cache (if any) or empty list.");
-        return applyFilters(samGovCacheFromFile?.data || [], searchCriteria);
-      }
-      hasMore = false;
+      data.push(...page.map(mapApiOpportunity));
+      if (page.length < limit) break;
+    } catch {
+      issue = 'upstream_error';
       break;
     }
-    pagesFetched++;
   }
+  if (issue) return data.length ? result({ data, lastFetched: Date.now() }, 'partial', issue) : fallback(issue);
 
-  if (allFetchedOpportunitiesData.length > 0) {
-    console.log(`Fetched a total of ${allFetchedOpportunitiesData.length} opportunities from API over ${pagesFetched} page(s).`);
-    const mappedOpportunities: SamGovOpportunity[] = allFetchedOpportunitiesData.map(mapApiOpportunity);
-
-    const newCache: SamGovCache = {
-      data: mappedOpportunities,
-      lastFetched: currentTime,
-    };
-    await writeCache(newCache);
-    console.log(`SAM.gov file cache updated with live API data. ${mappedOpportunities.length} opportunities stored.`);
-    return applyFilters(mappedOpportunities, searchCriteria);
-  } else {
-    // No new data fetched successfully from any page, and it wasn't a 429 on the first attempt that returned dummy.
-    console.log("No new opportunities fetched from API. Using existing file cache (if any) or returning empty list.");
-    return applyFilters(samGovCacheFromFile?.data || [], searchCriteria);
-  }
+  const snapshot = { data, lastFetched: Date.now() };
+  await writeCache(snapshot);
+  return result(snapshot, 'live');
 }
 
 /**
