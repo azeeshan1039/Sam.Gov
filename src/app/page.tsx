@@ -6,11 +6,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Award, Calendar, Check, Clock, Search, TriangleAlert } from "lucide-react";
 import { getStoredUser, getUserDisplayName } from "@/lib/auth";
-import { formatMoney, type StatsPayload } from "@/lib/stats";
-import type { PipelineItem } from "@/lib/pipeline";
+import { formatMoney, initials, type StatsPayload } from "@/lib/stats";
+import { HUNDRED_K_THRESHOLD, type PipelineItem } from "@/lib/pipeline";
 import type { AwardTrackingItem, AwardTrackingSummary } from "@/lib/awards";
-import { easternTodayUtc } from "@/lib/eastern-date";
+import { easternReportingRange, easternTodayUtc, formatUtcDateRange } from "@/lib/eastern-date";
+import { DASHBOARD_PERIOD_LABELS, dashboardQuarters, dashboardReportingRange, easternSubmissionDay, type DashboardPeriod } from "@/lib/dashboard-reporting";
 import { isProductRfq } from "@/lib/ai-suggestion-prefilter";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const GoalPaceChart = dynamic(() => import("@/components/GoalPaceChart"), {
   ssr: false,
@@ -45,16 +47,6 @@ function compactMoney(value: number) {
 function priceMoney(value: number | null | undefined) {
   if (value == null || Number.isNaN(Number(value))) return "—";
   return Number(value).toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-function inEasternMonth(value: string | null | undefined, year: number, month: number) {
-  if (!value) return false;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return false;
-  const parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric", month: "numeric" }).formatToParts(date);
-  const y = Number(parts.find((part) => part.type === "year")?.value);
-  const m = Number(parts.find((part) => part.type === "month")?.value);
-  return y === year && m === month;
 }
 
 function submittedStamp(value: string) {
@@ -103,61 +95,56 @@ function sumNumbers(values: Array<number | null | undefined>) {
 
 function PortalMix({
   wide,
-  monthLabel,
+  periodLabel,
   rows,
-  max,
-  sizeKnown,
-  veryLargeKnown,
   sizes,
 }: {
   wide?: boolean;
-  monthLabel: string;
-  rows: Array<{ name: string; count: number; value: number | null }>;
-  max: number;
-  sizeKnown: boolean;
-  veryLargeKnown: boolean;
+  periodLabel: string;
+  rows: Array<{ name: string; count: number; value: number }>;
   sizes: { Small: number; Medium: number; Large: number; "Very Large": number };
 }) {
+  const max = Math.max(1, ...rows.map((row) => row.count));
   const swatches = [
-    ["#A5F3FC", "Small <$50K", sizes.Small, true],
-    ["#06B6D4", "Medium", sizes.Medium, true],
-    ["#0E7490", "Large $100K+", sizes.Large, true],
-    ["#164E63", "Very large $500K+", veryLargeKnown ? sizes["Very Large"] : null, veryLargeKnown],
+    ["#A5F3FC", "Small <$50K", sizes.Small],
+    ["#06B6D4", "Medium", sizes.Medium],
+    ["#0E7490", "Large $100K+", sizes.Large],
+    ["#164E63", "Very large $500K+", sizes["Very Large"]],
   ] as const;
   return (
     <div className={wide ? "cf-card" : "cf-card cf-split-side"} style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 18 }}>
       <div>
         <h2 className="cf-h2">Submissions by portal</h2>
-        <p className="cf-sub">{monthLabel} · count and submitted value</p>
+        <p className="cf-sub">{periodLabel} · count and submitted value</p>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         {rows.length ? rows.map((row) => (
           <div key={row.name} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 14 }}>
               <span style={{ fontWeight: 500 }}>{row.name}</span>
-              <span className="cf-mono" style={{ fontSize: 13, color: "var(--cf-text-2)" }}>{row.count} · {row.value == null ? "—" : compactMoney(row.value)}</span>
+              <span className="cf-mono" style={{ fontSize: 13, color: "var(--cf-text-2)" }}>{row.count} · {compactMoney(row.value)}</span>
             </div>
             <div className="cf-bar" style={{ height: 8 }}><span style={{ width: `${(row.count / max) * 100}%` }} /></div>
           </div>
-        )) : <p className="cf-meta">No portal totals for this month.</p>}
+        )) : <p className="cf-meta">No submissions for this period.</p>}
       </div>
       <div style={{ borderTop: "1px solid var(--cf-line)", paddingTop: 16, display: "flex", flexDirection: "column", gap: 10 }}>
         <div className="cf-lbl">Bid size mix</div>
-        {sizeKnown ? (
+        {rows.length > 0 && (
           <>
-            <div style={{ display: "flex", gap: 2, height: 14, borderRadius: 4, overflow: "hidden" }} role="img" aria-label={`Small ${sizes.Small}, Medium ${sizes.Medium}, Large ${sizes.Large}, Very large ${veryLargeKnown ? sizes["Very Large"] : "not split"}`}>
-              {swatches.map(([color, , count, known]) => known && Number(count) > 0 ? <div key={color} style={{ flex: Number(count), background: color }} /> : null)}
+            <div style={{ display: "flex", gap: 2, height: 14, borderRadius: 4, overflow: "hidden" }} role="img" aria-label={`Small ${sizes.Small}, Medium ${sizes.Medium}, Large ${sizes.Large}, Very large ${sizes["Very Large"]}`}>
+              {swatches.map(([color, , count]) => count > 0 ? <div key={color} style={{ flex: count, background: color }} /> : null)}
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "6px 16px", fontSize: 13, color: "var(--cf-text-2)" }}>
               {swatches.map(([color, label, count]) => (
                 <span key={label} style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <span style={{ width: 10, height: 10, borderRadius: 2, background: color, flex: "none" }} />
-                  {label} · {count == null ? "—" : count}
+                  {label} · {count}
                 </span>
               ))}
             </div>
           </>
-        ) : <p className="cf-meta">Size mix is not in this feed.</p>}
+        )}
       </div>
     </div>
   );
@@ -182,9 +169,9 @@ export default function DashboardPage() {
   const [role, setRole] = useState<"admin" | "agent" | null>(null);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [leaderboardPeriod, setLeaderboardPeriod] = useState<"today" | "week" | "month">("month");
-  const [byAmount, setByAmount] = useState<Array<{ rank: number; user_id: number; name: string; amount: number; bid_count: number }>>([]);
-  const [byCount, setByCount] = useState<Array<{ rank: number; user_id: number; name: string; amount: number; bid_count: number }>>([]);
+  const [reportingPeriod, setReportingPeriod] = useState<DashboardPeriod>("mtd");
+  const [quarterOffset, setQuarterOffset] = useState(0);
+  const [leaderboardPeriod, setLeaderboardPeriod] = useState<"today" | "week" | "report">("report");
   const [duplicateFlags, setDuplicateFlags] = useState<Array<{ id: number; solicitation_number: string; attempted_by?: { full_name: string }; existing_agent?: { full_name: string }; detected_at: string }>>([]);
   const [staleFlags, setStaleFlags] = useState<Array<{ claim_id: number; solicitation_number: string | null; title: string; assignee?: { full_name: string }; last_status_at: string | null; href?: string }>>([]);
   const [awardFlags, setAwardFlags] = useState<Array<{ bid_id: number; display_bid_id: string; solicitation_number: string | null; title: string | null; agent_name: string | null; submitted_on: string | null; days_since_submission: number | null; href: string }>>([]);
@@ -201,6 +188,7 @@ export default function DashboardPage() {
   const [awardSummary, setAwardSummary] = useState<AwardTrackingSummary | null>(null);
   const [suggestions, setSuggestions] = useState<Array<{ id: string; solicitationNumber?: string; title: string; department?: string; closingDate?: string; fitReason?: string }>>([]);
   const [pipelineItems, setPipelineItems] = useState<PipelineItem[]>([]);
+  const [pipelineAvailable, setPipelineAvailable] = useState(false);
 
   useEffect(() => {
     const user = getStoredUser();
@@ -230,12 +218,12 @@ export default function DashboardPage() {
           setStats(data.stats);
         }
         if (role === 'admin') {
-          const now = new Date();
+          const now = easternTodayUtc();
           const statsQuery = new URLSearchParams({
             company_id: String(companyId),
             requester_user_id: String(userId),
-            year: String(now.getFullYear()),
-            month: String(now.getMonth() + 1),
+            year: String(now.getUTCFullYear()),
+            month: String(now.getUTCMonth() + 1),
           });
           const [flagsResponse, staleResponse, teamResponse, activityResponse, pulseResponse, statsResponse] = await Promise.all([
             fetch('/api/backend/opportunities/duplicates', { cache: 'no-store' }),
@@ -284,6 +272,7 @@ export default function DashboardPage() {
             if (pipelineResponse.ok) {
               const pipelineData = await pipelineResponse.json();
               setPipelineItems(pipelineData.items || []);
+              setPipelineAvailable(true);
             }
           } catch (err) {
             console.error("Failed to fetch pipeline:", err);
@@ -297,27 +286,6 @@ export default function DashboardPage() {
     };
     fetchStats();
   }, [authChecked, companyId, role, userId]);
-
-  useEffect(() => {
-    if (!authChecked || role !== "admin") return;
-    let cancelled = false;
-    const loadLeaderboard = async () => {
-      try {
-        const response = await fetch(`/api/backend/stats/leaderboard?period=${leaderboardPeriod}`, { cache: "no-store" });
-        if (!response.ok || cancelled) return;
-        const data = await response.json();
-        if (cancelled) return;
-        setByAmount(data.by_amount || []);
-        setByCount(data.by_count || []);
-      } catch (err) {
-        console.error("Failed to fetch leaderboard:", err);
-      }
-    };
-    loadLeaderboard();
-    return () => {
-      cancelled = true;
-    };
-  }, [authChecked, leaderboardPeriod, role]);
 
   useEffect(() => {
     if (!authChecked || role !== "agent" || userId === null || companyId === null) return;
@@ -402,36 +370,15 @@ export default function DashboardPage() {
     return <div className="cf-wrap cf-main">Loading...</div>;
   }
 
-  const monthPeriod = periods.find((period) => period.key === "month");
-  const submittedMtd = companyStats?.monthly_goal?.achieved ?? monthPeriod?.submitted ?? stats?.bids_submitted ?? 0;
-  const teamGoal = companyStats?.monthly_goal?.monthly || 100;
-  const goalPct = teamGoal > 0 ? Math.min(100, Math.round((submittedMtd / teamGoal) * 100)) : 0;
-  const monthLabel = companyStats?.month_label || new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "America/New_York" }).format(new Date());
-  const pace = (() => {
-    const parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric", month: "numeric", day: "numeric" }).formatToParts(new Date());
-    const year = Number(parts.find((part) => part.type === "year")?.value);
-    const month = Number(parts.find((part) => part.type === "month")?.value);
-    const day = Number(parts.find((part) => part.type === "day")?.value);
-    const days = new Date(year, month, 0).getDate();
-    const paceToday = Math.round(teamGoal * (day / days));
-    let weekdays = 0;
-    for (let cursor = day; cursor <= days; cursor += 1) {
-      const dow = new Date(year, month - 1, cursor).getDay();
-      if (dow !== 0 && dow !== 6) weekdays += 1;
-    }
-    return { behind: Math.max(paceToday - submittedMtd, 0), weekdays };
-  })();
-  const paceBehind = pace.behind;
-  const paceWeekdays = pace.weekdays;
-  const attentionCount = (paceBehind > 0 ? 1 : 0) + 2 + 1 + (duplicateFlags.length === 0 && staleFlags.length === 0 ? 1 : 0);
+  const monthLabel = new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "America/New_York" }).format(new Date());
   const hour = Number(new Intl.DateTimeFormat("en-US", { hour: "numeric", hour12: false, timeZone: "America/New_York" }).format(new Date()));
   const dayPart = hour < 12 ? "morning" : hour < 17 ? "afternoon" : "evening";
   const firstName = getUserDisplayName(getStoredUser()).split(" ")[0] || "there";
   const agentGoal = myGoal?.monthly || 0;
   const agentDone = myGoal?.achieved || 0;
   const agentPct = agentGoal > 0 ? Math.min(100, Math.round((agentDone / agentGoal) * 100)) : 0;
-  const etToday = easternTodayUtc();
-  const agentSubmitted = myBidItems.filter((item) => inEasternMonth(item.submitted_at, etToday.getUTCFullYear(), etToday.getUTCMonth() + 1));
+  const agentMonth = easternReportingRange("month").to.slice(0, 7);
+  const agentSubmitted = myBidItems.filter((item) => easternSubmissionDay(item.submitted_at).startsWith(agentMonth));
   const agentValue = sumNumbers(agentSubmitted.map((item) => item.submitted_price));
   const agentProfit = sumNumbers(agentSubmitted.map((item) => item.gross_profit));
   const agentMarkups = agentSubmitted.map((item) => item.markup_percent).filter((value): value is number => value != null);
@@ -634,61 +581,109 @@ export default function DashboardPage() {
     { key: "week" as const, label: "This week", date_from: "", date_to: "", picked_up: 0, submitted: 0 },
     { key: "month" as const, label: "This month", date_from: "", date_to: "", picked_up: 0, submitted: 0 },
   ];
-  const reportParts = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric", month: "numeric" }).formatToParts(new Date());
-  const reportYear = companyStats?.year || Number(reportParts.find((part) => part.type === "year")?.value);
-  const reportMonth = companyStats?.month || Number(reportParts.find((part) => part.type === "month")?.value);
-  const monthSubmitted = pipelineItems.filter((item) => inEasternMonth(item.submitted_at, reportYear, reportMonth));
+  const today = easternTodayUtc();
+  const report = dashboardReportingRange(reportingPeriod, today, quarterOffset);
+  const reportDates = formatUtcDateRange(report.start, report.through);
+  const periodLabel = DASHBOARD_PERIOD_LABELS[reportingPeriod];
+  const employees = new Map((companyStats?.employees ?? []).map((employee) => [employee.user_id, employee]));
+  const agentIds = new Set([...Array.from(employees.keys()), ...rosterRules.map((member) => member.id)]);
+  const activeAgents = new Set([
+    ...Array.from(employees.values()).filter((employee) => employee.is_active).map((employee) => employee.user_id),
+    ...rosterRules.filter((member) => member.is_active).map((member) => member.id),
+  ]);
+  const allSubmissions = pipelineItems
+    .filter((item) => item.internal_status === "Bid submitted" && item.submitted_price != null && agentIds.has(item.agent_user_id))
+    .map((item) => ({ item, day: easternSubmissionDay(item.submitted_at), price: item.submitted_price! }));
+  const submissions = allSubmissions.filter(({ day }) => day >= report.startKey && day <= report.endKey);
+  const submittedCount = submissions.length;
+  const monthlyGoal = companyStats?.monthly_goal?.monthly;
+  const teamGoal = (monthlyGoal ?? 0) * report.months;
+  const goalPct = teamGoal > 0 ? Math.round((submittedCount / teamGoal) * 100) : 0;
+  const paceBehind = pipelineAvailable && report.elapsed < report.days ? Math.max(Math.round(teamGoal * report.elapsed / report.days) - submittedCount, 0) : 0;
+  let paceWeekdays = 0;
+  for (const day = new Date(report.through); day <= report.last; day.setUTCDate(day.getUTCDate() + 1)) {
+    if (day.getUTCDay() > 0 && day.getUTCDay() < 6) paceWeekdays += 1;
+  }
+  const attentionCount = (paceBehind > 0 ? 1 : 0) + 2 + 1 + (duplicateFlags.length === 0 && staleFlags.length === 0 ? 1 : 0);
   const finding = pipelineItems.filter((item) => item.internal_status === "Finding Supplier");
   const waiting = pipelineItems.filter((item) => item.internal_status === "Waiting Approval");
   const submittedNow = pipelineItems.filter((item) => item.internal_status === "Bid submitted");
   const won = pipelineItems.filter((item) => item.award_outcome === "won");
-  const wonThisMonth = won.filter((item) => inEasternMonth(item.outcome_updated_at, reportYear, reportMonth));
-  const awardedRows = won.some((item) => item.outcome_updated_at) ? wonThisMonth : won;
+  const resolvedOutcomes = pipelineItems
+    .filter((item) => item.award_outcome === "won" || item.award_outcome === "lost")
+    .map((item) => ({ item, day: easternSubmissionDay(item.outcome_updated_at) }));
+  const reportOutcomes = resolvedOutcomes.filter(({ day }) => day >= report.startKey && day <= report.endKey);
+  const selectedAwards = reportOutcomes.filter(({ item }) => item.award_outcome === "won");
+  const winRate = reportOutcomes.length ? Math.round(100 * selectedAwards.length / reportOutcomes.length) : null;
   const lostCount = pipelineItems.filter((item) => item.award_outcome === "lost").length;
   const pendingCount = pipelineItems.filter((item) => item.award_outcome === "pending").length;
   const findingValue = sumNumbers(finding.map((item) => item.expected_submitted_price ?? item.submitted_price));
   const waitingValue = sumNumbers(waiting.map((item) => item.expected_submitted_price ?? item.submitted_price));
   const dueSoonKnown = finding.some((item) => item.days_remaining != null);
   const dueSoon = finding.filter((item) => item.days_remaining != null && item.days_remaining <= 2).length;
-  const monthSubmittedValue = sumNumbers(monthSubmitted.map((item) => item.submitted_price)) ?? (typeof companyStats?.total_submission_value === "number" ? companyStats.total_submission_value : null);
-  const monthProfit = sumNumbers(monthSubmitted.map((item) => item.gross_profit));
-  const monthCost = sumNumbers(monthSubmitted.map((item) => item.supplier_cost ?? item.cost));
-  const monthAwarded = sumNumbers(awardedRows.map((item) => item.awarded_amount));
-  const markups = monthSubmitted.map((item) => item.markup_percent).filter((value): value is number => value != null);
+  const submittedValue = submissions.reduce((sum, { price }) => sum + price, 0);
+  const grossProfit = sumNumbers(submissions.map(({ item }) => item.gross_profit));
+  const supplierCost = sumNumbers(submissions.map(({ item }) => item.supplier_cost ?? item.cost));
+  const awardedValue = sumNumbers(selectedAwards.map(({ item }) => item.awarded_amount));
+  const pipelineSubmittedValue = sumNumbers(submittedNow.map((item) => item.submitted_price));
+  const pipelineGrossProfit = sumNumbers(submittedNow.map((item) => item.gross_profit));
+  const pipelineAwardedValue = sumNumbers(won.map((item) => item.awarded_amount));
+  const markups = submissions.map(({ item }) => item.markup_percent).filter((value): value is number => value != null);
   const avgMarkup = markups.length ? markups.reduce((total, value) => total + value, 0) / markups.length : null;
   const sizes = { Small: 0, Medium: 0, Large: 0, "Very Large": 0 };
-  const veryLargeKnown = monthSubmitted.some((item) => item.size_bucket);
-  let sizeKnown = veryLargeKnown;
-  if (veryLargeKnown) {
-    for (const item of monthSubmitted) {
-      if (item.size_bucket && item.size_bucket in sizes) sizes[item.size_bucket] += 1;
-    }
-  } else if (companyStats?.thresholds) {
-    sizeKnown = true;
-    sizes.Small = companyStats.thresholds.lte_50k;
-    sizes.Large = companyStats.thresholds.gte_100k;
-    sizes.Medium = Math.max(0, companyStats.thresholds.gte_50k - companyStats.thresholds.gte_100k);
+  const portalTotals = new Map<string, { name: string; count: number; value: number }>();
+  const dailyCounts = new Map<string, number>();
+  for (const { item, day, price } of submissions) {
+    const size = price >= 500_000 ? "Very Large" : price >= HUNDRED_K_THRESHOLD ? "Large" : price >= 50_000 ? "Medium" : "Small";
+    sizes[size] += 1;
+    const rawPortal = item.portal?.trim() || "Unspecified";
+    const name = /^sam\.?gov$/i.test(rawPortal) ? "SAM.GOV" : rawPortal;
+    const key = name.toLowerCase();
+    const portal = portalTotals.get(key) ?? { name, count: 0, value: 0 };
+    portal.count += 1;
+    portal.value += price;
+    portalTotals.set(key, portal);
+    dailyCounts.set(day, (dailyCounts.get(day) ?? 0) + 1);
   }
-  const valueByPortal = new Map<string, number>();
-  for (const item of monthSubmitted) {
-    const key = (item.portal || "Unknown").toLowerCase();
-    valueByPortal.set(key, (valueByPortal.get(key) || 0) + (item.submitted_price || 0));
+  const portalDisplay = Array.from(portalTotals.values()).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  const monthlyBreakdown = Array.from({ length: report.months }, (_, index) => {
+    const date = new Date(Date.UTC(report.start.getUTCFullYear(), report.start.getUTCMonth() + index, 1));
+    if (date > report.through) return null;
+    const month = date.toISOString().slice(0, 7);
+    const rows = submissions.filter(({ day }) => day.startsWith(month));
+    return {
+      month,
+      label: date.toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" }),
+      count: rows.length,
+      value: rows.reduce((sum, { price }) => sum + price, 0),
+    };
+  });
+  const leaderboardRange = leaderboardPeriod === "report"
+    ? { from: report.startKey, to: report.endKey }
+    : easternReportingRange(leaderboardPeriod);
+  const leaderboard = new Map<number, { user_id: number; name: string; bid_count: number; amount: number; grossProfit: number | null }>();
+  for (const { item, day, price } of allSubmissions) {
+    if (day < leaderboardRange.from || day > leaderboardRange.to || !activeAgents.has(item.agent_user_id)) continue;
+    const id = item.agent_user_id;
+    const entry = leaderboard.get(id) ?? { user_id: id, name: employees.get(id)?.name || item.agent_name || "Agent", bid_count: 0, amount: 0, grossProfit: null };
+    entry.bid_count += 1;
+    entry.amount += price;
+    if (item.gross_profit != null) entry.grossProfit = (entry.grossProfit ?? 0) + item.gross_profit;
+    leaderboard.set(id, entry);
   }
-  const statPortals = companyStats?.bid_by_portal?.portals || [];
-  const portalDisplay = statPortals.length
-    ? statPortals.map((row) => ({ name: row.name, count: row.count, value: valueByPortal.has(row.name.toLowerCase()) ? valueByPortal.get(row.name.toLowerCase())! : null }))
-    : Array.from(monthSubmitted.reduce((map, item) => {
-        const name = item.portal || "Unknown";
-        const current = map.get(name) || { name, count: 0, value: 0 };
-        current.count += 1;
-        current.value += item.submitted_price || 0;
-        map.set(name, current);
-        return map;
-      }, new Map<string, { name: string; count: number; value: number }>()).values());
-  const portalMax = Math.max(1, ...portalDisplay.map((row) => row.count));
-  const latestSubmissions = [...pipelineItems].filter((item) => item.submitted_at).sort((left, right) => +new Date(right.submitted_at || 0) - +new Date(left.submitted_at || 0)).slice(0, 5);
+  const agentOutcomes = new Map<number, { won: number; total: number }>();
+  for (const { item, day } of resolvedOutcomes) {
+    if (day < leaderboardRange.from || day > leaderboardRange.to) continue;
+    const entry = agentOutcomes.get(item.agent_user_id) ?? { won: 0, total: 0 };
+    entry.total += 1;
+    if (item.award_outcome === "won") entry.won += 1;
+    agentOutcomes.set(item.agent_user_id, entry);
+  }
+  const byAmount = Array.from(leaderboard.values()).sort((a, b) => b.amount - a.amount || b.bid_count - a.bid_count || a.name.localeCompare(b.name) || a.user_id - b.user_id);
+  const byCount = Array.from(leaderboard.values()).sort((a, b) => b.bid_count - a.bid_count || b.amount - a.amount || a.name.localeCompare(b.name) || a.user_id - b.user_id);
+  const latestSubmissions = submissions.map(({ item }) => item).sort((a, b) => Date.parse(b.submitted_at!) - Date.parse(a.submitted_at!)).slice(0, 5);
   const portalMix = (
-    <PortalMix wide={dashView === "portal"} monthLabel={monthLabel} rows={portalDisplay} max={portalMax} sizeKnown={sizeKnown} veryLargeKnown={veryLargeKnown} sizes={sizes} />
+    <PortalMix wide={dashView === "portal"} periodLabel={report.label} rows={portalDisplay} sizes={sizes} />
   );
 
   return (
@@ -698,7 +693,7 @@ export default function DashboardPage() {
           <div>
             <div className="cf-eyebrow">Manager view</div>
             <h1 className="cf-h1">Bid performance</h1>
-            <div className="cf-lead">
+            <div className="cf-lead flex-wrap">
               <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#059669", boxShadow: "0 0 10px #059669" }} />
               Live sync · {loading ? "loading" : "updated just now"}
             </div>
@@ -713,10 +708,35 @@ export default function DashboardPage() {
                 <button key={key} type="button" className={`cf-seg${dashView === key ? " cf-seg-on" : ""}`} aria-pressed={dashView === key} onClick={() => setDashView(key)}>{label}</button>
               ))}
             </div>
-            <span className="cf-meta inline-flex items-center gap-2">
-              <Calendar size={16} strokeWidth={1.75} />
-              {monthLabel}
-            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <Select value={reportingPeriod} onValueChange={(value: DashboardPeriod) => {
+                setReportingPeriod(value);
+                setLeaderboardPeriod("report");
+              }}>
+                <SelectTrigger aria-label="Reporting period" className="cf-select !w-[11.5rem]">
+                  <span className="!flex items-center gap-2">
+                    <Calendar size={16} strokeWidth={1.75} className="shrink-0" aria-hidden="true" />
+                    <SelectValue />
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="mtd">Month to date (MTD)</SelectItem>
+                  <SelectItem value="quarter">Quarterly</SelectItem>
+                  <SelectItem value="ytd">Year to date (YTD)</SelectItem>
+                </SelectContent>
+              </Select>
+              {reportingPeriod === "quarter" && (
+                <Select value={String(quarterOffset)} onValueChange={(value) => {
+                  setQuarterOffset(Number(value));
+                  setLeaderboardPeriod("report");
+                }}>
+                  <SelectTrigger aria-label="Reporting quarter" className="cf-select !w-28"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {dashboardQuarters(today).map(({ label }, offset) => <SelectItem key={label} value={String(offset)}>{label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
             <Link className="cf-btn cf-btn-secondary" href="/stats">
               Stats
             </Link>
@@ -724,41 +744,45 @@ export default function DashboardPage() {
         </div>
       </section>
       <main className="cf-wrap cf-main">
+        <p className="cf-meta" role="status">{report.label} · {reportDates} ET{loading ? " · Loading bid data" : ""}</p>
+        {!loading && !pipelineAvailable && <p role="alert">Could not load bid data. Refresh to try again.</p>}
         <section className="cf-grid-kpi" aria-label="Key figures">
           <div className="cf-card cf-kpi cf-kpi-hero">
-            <div className="cf-lbl" style={{ color: "#0E7490" }}>Bids submitted · MTD</div>
+            <div className="cf-lbl" style={{ color: "#0E7490" }}>Bids submitted · {periodLabel}</div>
             <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-              <span className="cf-kpi-v" style={{ fontSize: 36 }}>{loading ? "—" : submittedMtd}</span>
-              <span className="cf-mono" style={{ fontSize: 14, color: "var(--cf-text-2)" }}>/ {teamGoal} goal</span>
+              <span className="cf-kpi-v" style={{ fontSize: 36 }}>{pipelineAvailable ? submittedCount : "—"}</span>
+              {monthlyGoal != null && <span className="cf-mono" style={{ fontSize: 14, color: "var(--cf-text-2)" }}>/ {teamGoal} goal</span>}
             </div>
-            <div className="cf-bar"><span style={{ width: `${goalPct}%` }} /></div>
-            <div className="cf-meta">{goalPct}% of goal{companyStats?.monthly_goal ? ` · ${companyStats.monthly_goal.left} left` : ""}</div>
+            {teamGoal > 0 && pipelineAvailable && <>
+              <div className="cf-bar"><span style={{ width: `${Math.min(100, goalPct)}%` }} /></div>
+              <div className="cf-meta">{goalPct}% of goal · {Math.max(0, teamGoal - submittedCount)} left</div>
+            </>}
           </div>
           <div className="cf-card cf-kpi">
             <div className="cf-lbl">Submitted value</div>
-            <div className="cf-kpi-v">{companyStats ? formatMoney(companyStats.total_submission_value) : formatCurrency(stats?.total_target_value ?? 0)}</div>
-            <div className="cf-meta">Month-over-month change is not in this feed</div>
+            <div className="cf-kpi-v">{pipelineAvailable ? formatMoney(submittedValue) : "—"}</div>
+            <div className="cf-meta">{report.label}</div>
           </div>
           <div className="cf-card cf-kpi">
             <div className="cf-lbl">Gross profit</div>
-            <div className="cf-kpi-v">{monthProfit == null ? "—" : formatMoney(monthProfit)}</div>
-            <div className="cf-meta">Submitted bids this month</div>
+            <div className="cf-kpi-v">{grossProfit == null ? "—" : formatMoney(grossProfit)}</div>
+            <div className="cf-meta">{report.label}</div>
           </div>
           <div className="cf-card cf-kpi">
             <div className="cf-lbl">Avg. markup</div>
             <div className="cf-kpi-v">{avgMarkup == null ? "—" : avgMarkup.toFixed(1) + "%"}</div>
-            <div className="cf-meta">Submitted bids this month</div>
+            <div className="cf-meta">{report.label}</div>
           </div>
           <div className="cf-card cf-kpi">
-            <div className="cf-lbl">Win rate · 90 days</div>
-            <div className="cf-kpi-v">—</div>
-            <div className="cf-meta">Won and lost counts are not in this feed</div>
+            <div className="cf-lbl">Win rate · {periodLabel}</div>
+            <div className="cf-kpi-v">{winRate == null ? "—" : `${winRate}%`}</div>
+            <div className="cf-meta">{reportOutcomes.length ? `${selectedAwards.length} won · ${reportOutcomes.length - selectedAwards.length} lost` : "No resolved outcomes in this period"}</div>
           </div>
           <div className="cf-card cf-kpi">
-            <div className="cf-lbl">$100K+ bids · MTD</div>
-            <div className="cf-kpi-v">{companyStats?.thresholds ? companyStats.thresholds.gte_100k : "—"}</div>
+            <div className="cf-lbl">$100K+ bids · {periodLabel}</div>
+            <div className="cf-kpi-v">{pipelineAvailable ? sizes.Large + sizes["Very Large"] : "—"}</div>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-              <span className="cf-meta">{companyStats?.thresholds ? `${companyStats.thresholds.gte_50k} at $50K+` : "Opens the existing $100K view"}</span>
+              <span className="cf-meta">{pipelineAvailable ? `${submittedCount - sizes.Small} at $50K+` : "—"}</span>
               <Link className="cf-link" href="/hundred-k" style={{ fontSize: 12 }}>View</Link>
             </div>
           </div>
@@ -769,16 +793,16 @@ export default function DashboardPage() {
             <div className="cf-card cf-split-main" style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 16, overflow: "hidden" }}>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "12px 24px", justifyContent: "space-between", alignItems: "flex-start" }}>
                 <div>
-                  <h2 className="cf-h2">Submissions vs. monthly goal</h2>
-                  <p className="cf-sub">Cumulative bids submitted in {monthLabel}, all agents</p>
+                  <h2 className="cf-h2">Submissions vs. goal</h2>
+                  <p className="cf-sub">{report.label} · all agents</p>
                 </div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 16, fontSize: 13, color: "var(--cf-text-2)" }}>
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><svg width="22" height="8" aria-hidden><line x1="1" y1="4" x2="21" y2="4" stroke="#0891B2" strokeWidth="2.5" strokeLinecap="round" /></svg>Actual</span>
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><svg width="22" height="8" aria-hidden><line x1="1" y1="4" x2="21" y2="4" stroke="#7C3AED" strokeWidth="2" strokeDasharray="4 3" /></svg>Forecast</span>
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><svg width="22" height="8" aria-hidden><line x1="1" y1="4" x2="21" y2="4" stroke="#94A3B8" strokeWidth="2" strokeDasharray="6 4" /></svg>Goal pace</span>
+                  {report.elapsed < report.days && <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><svg width="22" height="8" aria-hidden><line x1="1" y1="4" x2="21" y2="4" stroke="#7C3AED" strokeWidth="2" strokeDasharray="4 3" /></svg>Forecast</span>}
+                  {monthlyGoal != null && <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><svg width="22" height="8" aria-hidden><line x1="1" y1="4" x2="21" y2="4" stroke="#94A3B8" strokeWidth="2" strokeDasharray="6 4" /></svg>Goal pace</span>}
                 </div>
               </div>
-              <GoalPaceChart submitted={submittedMtd} goal={teamGoal} monthLabel={monthLabel} />
+              {pipelineAvailable && <GoalPaceChart range={report} dailyCounts={dailyCounts} goal={monthlyGoal == null ? null : teamGoal} />}
             </div>
             <aside className="cf-card cf-split-side" aria-labelledby="attn-h" style={{ display: "flex", flexDirection: "column" }}>
               <div className="cf-card-hd" style={{ paddingBottom: 8 }}>
@@ -791,7 +815,7 @@ export default function DashboardPage() {
                     <span className="cf-ico cf-ico-bad"><TriangleAlert size={18} strokeWidth={1.75} /></span>
                     <div>
                       <b>Team is {paceBehind} bids behind goal pace</b>
-                      <p>{Math.max(teamGoal - submittedMtd, 0)} more needed in {paceWeekdays} working days.</p>
+                      <p>{Math.max(teamGoal - submittedCount, 0)} more needed in {paceWeekdays} working days.</p>
                       <Link className="cf-link" href="/agent-bid-data">See by agent</Link>
                     </div>
                   </li>
@@ -877,13 +901,13 @@ export default function DashboardPage() {
             <div className="cf-stage">
               <span className="cf-pill cf-pill-sub">Bid submitted</span>
               <div className="cf-stage-v">{submittedNow.length}</div>
-              <div className="cf-meta" style={{ fontSize: 13, color: "var(--cf-text-2)" }}>{monthSubmittedValue == null ? "Submitted value is not in this feed" : `${compactMoney(monthSubmittedValue)} submitted this month`}</div>
-              <div className="cf-stage-f">{monthProfit == null ? "Gross profit is not in this feed" : `${compactMoney(monthProfit)} gross profit`}</div>
+              {pipelineSubmittedValue != null && <div className="cf-meta">{compactMoney(pipelineSubmittedValue)} submitted</div>}
+              {pipelineGrossProfit != null && <div className="cf-stage-f">{compactMoney(pipelineGrossProfit)} gross profit</div>}
             </div>
             <div className="cf-stage">
               <span className="cf-pill cf-pill-won">Awarded</span>
-              <div className="cf-stage-v">{awardedRows.length}</div>
-              <div className="cf-meta" style={{ fontSize: 13, color: "var(--cf-text-2)" }}>{monthAwarded == null ? "Awarded value is not on these rows" : `${compactMoney(monthAwarded)} ${wonThisMonth.length ? "won this month" : "awarded on file"}`}</div>
+              <div className="cf-stage-v">{won.length}</div>
+              {pipelineAwardedValue != null && <div className="cf-meta">{compactMoney(pipelineAwardedValue)} awarded</div>}
               <div className="cf-stage-f">{lostCount} lost · {pendingCount} pending</div>
             </div>
           </div>
@@ -891,7 +915,8 @@ export default function DashboardPage() {
 
         {dashView === "overview" && (
           <section>
-            <h2 className="cf-h2" style={{ marginBottom: 12 }}>Company pulse</h2>
+            <h2 className="cf-h2">Company pulse</h2>
+            <p className="cf-sub mb-3">Activity through today</p>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(200px, 100%), 1fr))", gap: 16 }}>
               {pulseCards.map((period) => (
                 <div key={period.key} className="cf-stage">
@@ -913,13 +938,13 @@ export default function DashboardPage() {
             <div className="cf-card-hd">
               <div>
                 <h2 className="cf-h2">Agent leaderboard</h2>
-                <p className="cf-sub">Ranked by submitted value · personal goal 20 bids / month</p>
+                <p className="cf-sub">Ranked by submitted value · {leaderboardPeriod === "report" ? report.label : leaderboardPeriod === "today" ? "Today" : "This week"}</p>
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
                 <div className="cf-seg-wrap" role="group" aria-label="Leaderboard period">
-                  {(["today", "week", "month"] as const).map((period) => (
+                  {(["today", "week", "report"] as const).map((period) => (
                     <button key={period} type="button" aria-pressed={leaderboardPeriod === period} onClick={() => setLeaderboardPeriod(period)} className={`cf-seg${leaderboardPeriod === period ? " cf-seg-on" : ""}`}>
-                      {period === "today" ? "Today" : period === "week" ? "This week" : "This month"}
+                      {period === "today" ? "Today" : period === "week" ? "This week" : reportingPeriod === "mtd" ? "This month" : "Reporting period"}
                     </button>
                   ))}
                 </div>
@@ -932,7 +957,7 @@ export default function DashboardPage() {
                     <tr>
                       <th style={{ width: 40 }}>#</th>
                       <th>Agent</th>
-                      <th>Bids vs. goal</th>
+                      <th>{leaderboardPeriod === "report" ? "Bids vs. goal" : "Bids"}</th>
                       <th className="cf-num">Submitted</th>
                       <th className="cf-num">Gross profit</th>
                       <th className="cf-num">Win rate</th>
@@ -941,31 +966,29 @@ export default function DashboardPage() {
                   <tbody>
                     {byAmount.length === 0 ? (
                       <tr><td colSpan={6}>No submitted agent bids for this period.</td></tr>
-                    ) : byAmount.map((entry) => {
-                      const employee = companyStats?.employees?.find((row) => row.name === entry.name);
-                      const personalGoal = employee?.monthly_goal || 20;
-                      const bids = employee?.month_total ?? entry.bid_count;
-                      const pct = personalGoal > 0 ? Math.min(100, Math.round((bids / personalGoal) * 100)) : 0;
-                      const letters = entry.name.trim().split(/\s+/).filter(Boolean);
-                      const mark = letters.length >= 2 ? `${letters[0][0]}${letters[1][0]}`.toUpperCase() : (letters[0] || "?").slice(0, 2).toUpperCase();
+                    ) : byAmount.map((entry, index) => {
+                      const employee = employees.get(entry.user_id);
+                      const personalGoal = leaderboardPeriod === "report" && employee ? employee.monthly_goal * report.months : 0;
+                      const pct = personalGoal > 0 ? Math.min(100, Math.round((entry.bid_count / personalGoal) * 100)) : 0;
+                      const outcomes = agentOutcomes.get(entry.user_id);
                       return (
                         <tr key={entry.user_id}>
-                          <td className="cf-mono" style={{ fontWeight: 600, color: entry.rank === 1 ? "#0E7490" : "var(--cf-text-3)" }}>{String(entry.rank).padStart(2, "0")}</td>
+                          <td className="cf-mono" style={{ fontWeight: 600, color: index === 0 ? "#0E7490" : "var(--cf-text-3)" }}>{String(index + 1).padStart(2, "0")}</td>
                           <td>
                             <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
-                              <span className={`cf-av ${entry.rank === 1 ? "cf-av-me" : ""}`} style={entry.rank === 1 ? { width: 30, height: 30, fontSize: 11 } : { width: 30, height: 30, fontSize: 11, background: "var(--cf-surface-3)", color: "var(--cf-text-2)", border: "1px solid var(--cf-line-2)" }}>{mark}</span>
+                              <span className={`cf-av ${index === 0 ? "cf-av-me" : ""}`} style={{ width: 30, height: 30, fontSize: 11 }}>{initials(entry.name)}</span>
                               <Link className="cf-link" href={"/agent-bid-data?agent_user_id=" + entry.user_id}>{entry.name}</Link>
                             </span>
                           </td>
                           <td>
                             <span style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 160 }}>
-                              <span className="cf-bar" style={{ flex: 1 }}><span style={{ width: `${pct}%` }} /></span>
-                              <span className="cf-mono" style={{ fontSize: 12, color: "var(--cf-text-2)", width: 48 }}>{bids}/{personalGoal}</span>
+                              {personalGoal > 0 && <span className="cf-bar" style={{ flex: 1 }}><span style={{ width: `${pct}%` }} /></span>}
+                              <span className="cf-mono" style={{ fontSize: 12, color: "var(--cf-text-2)" }}>{entry.bid_count}{personalGoal > 0 ? `/${personalGoal}` : ""}</span>
                             </span>
                           </td>
                           <td className="cf-num">{formatMoney(entry.amount)}</td>
-                          <td className="cf-num">—</td>
-                          <td className="cf-num">—</td>
+                          <td className="cf-num">{entry.grossProfit == null ? "—" : formatMoney(entry.grossProfit)}</td>
+                          <td className="cf-num">{outcomes ? `${Math.round(100 * outcomes.won / outcomes.total)}%` : "—"}</td>
                         </tr>
                       );
                     })}
@@ -979,11 +1002,25 @@ export default function DashboardPage() {
 
         {dashView !== "portal" && <section className="cf-card p-5">
           <h2 className="cf-h2">Agent leaderboard by bid count</h2>
-          {byCount.length ? <ol className="mt-3 space-y-2">{byCount.map((entry) => <li key={entry.user_id}>
-            {entry.rank}. <Link className="cf-link" href={"/agent-bid-data?agent_user_id=" + entry.user_id}>{entry.name}</Link> · {entry.bid_count} bids
+          {byCount.length ? <ol className="mt-3 space-y-2">{byCount.map((entry, index) => <li key={entry.user_id}>
+            {index + 1}. <Link className="cf-link" href={"/agent-bid-data?agent_user_id=" + entry.user_id}>{entry.name}</Link> · {entry.bid_count} bids
           </li>)}</ol> : <p className="cf-meta">No submissions for this period.</p>}
         </section>}
         {dashView === "portal" && portalMix}
+
+        {reportingPeriod !== "mtd" && pipelineAvailable && <section className="cf-card" aria-labelledby="monthly-breakdown">
+          <div className="cf-card-hd">
+            <div><h2 className="cf-h2" id="monthly-breakdown">Monthly breakdown</h2><p className="cf-sub">{report.label}</p></div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="cf-table">
+              <thead><tr><th scope="col">Month</th><th scope="col" className="cf-num">Bids submitted</th><th scope="col" className="cf-num">Submitted value</th></tr></thead>
+              <tbody>{monthlyBreakdown.map((row) => row && (
+                <tr key={row.month}><td>{row.label}</td><td className="cf-num">{row.count}</td><td className="cf-num">{formatMoney(row.value)}</td></tr>
+              ))}</tbody>
+            </table>
+          </div>
+        </section>}
 
         <section className="cf-split">
           <div className="cf-card cf-split-main" style={{ overflow: "hidden" }}>
@@ -1005,7 +1042,7 @@ export default function DashboardPage() {
                 </thead>
                 <tbody>
                   {latestSubmissions.length === 0 ? (
-                    <tr><td colSpan={6}>No submissions are in the pipeline yet.</td></tr>
+                    <tr><td colSpan={6}>{loading ? "Loading submissions…" : "No submissions for this period."}</td></tr>
                   ) : latestSubmissions.map((item) => (
                     <tr key={item.id}>
                       <td className="cf-mono cf-dim" style={{ whiteSpace: "nowrap", fontSize: 12 }}>{submittedStamp(item.submitted_at || "")}</td>
@@ -1028,14 +1065,14 @@ export default function DashboardPage() {
           <div className="cf-card cf-split-side" style={{ overflow: "hidden" }}>
             <div className="cf-card-hd" style={{ display: "block" }}>
               <h2 className="cf-h2">Financial summary</h2>
-              <p className="cf-sub">{monthLabel} to date · change vs. last month is not in this feed</p>
+              <p className="cf-sub">{report.label}</p>
             </div>
             <table className="cf-table">
               <tbody>
-                <tr><td className="cf-dim2">Submitted value</td><td className="cf-num" style={{ fontWeight: 500 }}>{monthSubmittedValue == null ? "—" : formatMoney(monthSubmittedValue)}</td><td className="cf-num cf-dim">—</td></tr>
-                <tr><td className="cf-dim2">Supplier cost</td><td className="cf-num" style={{ fontWeight: 500 }}>{monthCost == null ? "—" : formatMoney(monthCost)}</td><td className="cf-num cf-dim">—</td></tr>
-                <tr><td className="cf-dim2">Gross profit</td><td className="cf-num" style={{ fontWeight: 500 }}>{monthProfit == null ? "—" : formatMoney(monthProfit)}</td><td className="cf-num cf-dim">—</td></tr>
-                <tr><td className="cf-dim2">Awarded value</td><td className="cf-num" style={{ fontWeight: 500 }}>{monthAwarded == null ? "—" : formatMoney(monthAwarded)}</td><td className="cf-num cf-dim">—</td></tr>
+                <tr><td className="cf-dim2">Submitted value</td><td className="cf-num" style={{ fontWeight: 500 }}>{pipelineAvailable ? formatMoney(submittedValue) : "—"}</td><td className="cf-num cf-dim">—</td></tr>
+                <tr><td className="cf-dim2">Supplier cost</td><td className="cf-num" style={{ fontWeight: 500 }}>{supplierCost == null ? "—" : formatMoney(supplierCost)}</td><td className="cf-num cf-dim">—</td></tr>
+                <tr><td className="cf-dim2">Gross profit</td><td className="cf-num" style={{ fontWeight: 500 }}>{grossProfit == null ? "—" : formatMoney(grossProfit)}</td><td className="cf-num cf-dim">—</td></tr>
+                <tr><td className="cf-dim2">Awarded value</td><td className="cf-num" style={{ fontWeight: 500 }}>{awardedValue == null ? "—" : formatMoney(awardedValue)}</td><td className="cf-num cf-dim">—</td></tr>
                 <tr><td className="cf-dim2">Average markup</td><td className="cf-num" style={{ fontWeight: 500 }}>{avgMarkup == null ? "—" : `${avgMarkup.toFixed(1)}%`}</td><td className="cf-num cf-dim">—</td></tr>
               </tbody>
             </table>

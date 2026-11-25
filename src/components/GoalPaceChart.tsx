@@ -2,39 +2,27 @@
 
 import Highcharts from "highcharts";
 import HighchartsReact from "highcharts-react-official";
-
-function etParts(date = new Date()) {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/New_York",
-    year: "numeric",
-    month: "numeric",
-    day: "numeric",
-  }).formatToParts(date);
-  const pick = (type: string) => Number(parts.find((part) => part.type === type)?.value);
-  const year = pick("year");
-  const month = pick("month");
-  const day = pick("day");
-  return { year, month, day, days: new Date(year, month, 0).getDate() };
-}
-
-export function paceAndForecast(submitted: number, goal: number) {
-  const { day, days } = etParts();
-  const paceToday = Math.round(goal * (day / days));
-  const forecast = day > 0 ? Math.round(submitted * (days / day)) : submitted;
-  return { day, days, paceToday, forecast };
-}
+import { dateOnly } from "@/lib/eastern-date";
+import type { dashboardReportingRange } from "@/lib/dashboard-reporting";
 
 export default function GoalPaceChart({
-  submitted,
+  range,
+  dailyCounts,
   goal,
-  monthLabel,
 }: {
-  submitted: number;
-  goal: number;
-  monthLabel: string;
+  range: ReturnType<typeof dashboardReportingRange>;
+  dailyCounts: ReadonlyMap<string, number>;
+  goal: number | null;
 }) {
-  const { day, days, paceToday, forecast } = paceAndForecast(submitted, goal);
-  const monthShort = monthLabel.replace(/\s+\d{4}$/, "").slice(0, 3).toUpperCase();
+  const { start, days, elapsed: day, label } = range;
+  const submitted = Array.from(dailyCounts.values()).reduce((sum, count) => sum + count, 0);
+  const paceToday = goal == null ? null : Math.round(goal * day / days);
+  const forecast = Math.round(submitted * days / day);
+  const dateFormat = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+  const monthFormat = new Intl.DateTimeFormat("en-US", { month: "short", timeZone: "UTC" });
+  const categories: string[] = [];
+  const tickPositions: number[] = [];
+  const tickLabels: string[] = [];
   const actual: Array<number | Highcharts.PointOptionsObject | null> = [];
   const projected: Array<number | Highcharts.PointOptionsObject | null> = [];
   const pace: number[] = [];
@@ -54,62 +42,62 @@ export default function GoalPaceChart({
     lineWidth: 2,
     symbol: "circle",
   });
-  for (let index = 1; index <= days; index += 1) {
-    pace.push(Number(((goal * index) / days).toFixed(2)));
+  let cumulative = 0;
+  const date = new Date(start);
+  for (let index = 1; index <= days; index += 1, date.setUTCDate(date.getUTCDate() + 1)) {
+    categories.push(dateFormat.format(date));
+    if (days <= 31 ? (index - 1) % 7 === 0 : date.getUTCDate() === 1) {
+      tickPositions.push(index - 1);
+      tickLabels[index - 1] = days > 100 ? monthFormat.format(date) : dateFormat.format(date);
+    }
+    if (goal != null) pace.push(Number(((goal * index) / days).toFixed(2)));
     if (index <= day) {
-      const value = day === 0 ? 0 : Number(((submitted * index) / day).toFixed(2));
-      actual.push(index === day ? { y: submitted, marker: todayMarker, dataLabels: { enabled: true, format: String(submitted) } } : value);
+      cumulative += dailyCounts.get(dateOnly(date)) ?? 0;
+      actual.push(index === day ? { y: cumulative, marker: todayMarker } : cumulative);
       projected.push(index === day ? { y: submitted, marker: { enabled: false } } : null);
     } else {
       actual.push(null);
       const span = Math.max(days - day, 1);
       const value = Number((submitted + ((forecast - submitted) * (index - day)) / span).toFixed(2));
-      projected.push(index === days ? { y: value, marker: endMarker("#7C3AED"), dataLabels: { enabled: true, format: `~${forecast}` } } : value);
+      projected.push(index === days ? { y: value, marker: endMarker("#7C3AED") } : value);
     }
   }
+  const chartDescription = `${label}: ${submitted} ${submitted === 1 ? "bid" : "bids"} submitted${goal == null ? "" : ` against a goal of ${goal}`}${day < days ? `, with ${forecast} forecast by ${dateFormat.format(range.last)}` : ""}.`;
 
   const options: Highcharts.Options = {
     chart: {
       backgroundColor: "transparent",
       height: 280,
-      spacing: [8, 8, 8, 8],
+      spacing: [12, 18, 8, 12],
       style: { fontFamily: '"Geist Mono", ui-monospace, monospace' },
     },
-    title: { text: `Cumulative bids submitted in ${monthLabel}: ${submitted} by day ${day} against a goal pace of ${paceToday}; forecast about ${forecast} by month end versus a goal of ${goal}.`, floating: true, style: { display: "none" } },
+    title: { text: chartDescription, floating: true, style: { display: "none" } },
     credits: { enabled: false },
     legend: { enabled: false },
     xAxis: {
-      categories: Array.from({ length: days }, (_, index) => String(index + 1)),
+      categories,
       lineColor: "#CDD5E1",
       tickColor: "transparent",
-      tickInterval: 7,
+      tickPositions,
       labels: {
+        autoRotation: [],
+        formatter() { return tickLabels[this.pos] ?? ""; },
         style: { color: "#64748B", fontSize: "11px", fontFamily: '"Geist Mono", ui-monospace, monospace' },
-        formatter() {
-          return `${monthShort} ${this.value}`;
-        },
       },
-      plotBands: [{ from: day - 1, to: days - 1, color: "rgba(15,23,42,0.03)" }],
-      plotLines: [{
+      plotBands: day < days ? [{ from: day - 1, to: days - 1, color: "rgba(15,23,42,0.03)" }] : [],
+      plotLines: day < days ? [{
         value: day - 1,
         color: "#64748B",
         width: 1,
         dashStyle: "Dot",
         zIndex: 4,
-        label: {
-          text: "TODAY",
-          align: "left",
-          x: 6,
-          y: 14,
-          style: { color: "#475569", fontSize: "11px", fontWeight: "500", fontFamily: '"Geist Mono", monospace' },
-        },
-      }],
+      }] : [],
     },
     yAxis: {
       title: { text: undefined },
       gridLineColor: "#EEF2F7",
       min: 0,
-      max: Math.max(goal, forecast, submitted, 1),
+      max: Math.max(goal ?? 0, forecast, submitted, 1),
       labels: { style: { color: "#64748B", fontSize: "11px", fontFamily: '"Geist Mono", ui-monospace, monospace' } },
     },
     tooltip: {
@@ -123,18 +111,6 @@ export default function GoalPaceChart({
         animation: false,
         marker: { enabled: false, states: { hover: { enabled: false } } },
         states: { hover: { lineWidthPlus: 0 } },
-        dataLabels: {
-          crop: false,
-          overflow: "allow",
-          y: -8,
-          style: {
-            fontFamily: '"Space Grotesk", sans-serif',
-            fontWeight: "500",
-            fontSize: "14px",
-            color: "#0B1220",
-            textOutline: "none",
-          },
-        },
       },
       area: { fillOpacity: 0.28 },
     },
@@ -153,26 +129,26 @@ export default function GoalPaceChart({
           ],
         },
       },
-      {
+      ...(day < days ? [{
         type: "line",
         name: "Forecast",
         data: projected,
         color: "#7C3AED",
         dashStyle: "Dash",
         lineWidth: 2,
-      },
-      {
+      } satisfies Highcharts.SeriesLineOptions] : []),
+      ...(goal != null ? [{
         type: "line",
         name: "Goal pace",
         data: pace.map((value, index) => (
           index === days - 1
-            ? { y: value, marker: endMarker("#94A3B8"), dataLabels: { enabled: true, format: `Goal ${goal}`, style: { color: "#475569", fontSize: "13px", fontWeight: "500", textOutline: "none" } } }
+            ? { y: value, marker: endMarker("#94A3B8") }
             : value
         )),
         color: "#94A3B8",
         dashStyle: "Dash",
         lineWidth: 2,
-      },
+      } satisfies Highcharts.SeriesLineOptions] : []),
     ],
   };
 
@@ -183,24 +159,20 @@ export default function GoalPaceChart({
           <div className="cf-lbl">Submitted</div>
           <div style={{ marginTop: 6, font: "500 24px var(--cf-display)", color: "var(--cf-text)" }}>{submitted}</div>
         </div>
-        <div>
-          <div className="cf-lbl">Goal pace today</div>
+        {paceToday != null && <div>
+          <div className="cf-lbl">{day < days ? "Goal pace today" : "Period goal"}</div>
           <div style={{ marginTop: 6, font: "500 24px var(--cf-display)", color: "var(--cf-text)" }}>{paceToday}</div>
-        </div>
-        <div>
-          <div className="cf-lbl">Forecast month-end</div>
-          <div style={{ marginTop: 6, font: "500 24px var(--cf-display)", color: forecast < goal ? "#BE123C" : "var(--cf-text)" }}>~{forecast}</div>
+        </div>}
+        {day < days && <div>
+          <div className="cf-lbl">Forecast by {dateFormat.format(range.last)}</div>
+          <div style={{ marginTop: 6, font: "500 24px var(--cf-display)", color: goal != null && forecast < goal ? "#BE123C" : "var(--cf-text)" }}>~{forecast}</div>
+        </div>}
+      </div>
+      <div role="img" aria-label={chartDescription}>
+        <div aria-hidden="true">
+          <HighchartsReact highcharts={Highcharts} options={options} />
         </div>
       </div>
-      <p className="cf-meta">Actual is a straight line to the month-to-date total. Daily counts are not in this feed, so the shape is pace, not a day-by-day history.</p>
-      <HighchartsReact
-        highcharts={Highcharts}
-        options={options}
-        containerProps={{
-          role: "img",
-          "aria-label": `Cumulative bids submitted in ${monthLabel}: ${submitted} by day ${day} against a goal pace of ${paceToday}; forecast about ${forecast} by month end versus a goal of ${goal}.`,
-        }}
-      />
     </div>
   );
 }

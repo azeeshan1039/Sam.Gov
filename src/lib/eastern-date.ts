@@ -1,12 +1,14 @@
 export type ReportingPreset = "today" | "week" | "month";
 
+const easternDateFormat = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "America/New_York",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
 export function easternTodayUtc(now = new Date()) {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/New_York",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(now);
+  const parts = easternDateFormat.formatToParts(now);
   const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
   return new Date(Date.UTC(Number(values.year), Number(values.month) - 1, Number(values.day)));
 }
