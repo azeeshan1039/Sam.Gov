@@ -30,6 +30,7 @@ interface SuggestionResult {
   total_analyzed?: number;
   total_dropped_by_gate?: number;
   total_ai_scored?: number;
+  total_with_description?: number;
   threshold?: number;
 }
 
@@ -491,11 +492,14 @@ function OpportunityCatalog() {
                   <div>
                     <h2 className="cf-h2">Recommended opportunities</h2>
                     {suggestionResult?.total_analyzed != null ? (
-                      <p className="cf-sub">{suggestions.length} {suggestions.length === 1 ? "match" : "matches"} from {suggestionResult.total_analyzed} reviewed.</p>
+                      <p className="cf-sub">{suggestions.length} {suggestions.length === 1 ? "match" : "matches"} from {suggestionResult.total_analyzed} sent for screening.</p>
                     ) : null}
                     {suggestionResult?.total_ai_scored != null && suggestionResult.total_dropped_by_gate != null ? (
                       <p className="cf-meta">{suggestionResult.total_ai_scored} scored by AI · {suggestionResult.total_dropped_by_gate} excluded by screening rules.</p>
                     ) : null}
+                    {suggestionResult?.total_with_description != null && (
+                      <p className="cf-meta">{suggestionResult.total_with_description} shortlisted with notice description text.</p>
+                    )}
                   </div>
                   <button type="button" className="cf-btn cf-btn-secondary cf-btn-sm" onClick={loadSuggestions} disabled={loading || suggesting || !items.length}>
                     {suggesting ? "Analyzing…" : suggestError ? "Retry AI suggestions" : suggestionResult ? "Refresh suggestions" : "Get AI suggestions"}
