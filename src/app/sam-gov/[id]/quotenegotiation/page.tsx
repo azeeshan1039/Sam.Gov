@@ -26,6 +26,7 @@ import { getStoredUser } from '@/lib/auth';
 import { formatMoney, type BidConversationEvent } from '@/lib/pipeline';
 
 interface Supplier {
+  accepted_price?: number | null;
   id: number;
   company_name: string;
   email?: string;
@@ -58,6 +59,7 @@ interface Message {
 }
 
 interface NegotiationSession {
+  bid_internal_status?: string | null;
   id: number;
   status: string;
   suppliers: Supplier[];
@@ -164,13 +166,13 @@ function getSupplierFinalPrice(supplier: Supplier | undefined): number | null {
     .reverse()
     .find((message) => message.sender === 'supplier' && message.price_mentioned != null)
     ?.price_mentioned;
-  const rawPrice = supplier.metrics?.final_price ?? latestQuotedPrice;
+  const rawPrice = supplier.accepted_price ?? supplier.metrics?.final_price ??
+    supplier.gmail_negotiation?.latest_price ?? latestQuotedPrice;
   const parsedPrice = Number(rawPrice);
 
   return Number.isFinite(parsedPrice) && parsedPrice >= 0 ? parsedPrice : null;
 }
 
-const EMAIL_INBOX_POLL_THROTTLE_MS = 10_000;
 
 export default function BidSummaryPage() {
   const params = useParams();
@@ -185,6 +187,7 @@ export default function BidSummaryPage() {
   const [numSuppliers, setNumSuppliers] = useState('5');
   const [negotiationSession, setNegotiationSession] = useState<NegotiationSession | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [replyNotice, setReplyNotice] = useState<string | null>(null);
 
   // State for initial message review
   const [showInitialReview, setShowInitialReview] = useState(false);
@@ -196,7 +199,6 @@ export default function BidSummaryPage() {
   const [supplierDrafts, setSupplierDrafts] = useState<Map<number, SupplierDraft>>(new Map());
   const negotiationSessionRef = useRef<NegotiationSession | null>(null);
   const supplierDraftsRef = useRef(supplierDrafts);
-  const lastInboxPollRef = useRef(0);
 
   negotiationSessionRef.current = negotiationSession;
   supplierDraftsRef.current = supplierDrafts;
@@ -271,15 +273,22 @@ export default function BidSummaryPage() {
   useEffect(() => {
     if (!opportunityId) return
     fetchOpportunityDetails();
-    checkExistingSession();
-    fetchAiTargetEstimate();
+    void checkExistingSession().then((found) => {
+      if (found === false) void fetchAiTargetEstimate();
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [opportunityId]);
+
+  const sessionLookupUrl = () => {
+    const query = new URLSearchParams(getRequesterQuery());
+    query.set("opportunity_id", opportunityId);
+    return `/api/sam-gov/sessions?${query}`;
+  };
 
   // Check if there's an existing negotiation session for this opportunity
   const checkExistingSession = async () => {
     try {
-      const response = await fetch(`/api/sam-gov/sessions${getRequesterQuery()}`, {
+      const response = await fetch(sessionLookupUrl(), {
         cache: 'no-store',
       });
       if (response.ok) {
@@ -301,47 +310,15 @@ export default function BidSummaryPage() {
             setNegotiationSession(sessionData);
 
             // Auto-check for responses for pending suppliers who have messages sent
-            autoCheckPendingSuppliers(sessionData);
+            setTargetPrice(String(existingSession.target_price ?? ''));
+            return true;
           }
+          return undefined;
         }
+        return false;
       }
     } catch (err) {
       console.error('Error checking for existing session:', err);
-    }
-  };
-
-  // Automatically check for responses for pending suppliers
-  const autoCheckPendingSuppliers = async (session: NegotiationSession) => {
-    if (!session?.suppliers) return;
-
-    // Find suppliers that are pending, have buyer messages, and did NOT have a real email sent.
-    // Suppliers with email_sent=true wait for real email replies via the inbox poller.
-    const pendingWithMessages = session.suppliers.filter(
-      s => s.status === 'pending' && !s.email_sent && s.messages?.some(m => m.sender === 'buyer')
-    );
-
-    for (const supplier of pendingWithMessages) {
-      try {
-        await fetch(
-          `/api/sam-gov/negotiate/${session.id}/get-supplier-response/${supplier.id}`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(getRequesterPayload()),
-          }
-        );
-        await new Promise(resolve => setTimeout(resolve, 500));
-      } catch (err) {
-        console.error(`Failed to auto-check response for supplier ${supplier.id}:`, err);
-      }
-    }
-
-    if (pendingWithMessages.length > 0) {
-      const refreshResponse = await fetch(`/api/sam-gov/negotiate/${session.id}${getRequesterQuery()}`);
-      if (refreshResponse.ok) {
-        const refreshedData = await refreshResponse.json();
-        setNegotiationSession(refreshedData);
-      }
     }
   };
 
@@ -361,21 +338,7 @@ export default function BidSummaryPage() {
         isAwaitingVendorEmailReply(s, drafts)
       );
 
-      if (awaitingEmail) {
-        const now = Date.now();
-        if (now - lastInboxPollRef.current >= EMAIL_INBOX_POLL_THROTTLE_MS) {
-          lastInboxPollRef.current = now;
-          try {
-            await fetch('/api/sam-gov/negotiate/poll-inbox', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(getRequesterPayload()),
-            });
-          } catch (err) {
-            console.error('Auto poll-inbox failed:', err);
-          }
-        }
-      }
+      if (!awaitingEmail || session.status !== "active" || document.visibilityState !== "visible") return;
 
       try {
         const response = await fetch(
@@ -392,7 +355,7 @@ export default function BidSummaryPage() {
     };
 
     void tick();
-    const interval = setInterval(() => void tick(), 5000);
+    const interval = setInterval(() => void tick(), 15_000);
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [negotiationSession?.id, showInitialReview, initialMessages]);
@@ -400,20 +363,15 @@ export default function BidSummaryPage() {
   const fetchOpportunityDetails = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/sam-gov`);
-      const allOpportunities = await response.json().catch(() => []);
-      let foundOpportunity = Array.isArray(allOpportunities)
-        ? allOpportunities.find((opp: any) => opp.id === opportunityId)
-        : undefined;
-      // The cached list only holds recent notices. Older notices: ask SAM.gov directly.
-      if (!foundOpportunity && !opportunityId.startsWith('PIPELINE-')) {
+      let foundOpportunity;
+      if (!opportunityId.startsWith('PIPELINE-')) {
         const single = await fetch(`/api/sam-gov/opportunity/${encodeURIComponent(opportunityId)}`, { cache: 'no-store' });
         if (single.ok) foundOpportunity = await single.json();
       }
       // Bids without a SAM.gov notice (vendors added from the bid page create a PIPELINE-<id>
       // negotiation; bids from other portals): show the negotiation from its own record.
       if (!foundOpportunity) {
-        const sessionsResponse = await fetch(`/api/sam-gov/sessions${getRequesterQuery()}`, { cache: 'no-store' });
+        const sessionsResponse = await fetch(sessionLookupUrl(), { cache: 'no-store' });
         const sessionsData = sessionsResponse.ok ? await sessionsResponse.json() : null;
         const ownSession = sessionsData?.sessions?.find((s: any) => s.opportunity_id === opportunityId);
         if (ownSession) {
@@ -738,21 +696,29 @@ Procurement Team`
   const getSupplierResponse = async (supplierId: number) => {
     try {
       setGettingResponse(supplierId);
+      setReplyNotice(null);
 
       // Trigger a scoped inbox poll for this specific supplier before checking
       const supplier = negotiationSession?.suppliers.find(s => s.id === supplierId);
       if (supplier?.email_sent && negotiationSession) {
-        try {
-          await fetch('/api/sam-gov/negotiate/poll-inbox', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              session_id: negotiationSession.id,
-              supplier_id: supplierId,
-              ...getRequesterPayload(),
-            }),
-          });
-        } catch (_) { /* best-effort */ }
+        const poll = await fetch('/api/sam-gov/negotiate/poll-inbox', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            session_id: negotiationSession.id,
+            supplier_id: supplierId,
+            ...getRequesterPayload(),
+          }),
+        });
+        const result = await poll.json().catch(() => ({}));
+        if (!poll.ok || result.success === false) {
+          throw new Error(result.error || 'The RFQ inbox could not be checked.');
+        }
+        setReplyNotice(result.processed
+          ? `${result.processed} new vendor replies imported.`
+          : result.unmatched
+            ? "No reply matched this RFQ. Review unmatched mail in the connected inbox."
+            : "No new replies for this RFQ.");
       }
 
       const response = await fetch(
@@ -782,7 +748,7 @@ Procurement Team`
 
     } catch (err) {
       console.error('Failed to get response:', err);
-      setError('Failed to get supplier response. Please try again.');
+      setReplyNotice(err instanceof Error ? err.message : 'Failed to get supplier response. Please try again.');
     } finally {
       setGettingResponse(null);
     }
@@ -898,15 +864,23 @@ Procurement Team`
   };
 
   const acceptQuote = async (supplierId: number) => {
+    const supplier = negotiationSession?.suppliers.find((item) => item.id === supplierId);
+    const price = getSupplierFinalPrice(supplier);
+    if (!supplier || price === null || !window.confirm(`Accept ${supplier.company_name}'s offer of ${formatMoney(price)}?`)) return;
     try {
-      await fetch(`/api/sam-gov/negotiate/${negotiationSession?.id}/accept/${supplierId}`, {
+      const response = await fetch(`/api/sam-gov/negotiate/${negotiationSession?.id}/accept/${supplierId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(getRequesterPayload()),
+        body: JSON.stringify({ ...getRequesterPayload(), expected_price: price }),
       });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        setError(data.error || 'Unable to accept the quote.');
+      }
       fetchNegotiationStatus();
     } catch (err) {
       console.error('Failed to accept quote:', err);
+      setError('Unable to accept the quote.');
     }
   };
 
@@ -981,6 +955,11 @@ Procurement Team`
     const selectedSupplier = negotiationSession.suppliers.find(s => s.id === selectedVendorForBid);
     if (!selectedSupplier) return;
 
+    const quotePrice = getSupplierFinalPrice(selectedSupplier);
+    if (quotePrice === null) {
+      setError("This vendor has no priced offer for the bid package.");
+      return;
+    }
     setGeneratingPdf(true);
     const compliance = complianceResults.get(selectedVendorForBid);
     const savedData = localStorage.getItem(`summary-${opportunityId}`);
@@ -994,16 +973,16 @@ Procurement Team`
           opportunity: opportunityData,
           vendor: {
             ...selectedSupplier,
-            current_price: selectedSupplier.metrics?.final_price || selectedSupplier.messages?.find(m => m.price_mentioned)?.price_mentioned
+            current_price: quotePrice,
           },
           compliance: compliance,
           negotiation: {
-            round_count: selectedSupplier.negotiation_round,
+            round_count: selectedSupplier.gmail_negotiation?.rounds.length ?? selectedSupplier.negotiation_round,
             initial_price: parseFloat(selectedSupplier.metrics?.initial_price || '0'),
-            final_price: parseFloat(selectedSupplier.metrics?.final_price || '0'),
+            final_price: quotePrice,
             savings: parseFloat(selectedSupplier.metrics?.savings || '0'),
             savings_percent: parseFloat(selectedSupplier.metrics?.savings_percent || '0'),
-            messages: selectedSupplier.messages
+            messages: selectedSupplier.gmail_negotiation?.messages ?? selectedSupplier.messages,
           }
         })
       });
@@ -1058,6 +1037,9 @@ Procurement Team`
       setError('Select a vendor with a valid final supplier quote before submitting the bid.');
       return;
     }
+    const requiresConfirmation = negotiationSession.bid_internal_status === "Waiting Approval" ||
+      negotiationSession.bid_internal_status === "Bid No Approved";
+    if (requiresConfirmation && !window.confirm("Record this submission without manager approval?")) return;
     setSubmittingBid(true);
 
     try {
@@ -1093,8 +1075,6 @@ Procurement Team`
         existingBids.push(bidData);
       }
 
-      localStorage.setItem('ongoingBids', JSON.stringify(existingBids));
-
       // Update session status to bid_submitted
       if (negotiationSession) {
         try {
@@ -1106,6 +1086,7 @@ Procurement Team`
               portal: 'SAM.GOV',
               supplier_cost: selectedSupplierCost,
               submitted_price: submittedPrice,
+              confirm_without_approval: requiresConfirmation,
               supplier_id: selectedSupplier.id,
               ...getRequesterPayload(),
             }),
@@ -1130,11 +1111,12 @@ Procurement Team`
         }
       }
 
+      localStorage.setItem('ongoingBids', JSON.stringify(existingBids));
       setBidSubmitted(true);
 
     } catch (err) {
       console.error('Failed to submit bid:', err);
-      setError('Failed to submit bid. Please try again.');
+      setError(err instanceof Error ? err.message : 'Failed to submit bid. Please try again.');
     } finally {
       setSubmittingBid(false);
     }
@@ -1232,6 +1214,7 @@ Procurement Team`
         }
       />
       <PageMain className="cf-workspace">
+        {replyNotice && <p className="cf-banner" role="status">{replyNotice}</p>}
         <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,2.4fr)]">
           {/* Opportunity Summary */}
           <div className="min-w-0">
@@ -1817,6 +1800,11 @@ Procurement Team`
                             </CardHeader>
                             <CardContent className="space-y-4">
                               <Link href={`/bids/${gmail.bid_id}#bid-emails`} className="cf-btn cf-btn-secondary">Open bid email conversation</Link>
+                              {supplier.status !== "completed" && gmail.latest_price != null && (
+                                <Button variant="outline" onClick={() => acceptQuote(supplier.id)}>
+                                  Accept {formatMoney(gmail.latest_price)} offer
+                                </Button>
+                              )}
                               {supplier.status !== "stopped" && supplier.status !== "completed" && gmail.rounds.length < 3 && (
                                 <Button variant="outline" onClick={() => stopNegotiation(supplier.id)}>Stop negotiation</Button>
                               )}
@@ -2048,7 +2036,7 @@ Procurement Team`
                                       variant="outline"
                                       size="sm"
                                     >
-                                      {gmail ? "Accept RFQ channel quote" : "Accept supplier quote"}
+                                      Accept latest vendor quote
                                     </Button>
                                     <p className="max-w-xs text-xs text-slate-600">
                                       Records this supplier quote only. The customer award is recorded later in Award Tracking.

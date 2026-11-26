@@ -25,6 +25,9 @@ const LABELS: Record<string, string> = {
   award_checkpoint_due: "Award checkpoint due",
   award_check_overdue: "Award outcome missing (90 days)",
   award_info_found: "SAM.gov award found",
+  bid_handoff: "Bid assignment",
+  bid_review: "Bid status",
+  vendor_response: "Vendor reply",
 };
 
 export function agentAlertLabel(type: string) {

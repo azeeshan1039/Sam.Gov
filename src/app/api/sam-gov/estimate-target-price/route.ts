@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { backendAuthHeaders } from '@/lib/backend-auth';
 import { BACKEND_URL } from '@/lib/backend-config';
 
 export async function POST(request: NextRequest) {
@@ -7,7 +8,7 @@ export async function POST(request: NextRequest) {
 
     const response = await fetch(`${BACKEND_URL}/api/sam-gov/estimate-target-price`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: backendAuthHeaders(request),
       body: JSON.stringify(body),
     });
 

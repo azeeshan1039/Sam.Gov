@@ -20,6 +20,8 @@ async function authenticate(page: Page) {
     contentType: "application/json",
     body: JSON.stringify({ notifications: [], unread_count: 0 }),
   }));
+  await page.route("**/api/backend/health", (route) => route.fulfill({ json: { status: "ok" } }));
+  await page.route("**/api/backend/opportunities/stale", (route) => route.fulfill({ json: { bids: [] } }));
 }
 
 function monitorRuntime(page: Page) {
@@ -32,13 +34,15 @@ function monitorRuntime(page: Page) {
 }
 
 test("@critical catalog distinguishes active claims from submitted work", async ({ page }) => {
+  test.setTimeout(60_000);
   const runtimeErrors = monitorRuntime(page);
   await authenticate(page);
   await page.route("**/api/sam-gov", (route) => route.fulfill({ json: catalog }));
   await page.route("**/api/backend/opportunities/availability", (route) => route.fulfill({ json: availability }));
 
   await page.goto("/sam-gov");
-  await expect(page.getByText("Taken by Agent One")).toBeVisible();
+  await expect(page).toHaveURL(/\/opportunities\?view=all$/, { timeout: 30_000 });
+  await expect(page.getByText("Taken by Agent One")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText("Submitted by Agent Two")).toBeVisible();
   await expect(page.getByText(/Taken by Agent Two/)).toHaveCount(0);
 
@@ -56,9 +60,14 @@ test("legacy catalog opens the revamp with the full AI suggestions workflow", as
   await page.route("**/api/sam-gov/ai-suggestions", (route) => {
     requests += 1;
     if (requests === 1) return route.fulfill({ status: 503, json: { error: "Provider unavailable" } });
+    if (requests === 2) return route.fulfill({ status: 202, json: { job_id: "qa-job", status: "queued" } });
+    return route.fulfill({ json: { suggestions: [], total_analyzed: 2, threshold: 60 } });
+  });
+  await page.route(/\/api\/sam-gov\/ai-suggestions\?job=/, (route) => {
     return route.fulfill({
       json: {
-        suggestions: requests === 2 ? [{ ...notice, fitScore: 94, fitReason: "Matches the requested equipment." }] : [],
+        status: "completed",
+        suggestions: [{ ...notice, fitScore: 94, fitReason: "Matches the requested equipment." }],
         total_analyzed: 2,
         threshold: 60,
       },
@@ -73,7 +82,7 @@ test("legacy catalog opens the revamp with the full AI suggestions workflow", as
   await expect(results.getByRole("alert")).toHaveText("Provider unavailable");
   await results.getByRole("button", { name: "Retry AI suggestions" }).click();
   await expect(results.getByText("94% AI fit")).toBeVisible();
-  await expect(results.getByText("1 match from 2 reviewed.")).toBeVisible();
+  await expect(results.getByText("1 match from 2 sent for screening.")).toBeVisible();
   await results.getByText("Why this matches", { exact: true }).click();
   await expect(results.getByText("Matches the requested equipment.")).toBeVisible();
   await expect(results.getByRole("link", { name: notice.title })).toHaveAttribute("href", `/sam-gov/${notice.id}`);

@@ -59,7 +59,7 @@ export default function StatsPage() {
       return;
     }
     if (currentUser.role !== "admin") {
-      router.replace("/negotiations");
+      router.replace("/my-bids?access=manager");
       return;
     }
     setUser(currentUser);

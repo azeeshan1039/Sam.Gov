@@ -48,7 +48,7 @@ export default function ActivityLogPage() {
       return;
     }
     if (current.role !== "admin") {
-      router.replace("/negotiations");
+      router.replace("/my-bids?access=manager");
       return;
     }
     setUser(current);

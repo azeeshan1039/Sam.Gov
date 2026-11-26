@@ -85,7 +85,18 @@ export function BidEmailsPanel({ bidId, composeRequest, readOnly = false, onMail
     setSuggested(unlinked.ok ? (unlinked.data.threads || []).filter((t) => t.candidate_bid_ids.includes(bidId)) : []);
   }, [bidId]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    void load();
+    const refresh = () => {
+      if (document.visibilityState === "visible") void load();
+    };
+    window.addEventListener("focus", refresh);
+    const timer = window.setInterval(refresh, 15_000);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      window.clearInterval(timer);
+    };
+  }, [load]);
 
   // Open compose once per request, after the bid's emails (account, vendors) are loaded.
   const handledRequest = useRef<number | null>(null);

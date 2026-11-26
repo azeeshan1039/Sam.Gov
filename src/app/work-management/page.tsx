@@ -25,6 +25,9 @@ interface Opportunity {
   solicitation_number?: string;
   title: string;
   expected_bid_value?: number;
+  submitted_price?: number | null;
+  bid_id?: number;
+  submitting_agent?: Person | null;
   response_deadline?: string | null;
   state: string;
   assignee?: Person | null;
@@ -37,6 +40,7 @@ interface Incident {
   attempted_by?: Person;
   existing_agent?: Person;
   status: string;
+  attempt_count?: number;
   resolution_note?: string;
   created_at: string;
   detected_at: string;
@@ -104,7 +108,7 @@ export default function WorkManagementPage() {
   useEffect(() => {
     const user = getStoredUser();
     if (!user) return router.replace('/login');
-    if (user.role !== 'admin') return router.replace('/');
+    if (user.role !== 'admin') return router.replace('/my-bids?access=manager');
     void load();
   }, [load, router]);
 
@@ -243,7 +247,7 @@ export default function WorkManagementPage() {
         {incidents.length === 0 ? <p className="cf-meta" style={{ padding: "0 24px 18px" }}>No unresolved duplicate flags.</p> : incidents.map((incident) => (
           <div key={incident.id} id={`duplicate-${incident.id}`} style={{ margin: "0 24px 20px", borderTop: "1px solid var(--cf-line)", paddingTop: 14, display: "flex", flexDirection: "column", gap: 12 }}>
             <div><div style={{ font: "500 16px var(--cf-display)" }}>Solicitation {incident.solicitation_number}</div></div>
-            <p style={{ fontSize: 14, color: "var(--cf-text-2)", lineHeight: 1.55 }}>{incident.attempted_by?.full_name || "Unknown"} tried to pick this up. It is owned by {incident.existing_agent?.full_name || "Unknown"}. Detected {new Date(incident.detected_at || incident.created_at).toLocaleString()}.</p>
+            <p style={{ fontSize: 14, color: "var(--cf-text-2)", lineHeight: 1.55 }}>{incident.attempted_by?.full_name || "Unknown"} tried to pick this up. It is owned by {incident.existing_agent?.full_name || "Unknown"}. Detected {new Date(incident.detected_at || incident.created_at).toLocaleString()}. {(incident.attempt_count ?? 1) > 1 ? `${incident.attempt_count} attempts.` : ""}</p>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
               <input className="cf-input" style={{ flex: "1 1 180px" }} placeholder="Resolution note" aria-label={`Resolution note for ${incident.solicitation_number}`} value={resolutionByIncident[incident.id] || ""} onChange={(event) => setResolutionByIncident({ ...resolutionByIncident, [incident.id]: event.target.value })} />
               <button type="button" className="cf-btn cf-btn-primary cf-btn-sm" onClick={() => resolveIncident(incident)}>Resolve</button>
@@ -260,13 +264,13 @@ export default function WorkManagementPage() {
       </div>
       <div style={{ overflowX: "auto" }}>
         <table className="cf-table">
-          <thead><tr><th>Opportunity</th><th className="cf-num">Value</th><th>State</th><th>Owner</th><th>Manager action</th></tr></thead>
+          <thead><tr><th>Opportunity</th><th className="cf-num">Bid amount</th><th>State</th><th>Owner</th><th>Manager action</th></tr></thead>
           <tbody>
             {opportunities.length === 0 ? <tr><td colSpan={5} style={{ textAlign: "center", color: "var(--cf-text-2)" }}>No opportunities have been picked up yet.</td></tr> : opportunities.map((item) => (
-              <tr key={item.id}>
+              <tr key={item.id} id={`assignment-${item.id}`}>
                 <td>
                   <div style={{ fontWeight: 500 }}>{item.title}</div>
-                  <div className="cf-id">{item.solicitation_number || item.external_notice_id}</div>
+                  {item.bid_id ? <Link className="cf-id" href={`/bids/${item.bid_id}`}>{item.solicitation_number || item.external_notice_id}</Link> : <div className="cf-id">{item.solicitation_number || item.external_notice_id}</div>}
                   <details>
                     <summary className="cf-mono cf-meta" style={{ cursor: "pointer" }}>Assignment history ({item.assignment_history?.length || 0})</summary>
                     {item.assignment_history?.length ? item.assignment_history.map((event) => (
@@ -276,7 +280,7 @@ export default function WorkManagementPage() {
                 </td>
                 <td className="cf-num">{item.expected_bid_value == null ? "—" : `$${item.expected_bid_value.toLocaleString()}`}</td>
                 <td><span className={`cf-pill ${statePill(item.state)}`}>{stateLabel(item.state)}</span></td>
-                <td>{item.assignee?.full_name || "Pool"}</td>
+                <td>{item.submitting_agent?.full_name || item.assignee?.full_name || (item.state === "available" ? "Pool" : "?")}</td>
                 <td>
                   {item.state === "assigned" || item.state === "available" ? (
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>

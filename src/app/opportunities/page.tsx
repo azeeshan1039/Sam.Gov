@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Bookmark, Building2, Clock, Inbox, Lock, RefreshCw, Search, Sparkles, Users } from "lucide-react";
 import { getStoredUser } from "@/lib/auth";
-import { isProductRfq } from "@/lib/ai-suggestion-prefilter";
 import { presentOpportunityAvailability, type OpportunityAvailability } from "@/lib/opportunity-availability";
 import { opportunityDeadlinePassed } from "@/lib/eastern-date";
 import type { SamGovOpportunity } from "@/types/sam-gov";
@@ -31,6 +30,7 @@ interface SuggestionResult {
   total_dropped_by_gate?: number;
   total_ai_scored?: number;
   total_with_description?: number;
+  total_missing?: number;
   threshold?: number;
 }
 
@@ -129,11 +129,15 @@ function OpportunityCatalog() {
   }, [requestedView]);
 
   const catalogRequest = useRef<AbortController | null>(null);
+  const suggestionRequest = useRef<AbortController | null>(null);
+  useEffect(() => () => suggestionRequest.current?.abort(), []);
+  const [checkingAvailability, setCheckingAvailability] = useState(false);
   const load = useCallback(async () => {
     catalogRequest.current?.abort();
     const controller = new AbortController();
     catalogRequest.current = controller;
     setLoading(true);
+    setCheckingAvailability(true);
     setPage(1);
     setAvailability({});
     setError(null);
@@ -153,22 +157,32 @@ function OpportunityCatalog() {
         : source === "partial" ? "SAM.gov returned a partial set of notices." : null);
       setItems(catalog);
       const checked: Record<string, OpportunityAvailability> = {};
-      for (let offset = 0; offset < catalog.length; offset += 1000) {
+      const prioritized = [...catalog].sort((left, right) =>
+        Number(opportunityDeadlinePassed(left.closingDate)) - Number(opportunityDeadlinePassed(right.closingDate)) ||
+        (left.closingDate || "9999").localeCompare(right.closingDate || "9999"));
+      let offset = 0;
+      while (offset < prioritized.length) {
+        const end = offset + (offset === 0 ? 80 : 1000);
         const availabilityResponse = await fetch("/api/backend/opportunities/availability", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           signal: controller.signal,
           body: JSON.stringify({
-            opportunities: catalog.slice(offset, offset + 1000).map((item) => ({
+            include_niche: false,
+            opportunities: prioritized.slice(offset, end).map((item) => ({
               external_notice_id: item.id,
               solicitation_number: item.solicitationNumber || item.id,
-              source: "SAM.GOV", ncode: item.ncode, naics_description: item.naicsDescription,
+              source: "SAM.GOV",
             })),
           }),
         });
         const result = await availabilityResponse.json();
         if (!availabilityResponse.ok) throw new Error(result.error || "Unable to check availability.");
         for (const row of result.opportunities || []) checked[row.external_notice_id] = row;
+        if (controller.signal.aborted) return;
+        setAvailability({ ...checked });
+        setLoading(false);
+        offset = end;
       }
       if (controller.signal.aborted) return;
       setAvailability(checked);
@@ -177,7 +191,10 @@ function OpportunityCatalog() {
       setAvailability({});
       setError(err instanceof Error ? err.message : "Unable to load opportunities.");
     } finally {
-      if (!controller.signal.aborted) setLoading(false);
+      if (!controller.signal.aborted) {
+        setLoading(false);
+        setCheckingAvailability(false);
+      }
     }
   }, []);
 
@@ -271,24 +288,38 @@ function OpportunityCatalog() {
   const pageItems = visible.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const minutesAgo = syncedAt ? Math.max(0, Math.round((Date.now() - syncedAt.getTime()) / 60000)) : null;
 
-  const loadSuggestions = useCallback(async () => {
+  const loadSuggestions = useCallback(async (force = false) => {
     if (loading || !items.length || suggesting) return;
+    const controller = new AbortController();
+    suggestionRequest.current = controller;
     setSuggesting(true);
     setSuggestError(null);
     try {
       const res = await fetch("/api/sam-gov/ai-suggestions", {
         method: "POST",
+        signal: controller.signal,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ opportunities: items.filter(isProductRfq) }),
+        body: JSON.stringify({ force, refresh_id: force ? crypto.randomUUID() : undefined }),
       });
-      const data = await res.json();
+      let data = await res.json();
       if (!res.ok) throw new Error(data.error || "Unable to load suggestions.");
+      for (let attempt = 0; data.job_id && (data.status === "queued" || data.status === "running"); attempt++) {
+        if (attempt >= 150) throw new Error("Suggestions are still running. Open this tab again to check the result.");
+        await new Promise((resolve) => window.setTimeout(resolve, 2000));
+        if (controller.signal.aborted) return;
+        const status = await fetch(`/api/sam-gov/ai-suggestions?job=${encodeURIComponent(data.job_id)}`, {
+          cache: "no-store", signal: controller.signal,
+        });
+        data = await status.json();
+        if (!status.ok) throw new Error(data.error || "Unable to check suggestions.");
+      }
+      if (data.status === "failed") throw new Error("AI scoring did not finish. Refresh suggestions to retry.");
       setSuggestionResult({ ...data, suggestions: data.suggestions ?? [] });
       setPage(1);
     } catch (err) {
-      setSuggestError(err instanceof Error ? err.message : "Unable to load suggestions.");
+      if (!controller.signal.aborted) setSuggestError(err instanceof Error ? err.message : "Unable to load suggestions.");
     } finally {
-      setSuggesting(false);
+      if (!controller.signal.aborted) setSuggesting(false);
     }
   }, [items, loading, suggesting]);
 
@@ -501,7 +532,8 @@ function OpportunityCatalog() {
                       <p className="cf-meta">{suggestionResult.total_with_description} shortlisted with notice description text.</p>
                     )}
                   </div>
-                  <button type="button" className="cf-btn cf-btn-secondary cf-btn-sm" onClick={loadSuggestions} disabled={loading || suggesting || !items.length}>
+                  {Boolean(suggestionResult?.total_missing) && <p className="cf-meta" role="status">{suggestionResult?.total_missing} shortlisted notices had no valid score.</p>}
+                  <button type="button" className="cf-btn cf-btn-secondary cf-btn-sm" onClick={() => void loadSuggestions(true)} disabled={loading || suggesting || !items.length}>
                     {suggesting ? "Analyzing…" : suggestError ? "Retry AI suggestions" : suggestionResult ? "Refresh suggestions" : "Get AI suggestions"}
                   </button>
                 </div>
@@ -518,11 +550,14 @@ function OpportunityCatalog() {
                 </div>
               </div>
               {tab === "suggested" && suggestError ? <div role="alert" className="cf-banner cf-banner-bad">{suggestError}</div> : null}
-              {!loading && !suggesting && pageItems.length === 0 && !(tab === "suggested" && suggestError) ? (
+              {tab === "unclaimed" && checkingAvailability && (
+                <p className="cf-meta" role="status">Checking availability for the remaining notices…</p>
+              )}
+              {!loading && !suggesting && !(tab === "unclaimed" && checkingAvailability) && pageItems.length === 0 && !(tab === "suggested" && suggestError) ? (
                 <div className="cf-card" style={{ padding: 28, textAlign: "center" }}>
                   <h2 className="cf-h2">No matching opportunities</h2>
                   {tab === "suggested" && suggestionResult && suggestions.length === 0 ? (
-                    <p className="cf-sub">No recommendations met the {suggestionResult.threshold ?? 60}% fit threshold.</p>
+                    <p className="cf-sub">{suggestionResult.total_missing ? "No scored notices" : "No recommendations"} met the {suggestionResult.threshold ?? 60}% fit threshold.</p>
                   ) : <p className="cf-sub">Try another keyword or clear the filters.</p>}
                 </div>
               ) : (

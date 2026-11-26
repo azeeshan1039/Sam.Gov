@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { PipelineTable } from "@/components/pipeline/PipelineTable";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -87,10 +87,12 @@ export default function MyBidsPage() {
     setUser(current);
   }, [router]);
 
-  const load = useCallback(async () => {
-    if (!user) return;
-    setLoading(true);
-    setError(null);
+  const loadingRef = useRef(false);
+  const highlightedRef = useRef<number | null>(null);
+  const load = useCallback(async (background = false) => {
+    if (!user || loadingRef.current) return;
+    loadingRef.current = true;
+    if (!background) setLoading(true);
     try {
       const query = requesterQuery(user);
       const [bidsRes, goalRes, claimsRes] = await Promise.all([
@@ -105,6 +107,7 @@ export default function MyBidsPage() {
         console.error("[my-bids] load failed", { status: bidsRes.status, body: bidsData });
         throw new Error(bidsData.error || `Failed to load bids (${bidsRes.status})`);
       }
+      setError(null);
       setItems(bidsData.items || []);
       if (claimsRes.ok) {
         setActiveClaims(
@@ -142,20 +145,34 @@ export default function MyBidsPage() {
       }
     } catch (err) {
       console.error("[my-bids] page error", err);
-      setError(err instanceof Error ? err.message : "Failed to load bids");
+      if (!background) setError(err instanceof Error ? err.message : "Failed to load bids");
     } finally {
-      setLoading(false);
+      loadingRef.current = false;
+      if (!background) setLoading(false);
     }
   }, [user]);
 
   useEffect(() => {
-    if (user) load();
+    if (!user) return;
+    void load();
+    const refresh = () => {
+      if (document.visibilityState === "visible") void load(true);
+    };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    const timer = window.setInterval(refresh, 15_000);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+      window.clearInterval(timer);
+    };
   }, [user, load]);
 
   useEffect(() => {
-    if (!highlightId || loading) return;
+    if (!highlightId || loading || highlightedRef.current === highlightId) return;
     const index = items.findIndex((item) => item.id === highlightId);
     if (index < 0) return;
+    highlightedRef.current = highlightId;
     setTab("all");
     setPortal("all");
     setQuery("");
@@ -214,6 +231,11 @@ export default function MyBidsPage() {
         actions={<Link className="cf-btn cf-btn-primary" href="/opportunities"><Search size={16} strokeWidth={2} aria-hidden />Find opportunities</Link>}
       />
       <PageMain>
+      {searchParams.get("access") === "manager" && (
+        <p className="cf-banner cf-banner-warn" role="status">
+          That page requires manager access. You can review your own work here.
+        </p>
+      )}
         <MyBidsAlerts />
         {error && (
           <div role="alert" style={{ border: "1px solid rgba(251,113,133,.45)", background: "rgba(251,113,133,.1)", color: "#BE123C", borderRadius: 12, padding: "12px 16px" }}>

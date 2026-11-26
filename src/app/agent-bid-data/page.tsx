@@ -180,7 +180,9 @@ export default function AgentBidDataPage() {
             </div>
             <span className="cf-mono cf-meta">{completed.length} BIDS</span>
           </div>
-          <PipelineTable items={completed} variant="history" empty="No completed bids." />
+          <div style={completed.length === 0 ? { padding: "0 24px 20px" } : undefined}>
+            <PipelineTable items={completed} variant="history" empty="No completed bids." />
+          </div>
         </section>
       </>}
       </PageMain>

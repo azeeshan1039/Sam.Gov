@@ -12,6 +12,7 @@ export interface OpportunityAvailability {
   /** Backwards-compatible flag retained by the API. */
   available: boolean;
   tracked_opportunity_id?: number | null;
+  bid_id?: number | null;
   assignee?: { id: number; full_name: string } | null;
   niche?: {
     naics_code: string;

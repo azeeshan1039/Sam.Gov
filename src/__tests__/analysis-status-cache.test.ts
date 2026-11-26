@@ -1,4 +1,5 @@
 import { GET } from "@/app/api/backend/analyze-solicitations/status/route";
+import type { NextRequest } from "next/server";
 
 jest.mock("next/server", () => ({
   NextResponse: {
@@ -31,7 +32,8 @@ describe("analysis status polling cache behavior", () => {
 
     const response = await GET({
       url: "http://localhost/api/backend/analyze-solicitations/status?job_id=job-123",
-    } as Request);
+      cookies: { get: () => ({ value: "qa-session" }) },
+    } as unknown as NextRequest);
 
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringMatching(/\/analyze-solicitations\/status\/job-123$/),
@@ -40,6 +42,7 @@ describe("analysis status polling cache behavior", () => {
     expect(response.headers.get("Cache-Control")).toBe(
       "no-store, no-cache, must-revalidate",
     );
+    expect(fetchMock.mock.calls[0][1].headers.get("Authorization")).toBe("Bearer qa-session");
     await expect(response.json()).resolves.toMatchObject({
       job_id: "job-123",
       status: "completed",

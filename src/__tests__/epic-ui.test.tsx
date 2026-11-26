@@ -420,7 +420,7 @@ describe("KAN-40 manager duplicate resolution", () => {
 describe("KAN-26 unclaimed SAM.gov pool", () => {
   test("renders only opportunities confirmed available by the batched ownership overlay", async () => {
     mockedGetStoredUser.mockReturnValue(agent);
-    const availabilityBody: { opportunities: Array<{ ncode?: string }> } = { opportunities: [] };
+    const availabilityBody: { include_niche?: boolean; opportunities: Array<{ external_notice_id: string; ncode?: string }> } = { opportunities: [] };
     global.fetch = jest.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = urlOf(input);
       if (url === "/api/sam-gov") return response([
@@ -429,7 +429,7 @@ describe("KAN-26 unclaimed SAM.gov pool", () => {
         { id: "EXPIRED-1", title: "Expired SAM bid", closingDate: "2000-01-01", solicitationNumber: "SOL-EXPIRED", ncode: "541512" },
       ]);
       if (url.includes("opportunities/availability")) {
-        availabilityBody.opportunities = JSON.parse(String(init?.body)).opportunities;
+        Object.assign(availabilityBody, JSON.parse(String(init?.body)));
         return response({ opportunities: [
           { external_notice_id: "OPEN-1", available: true },
           { external_notice_id: "TAKEN-1", available: false },
@@ -445,7 +445,9 @@ describe("KAN-26 unclaimed SAM.gov pool", () => {
     expect(screen.queryByText("Claimed SAM bid")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Pick up" })).toHaveAttribute("href", "/sam-gov/OPEN-1");
     expect(screen.queryByText("Expired SAM bid")).not.toBeInTheDocument();
-    expect(availabilityBody?.opportunities.map((item) => item.ncode)).toEqual(["541519", "339112", "541512"]);
+    expect(availabilityBody.include_niche).toBe(false);
+    expect(availabilityBody.opportunities.map((item) => item.external_notice_id)).toEqual(["OPEN-1", "TAKEN-1", "EXPIRED-1"]);
+    expect(availabilityBody.opportunities.every((item) => item.ncode === undefined)).toBe(true);
     await userEvent.click(screen.getByRole("button", { name: "All SAM.gov" }));
     expect(await screen.findByText("Expired SAM bid")).toBeInTheDocument();
     expect(screen.getByText("Deadline passed")).toBeInTheDocument();
@@ -473,7 +475,7 @@ describe("KAN-26 unclaimed SAM.gov pool", () => {
 
     render(<OpportunitiesPage />);
     expect(await screen.findByText("SAM bid 1000")).toBeInTheDocument();
-    expect(chunkSizes).toEqual([1000, 1]);
+    expect(chunkSizes).toEqual([80, 921]);
   });
 });
 

@@ -1,15 +1,16 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { backendAuthHeaders } from '@/lib/backend-auth';
 import { BACKEND_URL } from '@/lib/backend-config';
 
 export const maxDuration = 60;
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
 
         const response = await fetch(`${BACKEND_URL}/analyze-solicitations/start`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: backendAuthHeaders(request),
             body: JSON.stringify(body),
         });
 

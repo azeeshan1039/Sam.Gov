@@ -206,7 +206,7 @@ function OpportunityDetail({ id }: { id: string }) {
       const response = await fetch('/api/backend/opportunities/availability', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ opportunities: [{
+        body: JSON.stringify({ include_workspace: true, opportunities: [{
           external_notice_id: item.id,
           solicitation_number: item.solicitationNumber || item.id,
           source: 'SAM.GOV',
@@ -329,6 +329,7 @@ function OpportunityDetail({ id }: { id: string }) {
   const closingDays = closingDate ? Math.ceil((closingDate.getTime() - Date.now()) / 86400000) : null;
   const formattedClosingDate = closingDate ? format(closingDate, 'MMM d, yyyy') : '—';
   const closingLabel = closingDays == null ? formattedClosingDate : `${formattedClosingDate} · ${closingDays} day${closingDays === 1 ? '' : 's'}`;
+  const isManager = currentUser?.role === "admin";
   const ownedByCurrentAgent = Boolean(
     currentUser?.role === 'agent' &&
     availability &&
@@ -426,21 +427,28 @@ function OpportunityDetail({ id }: { id: string }) {
               <div className="cf-lbl" style={{ color: availabilityPresentation?.state === "claimed" ? "#0E7490" : availabilityPresentation?.state === "terminal" ? "#BE123C" : "#0E7490" }}>
                 {availabilityPresentation?.state === "claimed" ? "Already picked up" : availabilityPresentation?.state === "terminal" ? "Closed in the company workflow" : availabilityPresentation ? "Unclaimed · no one on your team has this" : "Company availability"}
               </div>
-              <h2 className="cf-h2" style={{ fontSize: 22 }}>{availabilityPresentation?.state === "claimed" ? (ownedByCurrentAgent ? "This bid is yours" : "Someone else has this bid") : deadlinePassed || availabilityPresentation?.state === "terminal" ? "This bid is closed" : availabilityPresentation ? "Pick up this bid" : availabilityFailed ? "Availability unavailable" : "Checking availability"}</h2>
+              <h2 className="cf-h2" style={{ fontSize: 22 }}>{availabilityPresentation?.state === "claimed" ? (ownedByCurrentAgent ? "This bid is yours" : isManager ? "Assigned to your team" : "Someone else has this bid") : deadlinePassed || availabilityPresentation?.state === "terminal" ? "This bid is closed" : availabilityPresentation ? (isManager ? "Assign this bid" : "Pick up this bid") : availabilityFailed ? "Availability unavailable" : "Checking availability"}</h2>
               {deadlinePassed && availabilityPresentation?.state !== "claimed" ? (
                 <p className="cf-meta">The response deadline has passed.</p>
               ) : availabilityPresentation?.state === "available" ? (
                 <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 10 }}>
-                  {["It's reserved for you and hidden from teammates' pickup lists.", "Next step is finding a supplier and adding their quote.", "Bids with no progress for 3 days are flagged to your manager."].map((line) => (
+                  {[isManager ? "The selected agent will own this bid." : "Pickup reserves this bid for you.", "Next step is finding a supplier and adding their quote.", "Bids with no progress for 3 days are flagged to your manager."].map((line) => (
                     <li key={line} style={{ display: "flex", gap: 10, fontSize: 14, color: "var(--cf-text-2)", lineHeight: 1.45 }}><Check size={16} strokeWidth={2} color="#0891B2" style={{ flex: "none", marginTop: 2 }} />{line}</li>
                   ))}
                 </ul>
               ) : availabilityPresentation ? (
-                <p style={{ margin: 0, fontSize: 14, color: "var(--cf-text-2)" }}>{availabilityPresentation.label}. {availabilityPresentation.state === "terminal" ? "It cannot be picked up again." : "Duplicate pickup is blocked."}</p>
+                <p style={{ margin: 0, fontSize: 14, color: "var(--cf-text-2)" }}>{availabilityPresentation.label}. {availabilityPresentation.state === "terminal" ? "It cannot be picked up again." : ownedByCurrentAgent || isManager ? "" : "Duplicate pickup is blocked."}</p>
               ) : availabilityFailed ? (
                 <button type="button" className="cf-btn cf-btn-secondary" onClick={() => refreshAvailability(opportunity)}>Retry availability</button>
               ) : null}
-              {ownedByCurrentAgent ? <Link className="cf-btn cf-btn-primary" href={`/sam-gov/${id}/bid-summary`} style={{ width: "100%" }}>Continue this bid</Link> : null}
+              {(ownedByCurrentAgent || isManager) && availability?.bid_id ? (
+                <Link className="cf-btn cf-btn-primary" href={`/bids/${availability.bid_id}`}>Open bid workspace</Link>
+              ) : ownedByCurrentAgent ? (
+                <Link className="cf-btn cf-btn-primary" href={`/sam-gov/${id}/bid-summary`}>Continue this bid</Link>
+              ) : null}
+              {isManager && availabilityPresentation?.state === "claimed" ? (
+                <Link className="cf-btn cf-btn-secondary" href={`/work-management#assignment-${availability?.tracked_opportunity_id}`}>Manage assignment</Link>
+              ) : null}
               {availabilityPresentation?.state === "available" && !deadlinePassed && currentUser ? (
                 <>
                   <label className="cf-field">Expected submitted price

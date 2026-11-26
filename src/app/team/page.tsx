@@ -51,7 +51,7 @@ export default function TeamPage() {
   useEffect(() => {
     const current = getStoredUser();
     if (!current) return router.replace('/login');
-    if (current.role !== 'admin') return router.replace('/');
+    if (current.role !== 'admin') return router.replace('/my-bids?access=manager');
     setUser(current);
   }, [router]);
 

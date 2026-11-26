@@ -44,8 +44,8 @@ function checkpointNote(item: AwardTrackingItem) {
   if (item.checkpoint_state === "untracked") return { text: "BEFORE TRACKING", color: "var(--cf-text-3)" };
   if (item.current_checkpoint && item.checkpoint_state === "upcoming") return { text: `NEXT ${item.current_checkpoint.due_on}`, color: "var(--cf-text-3)" };
   if (item.award_outcome === "won" || item.award_outcome === "lost" || item.checkpoint_state === "complete") {
-    const day = CHECK_DAYS[Math.max(0, item.checkpoints_completed - 1)] || 30;
-    return { text: `CLOSED AT ${day}D`, color: "var(--cf-text-3)" };
+    const text = item.checkpoints_completed === 0 ? "RESOLVED BEFORE FIRST CHECK" : "CHECKS CLOSED";
+    return { text, color: "var(--cf-text-3)" };
   }
   return { text: "", color: "var(--cf-text-3)" };
 }

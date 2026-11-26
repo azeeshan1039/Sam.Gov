@@ -76,6 +76,7 @@ export default function BidDetailPage() {
   const [status, setStatus] = useState<BidStatus>("Finding Supplier");
   const [supplierCost, setSupplierCost] = useState("");
   const [submittedPrice, setSubmittedPrice] = useState("");
+  const [checkingVendorReply, setCheckingVendorReply] = useState<number | null>(null);
   const [remarks, setRemarks] = useState("");
   const [researchNotes, setResearchNotes] = useState("");
   const [message, setMessage] = useState<string | null>(null);
@@ -136,25 +137,62 @@ export default function BidDetailPage() {
       }
       return merged;
     });
-    setPreferredPending({});
+    if (!preserveStatusDraft) setPreferredPending({});
     saved.current = fresh;
   }, [params.id]);
 
   useEffect(() => {
-    if (user) load();
+    if (!user) return;
+    void load();
+    const refresh = () => {
+      if (document.visibilityState === "visible") void load(true).catch(() => {});
+    };
+    window.addEventListener("focus", refresh);
+    const timer = window.setInterval(refresh, 15_000);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      window.clearInterval(timer);
+    };
   }, [load, user]);
 
   async function saveStatus() {
+    if (!bid) return;
+    const requiresConfirmation = status === "Bid submitted" &&
+      (bid.internal_status === "Waiting Approval" || bid.internal_status === "Bid No Approved");
+    if (requiresConfirmation && !window.confirm("Record this submission without manager approval?")) return;
     setMessage(null);
     const response = await fetch(`/api/backend/pipeline/bids/${params.id}/status`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status, supplier_cost: supplierCost, submitted_price: submittedPrice }),
+      body: JSON.stringify({ status, supplier_cost: supplierCost, submitted_price: submittedPrice, confirm_without_approval: requiresConfirmation }),
     });
     const data = await response.json();
     if (!response.ok) return setMessage(data.error || "Unable to update status.");
     setMessage(data.warning || "Status updated.");
     await load();
+  }
+
+  async function checkVendorReply(sessionId: number, vendor: BidVendor) {
+    setCheckingVendorReply(vendor.id);
+    try {
+      const response = await fetch("/api/sam-gov/negotiate/poll-inbox", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sessionId, supplier_id: vendor.id }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) throw new Error(result.error || "Could not check this RFQ inbox.");
+      await load(true);
+      setMessage(result.processed
+        ? `Imported ${result.processed} new RFQ replies.`
+        : result.unmatched
+          ? "No reply matched this RFQ. Review unmatched mail in the inbox."
+          : "No new RFQ replies for this vendor.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not check this RFQ inbox.");
+    } finally {
+      setCheckingVendorReply(null);
+    }
   }
 
   async function addVendor(payload: { company_name: string; email: string; notes?: string; source?: "manual" | "ai_suggested" }) {
@@ -257,12 +295,10 @@ export default function BidDetailPage() {
 
   if (!bid) return <PageMain>{message || "Loading bid…"}</PageMain>;
 
-  const agentCanEdit = user?.role === "admin" || (
-    BID_STATUSES[bid.internal_status as BidStatus]?.classification === "active" &&
-    bid.current_owner_user_id === user?.id
-  );
   // Vendors, notes and negotiation: admins and the bid's current owner (older backends omit the flag).
   const canEdit = bid.can_edit_workspace !== false;
+  const agentCanEdit = canEdit &&
+    BID_STATUSES[bid.internal_status as BidStatus]?.classification === "active";
   const workspace: BidWorkspace = bid.workspace || {
     session_id: null,
     negotiation_status: null,
@@ -339,7 +375,8 @@ export default function BidDetailPage() {
       </section>
       <PageMain>
         <nav aria-label="On this page" className="flex flex-wrap items-center gap-4">
-          {workspace.rfq_href && <Link className="cf-btn cf-btn-primary" href={workspace.rfq_href}>Open RFQ negotiation</Link>}
+          {workspace.rfq_href && <Link className="cf-btn cf-btn-primary" href={workspace.rfq_href}>{canEdit && workspace.negotiation_status === "active" ? "Resume negotiation" : "View negotiation"}</Link>}
+          {!workspace.rfq_href && canEdit && <a className="cf-btn cf-btn-primary" href="#vendors">Start negotiation</a>}
           {[["vendors", "Vendors"], ["negotiation", "Negotiation"], ["bid-emails", "Emails"], ["notes", "Remarks & notes"], ["history", "History"]].map(([id, label]) => (
             <a className="cf-link" key={id} href={"#" + id}>{label}</a>
           ))}
@@ -411,7 +448,7 @@ export default function BidDetailPage() {
           {approved ? (
             <section className="cf-card" aria-labelledby="sb-h" style={{ padding: 24, display: "flex", flexDirection: "column", gap: 18, borderColor: "rgba(52,211,153,.4)" }}>
               <div className="cf-banner cf-banner-ok" style={{ padding: "12px 14px" }}>
-                <span><strong style={{ fontWeight: 500, color: "#047857" }}>Approved{bid.approved_by_name ? ` by ${bid.approved_by_name}` : ""}</strong> — submit it on the portal, then record the price here.</span>
+                <span><strong style={{ fontWeight: 500, color: "#047857" }}>{bid.approved_by_name ? `Approved by ${bid.approved_by_name}` : "Approval history unverified"}</strong> · Record the price after submitting on the portal.</span>
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
                 <h2 id="sb-h" className="cf-h2">Record your portal submission</h2>
@@ -437,7 +474,11 @@ export default function BidDetailPage() {
               <div className="cf-grid2">
                 <label className="cf-field">New status
                   <select aria-label="New status" className="cf-select" value={status} onChange={(e) => setStatus(e.target.value as BidStatus)}>
-                    {Object.keys(BID_STATUSES).map((label) => <option key={label}>{label}</option>)}
+                    {Object.keys(BID_STATUSES).filter((label) =>
+                      label === bid.internal_status ||
+                      ((label !== "Approved for Submission" && label !== "Bid No Approved") ||
+                       (user?.role === "admin" && waiting))
+                    ).map((label) => <option key={label}>{label}</option>)}
                   </select>
                 </label>
                 {status === "Bid submitted" ? (
@@ -611,6 +652,12 @@ export default function BidDetailPage() {
                             )}
                             {canEdit && vendor.email && (
                               <button type="button" className="cf-btn cf-btn-secondary" aria-label={`Email ${vendor.company_name || vendor.email}`} onClick={() => emailVendor(vendor)}>Email</button>
+                            )}
+                            {canEdit && vendor.email_sent && workspace.session_id != null && (
+                              <button type="button" className="cf-btn cf-btn-secondary" disabled={checkingVendorReply !== null}
+                                onClick={() => void checkVendorReply(workspace.session_id!, vendor)}>
+                                {checkingVendorReply === vendor.id ? "Checking…" : "Check RFQ replies"}
+                              </button>
                             )}
                           </div>
                         </td>

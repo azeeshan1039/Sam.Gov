@@ -1,10 +1,11 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
+import { backendAuthHeaders } from '@/lib/backend-auth';
 import { BACKEND_URL } from '@/lib/backend-config';
 
 export const maxDuration = 60;
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
     try {
         const { searchParams } = new URL(request.url);
         const jobId = searchParams.get('job_id');
@@ -15,7 +16,7 @@ export async function GET(request: Request) {
 
         const response = await fetch(`${BACKEND_URL}/analyze-solicitations/status/${jobId}`, {
             method: 'GET',
-            headers: { 'Content-Type': 'application/json' },
+            headers: backendAuthHeaders(request),
             cache: 'no-store',
         });
 
