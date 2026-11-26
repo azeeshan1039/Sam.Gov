@@ -12,10 +12,10 @@ const manager = {
   is_active: true,
 };
 
-async function authenticate(page: Page) {
+async function authenticate(page: Page, currentUser = manager) {
   await page.addInitScript((user) => {
     localStorage.setItem("samgov-auth-user", JSON.stringify(user));
-  }, manager);
+  }, currentUser);
   await page.route("**/api/backend/notifications/agent**", (route) => route.fulfill({
     contentType: "application/json",
     body: JSON.stringify({ notifications: [], unread_count: 0 }),
@@ -23,6 +23,51 @@ async function authenticate(page: Page) {
   await page.route("**/api/backend/health", (route) => route.fulfill({ json: { status: "ok" } }));
   await page.route("**/api/backend/opportunities/stale", (route) => route.fulfill({ json: { bids: [] } }));
 }
+
+test("an assigned agent can find attachments and start the original solicitation analysis", async ({ page }) => {
+  test.setTimeout(75_000);
+  const owner = { ...manager, id: 2, role: "agent" };
+  await authenticate(page, owner);
+  const noticeId = "NOTICE-ANALYSIS-TEST";
+  const url = "https://sam.gov/example/statement-of-work.pdf";
+  await page.route(`**/api/sam-gov/opportunity/${noticeId}`, (route) => route.fulfill({ json: {
+    id: noticeId, solicitationNumber: "QA-SOL-1", title: "QA solicitation", type: "Solicitation",
+    description: "Test procurement", resourceLinks: [url, { name: "Statement of work", link: url }],
+  } }));
+  await page.route("**/api/backend/opportunities/availability", (route) => route.fulfill({ json: {
+    opportunities: [{ available: false, availability_state: "claimed", assignee: owner, bid_id: 96 }],
+  } }));
+  await page.route("**/api/backend/analyze-solicitations/start", (route) =>
+    route.fulfill({ status: 503, json: { error: "Test stops before any provider call" } }));
+
+  await page.goto(`/sam-gov/${noticeId}`);
+  const attachments = page.getByRole("region", { name: "Attachments" });
+  await expect(attachments.getByRole("link")).toHaveCount(1);
+  await expect(attachments.getByRole("link", { name: /Statement of work/ })).toHaveAttribute("href", url);
+  await expect(page.getByRole("link", { name: "Open bid workspace" })).toHaveAttribute("href", "/bids/96");
+  const analysisRequest = page.waitForRequest((request) => request.url().endsWith("/api/backend/analyze-solicitations/start"));
+  await page.getByRole("link", { name: "Start bidding process" }).click();
+  expect((await analysisRequest).postDataJSON()).toMatchObject({ urls: [url], opportunity_id: noticeId });
+  await expect(page).toHaveURL(new RegExp(`/sam-gov/${noticeId}/bid-summary$`));
+});
+
+test("a description-only solicitation remains readable and refreshes on revisit", async ({ page }) => {
+  const noticeId = "NOTICE-DESCRIPTION-ONLY";
+  await authenticate(page, { ...manager, id: 2, role: "agent" });
+  let description = "Initial procurement description";
+  await page.route(`**/api/sam-gov/opportunity/${noticeId}`, (route) => route.fulfill({ json: {
+    id: noticeId, title: "QA description-only solicitation", description, resourceLinks: [],
+  } }));
+
+  await page.goto(`/sam-gov/${noticeId}/bid-summary`);
+  await expect(page.getByText(description, { exact: true })).toBeVisible();
+  description = "Updated procurement description";
+  await page.reload();
+  await expect(page.getByText(description, { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Quote Negotiation" })).toHaveAttribute(
+    "href", `/sam-gov/${noticeId}/quotenegotiation`,
+  );
+});
 
 function monitorRuntime(page: Page) {
   const errors: string[] = [];

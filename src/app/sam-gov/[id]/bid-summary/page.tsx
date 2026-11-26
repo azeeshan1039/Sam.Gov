@@ -1,5 +1,6 @@
 "use client";
 
+import { samGovAttachmentUrls } from "@/lib/sam-gov-attachments";
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
@@ -393,23 +394,27 @@ export default function BidSummaryPage() {
     fetchInProgress.current = true;
 
     // 1. Check for completed summary in localStorage
-    let savedData = localStorage.getItem(`summary-${id}`)
-    if (savedData !== null) {
-      const x = JSON.parse(savedData)
-      if (x) {
-        setSummary(x)
-        if (x.description) {
-          setDescriptionHtml(x.description);
+    const savedData = localStorage.getItem(`summary-${id}`);
+    if (savedData) {
+      try {
+        const cached = JSON.parse(savedData);
+        if (cached?.id === id && (cached.analysisJobId || Object.keys(cached).some((key) => !metaKeys.includes(key)))) {
+          setSummary(cached);
+          if (cached.description) setDescriptionHtml(cached.description);
+          setLoading(false);
+          fetchInProgress.current = false;
+          return;
         }
-        setLoading(false)
-        fetchInProgress.current = false;
-        return;
+      } catch {
+        // Refetch when a saved summary cannot be read.
       }
+      localStorage.removeItem(`summary-${id}`);
     }
 
     // Fetch the listing description via proxy and return it as HTML string
     const fetchDescription = async (opportunity: SamGovOpportunity): Promise<string | null> => {
       if (!opportunity.description) return null;
+      if (!/^https?:\/\//i.test(opportunity.description)) return opportunity.description;
       try {
         const proxyUrl = `/api/sam-gov/proxy-description?url=${encodeURIComponent(opportunity.description)}`;
         const descRes = await fetch(proxyUrl);
@@ -463,14 +468,15 @@ export default function BidSummaryPage() {
     // Helper: start a fresh analysis job. `force=true` bypasses the backend's
     // opportunity_id → existing-job cache (used by the Reanalyze button).
     const startNewAnalysis = async (opportunity: SamGovOpportunity, force = false) => {
+      const urls = samGovAttachmentUrls(opportunity.resourceLinks);
       setAnalysisProgress({
         status: 'pending',
         progress: 'Starting analysis...',
-        totalDocuments: opportunity.resourceLinks.length,
+        totalDocuments: urls.length,
         processedDocuments: 0,
       });
       const { result: aiSummary } = await fetchAnalyzedContractSummaryAsync(
-        opportunity.resourceLinks as string[],
+        urls,
         (progress) => setAnalysisProgress(progress),
         (jobId) => {
           localStorage.setItem(`analysis-job-${id}`, JSON.stringify({
@@ -483,7 +489,7 @@ export default function BidSummaryPage() {
       );
       setAnalysisProgress(null);
       if (aiSummary) {
-        handleAnalysisComplete(aiSummary, opportunity);
+        await handleAnalysisComplete(aiSummary, opportunity);
       } else {
         localStorage.removeItem(`analysis-job-${id}`);
         throw new Error("Failed to generate AI summary.");
@@ -503,7 +509,7 @@ export default function BidSummaryPage() {
         const opportunity: SamGovOpportunity = await response.json();
         if (!opportunity) throw new Error("Opportunity not found.");
 
-        if (opportunity.resourceLinks.length == 0) {
+        if (samGovAttachmentUrls(opportunity.resourceLinks).length === 0) {
           const descHtml = await fetchDescription(opportunity);
           const content = descHtml || "No description available.";
 
@@ -517,7 +523,6 @@ export default function BidSummaryPage() {
             description: content,
           };
           setSummary(noDocSummary);
-          localStorage.setItem(`summary-${id}`, JSON.stringify(noDocSummary));
         } else {
           // 2. Check for an in-progress job we can resume
           const savedJob = localStorage.getItem(`analysis-job-${id}`);
@@ -530,7 +535,7 @@ export default function BidSummaryPage() {
                 setAnalysisProgress({
                   status: 'analyzing',
                   progress: 'Reconnecting to analysis job...',
-                  totalDocuments: opportunity.resourceLinks.length,
+                  totalDocuments: samGovAttachmentUrls(opportunity.resourceLinks).length,
                   processedDocuments: 0,
                 });
                 const pollResult = await pollExistingJob(
@@ -543,7 +548,7 @@ export default function BidSummaryPage() {
                   localStorage.removeItem(`analysis-job-${id}`);
                   await startNewAnalysis(opportunity);
                 } else if (pollResult.result) {
-                  handleAnalysisComplete(pollResult.result, opportunity);
+                  await handleAnalysisComplete(pollResult.result, opportunity);
                 } else {
                   localStorage.removeItem(`analysis-job-${id}`);
                   throw new Error("Analysis job failed on resume.");
@@ -673,7 +678,8 @@ export default function BidSummaryPage() {
         throw new Error(err.error || "Could not refetch opportunity for reanalysis.");
       }
       const opportunity: SamGovOpportunity = await oppRes.json();
-      if (!opportunity?.resourceLinks?.length) {
+      const urls = samGovAttachmentUrls(opportunity?.resourceLinks);
+      if (!urls.length) {
         throw new Error("Opportunity has no attachments to reanalyze.");
       }
 
@@ -681,13 +687,13 @@ export default function BidSummaryPage() {
       setAnalysisProgress({
         status: "pending",
         progress: "Starting reanalysis...",
-        totalDocuments: opportunity.resourceLinks.length,
+        totalDocuments: urls.length,
         processedDocuments: 0,
       });
       setLoading(true);
 
       const { result: aiSummary, jobId: newJobId } = await fetchAnalyzedContractSummaryAsync(
-        opportunity.resourceLinks as string[],
+        urls,
         (progress) => setAnalysisProgress(progress),
         (jobId) => {
           localStorage.setItem(`analysis-job-${id}`, JSON.stringify({
@@ -982,7 +988,7 @@ export default function BidSummaryPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="min-w-0 overflow-x-auto"><DescriptionBlock content={descriptionHtml} isHtml={true} /></div>
+            <div className="min-w-0 overflow-x-auto"><DescriptionBlock content={descriptionHtml} /></div>
           </CardContent>
         </Card>
       )}

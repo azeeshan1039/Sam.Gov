@@ -11,6 +11,7 @@ import Loading from '@/app/loading';
 import { Icons } from '@/components/icons';
 import { format, parseISO } from 'date-fns';
 import { opportunityDeadlinePassed } from '@/lib/eastern-date';
+import { samGovAttachments } from '@/lib/sam-gov-attachments';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
@@ -324,6 +325,7 @@ function OpportunityDetail({ id }: { id: string }) {
     return parts.join(', ') || 'N/A';
   };
 
+  const attachments = samGovAttachments(opportunity.resourceLinks);
   const deadlinePassed = opportunityDeadlinePassed(opportunity.closingDate);
   const closingDate = opportunity.closingDate ? parseISO(opportunity.closingDate) : null;
   const closingDays = closingDate ? Math.ceil((closingDate.getTime() - Date.now()) / 86400000) : null;
@@ -395,21 +397,24 @@ function OpportunityDetail({ id }: { id: string }) {
                 <span className="cf-mono cf-meta">FROM SAM.GOV</span>
               </div>
               {descriptionLoading ? <Skeleton className="h-16 w-full" /> : <div style={{ fontSize: 15, lineHeight: 1.65, color: "var(--cf-text-2)" }}><DescriptionBlock content={detailedDescription || "No description available."} isHtml={descriptionIsHtml} /></div>}
-              {opportunity.resourceLinks && opportunity.resourceLinks.length > 0 ? (
+            </section>
+            <section className="cf-card" aria-labelledby="attachments-h" style={{ padding: "22px 24px", display: "flex", flexDirection: "column", gap: 16 }}>
+              <h2 id="attachments-h" className="cf-h2">Attachments</h2>
+              {attachments.length > 0 ? (
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(260px, 100%), 1fr))", gap: 10 }}>
-                  {opportunity.resourceLinks.map((resourceLink, idx) => {
-                    const isObject = typeof resourceLink === "object" && resourceLink !== null;
-                    const linkUrl = isObject ? resourceLink.link : resourceLink;
-                    const linkName = isObject ? resourceLink.name : getFileName(resourceLink);
+                  {attachments.map(({ url, name }, idx) => {
+                    const linkName = name || getFileName(url);
                     return (
-                      <a key={idx} className="cf-att" href={linkUrl} target="_blank" rel="noreferrer">
+                      <a key={url} className="cf-att" href={url} target="_blank" rel="noreferrer">
                         <FileText size={20} strokeWidth={1.6} color="#0891B2" />
                         <span style={{ flex: 1 }}><span style={{ display: "block", fontWeight: 500 }}>{linkName || `Attachment ${idx + 1}`}</span><span className="cf-mono cf-meta">OPENS ON SAM.GOV</span></span>
                       </a>
                     );
                   })}
                 </div>
-              ) : null}
+              ) : (
+                <p className="cf-sub">The SAM.gov feed returned no attachments for this notice. Check the original notice for documents or amendments.</p>
+              )}
             </section>
             <section className="cf-card" aria-labelledby="past-h" style={{ overflow: "hidden" }}>
               <div style={{ padding: "20px 24px 14px" }}>
@@ -441,10 +446,11 @@ function OpportunityDetail({ id }: { id: string }) {
               ) : availabilityFailed ? (
                 <button type="button" className="cf-btn cf-btn-secondary" onClick={() => refreshAvailability(opportunity)}>Retry availability</button>
               ) : null}
+              {ownedByCurrentAgent ? (
+                <Link className="cf-btn cf-btn-primary" href={`/sam-gov/${encodeURIComponent(id)}/bid-summary`}>Start bidding process</Link>
+              ) : null}
               {(ownedByCurrentAgent || isManager) && availability?.bid_id ? (
-                <Link className="cf-btn cf-btn-primary" href={`/bids/${availability.bid_id}`}>Open bid workspace</Link>
-              ) : ownedByCurrentAgent ? (
-                <Link className="cf-btn cf-btn-primary" href={`/sam-gov/${id}/bid-summary`}>Continue this bid</Link>
+                <Link className={`cf-btn ${ownedByCurrentAgent ? "cf-btn-secondary" : "cf-btn-primary"}`} href={`/bids/${availability.bid_id}`}>Open bid workspace</Link>
               ) : null}
               {isManager && availabilityPresentation?.state === "claimed" ? (
                 <Link className="cf-btn cf-btn-secondary" href={`/work-management#assignment-${availability?.tracked_opportunity_id}`}>Manage assignment</Link>

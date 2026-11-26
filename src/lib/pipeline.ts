@@ -55,6 +55,7 @@ export interface PipelineItem {
   due_time: string | null;
   days_remaining: number | null;
   tracked_opportunity_id: number | null;
+  external_notice_id?: string | null;
   expected_submitted_price: number | null;
   supplier_cost: number | null;
   submitted_price: number | null;

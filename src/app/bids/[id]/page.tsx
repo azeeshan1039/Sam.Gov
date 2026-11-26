@@ -297,6 +297,9 @@ export default function BidDetailPage() {
 
   // Vendors, notes and negotiation: admins and the bid's current owner (older backends omit the flag).
   const canEdit = bid.can_edit_workspace !== false;
+  const noticeId = bid.portal?.toUpperCase() === "SAM.GOV"
+    ? bid.external_notice_id || (/^[a-f0-9]{32}$/i.test(bid.bid_id) ? bid.bid_id : null)
+    : null;
   const agentCanEdit = canEdit &&
     BID_STATUSES[bid.internal_status as BidStatus]?.classification === "active";
   const workspace: BidWorkspace = bid.workspace || {
@@ -375,6 +378,7 @@ export default function BidDetailPage() {
       </section>
       <PageMain>
         <nav aria-label="On this page" className="flex flex-wrap items-center gap-4">
+          {noticeId && <Link className="cf-btn cf-btn-secondary" href={`/sam-gov/${encodeURIComponent(noticeId)}/bid-summary`}>Solicitation analysis</Link>}
           {workspace.rfq_href && <Link className="cf-btn cf-btn-primary" href={workspace.rfq_href}>{canEdit && workspace.negotiation_status === "active" ? "Resume negotiation" : "View negotiation"}</Link>}
           {!workspace.rfq_href && canEdit && <a className="cf-btn cf-btn-primary" href="#vendors">Start negotiation</a>}
           {[["vendors", "Vendors"], ["negotiation", "Negotiation"], ["bid-emails", "Emails"], ["notes", "Remarks & notes"], ["history", "History"]].map(([id, label]) => (
