@@ -23,6 +23,7 @@ import { format } from 'date-fns';
 import { Plus, Trash2, Building2, Mail, StickyNote, Trophy, ShieldCheck, FileDown, Send, AlertTriangle, CheckCircle2, Star, Sparkles } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { getStoredUser } from '@/lib/auth';
+import { useActiveGmailSync } from '@/lib/useActiveGmailSync';
 import { formatMoney, type BidConversationEvent } from '@/lib/pipeline';
 
 interface Supplier {
@@ -33,6 +34,9 @@ interface Supplier {
   notes?: string;
   is_manual?: boolean;
   email_sent?: boolean;
+  email_channel?: "gmail" | "legacy" | null;
+  bid_id?: number | null;
+  initial_rfq_draft?: string | null;
   status: string;
   negotiation_round: number;
   rounds?: { round_number: number; price: number | null; status: string }[];
@@ -187,6 +191,7 @@ export default function BidSummaryPage() {
   const [numSuppliers, setNumSuppliers] = useState('5');
   const [negotiationSession, setNegotiationSession] = useState<NegotiationSession | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [sendError, setSendError] = useState<string | null>(null);
   const [replyNotice, setReplyNotice] = useState<string | null>(null);
 
   // State for initial message review
@@ -306,8 +311,21 @@ export default function BidSummaryPage() {
             cache: 'no-store',
           });
           if (sessionResponse.ok) {
-            const sessionData = await sessionResponse.json();
+            const sessionData: NegotiationSession = await sessionResponse.json();
             setNegotiationSession(sessionData);
+            const unsent = sessionData.suppliers.flatMap((supplier) => (
+              !supplier.email_sent && supplier.initial_rfq_draft && supplier.status === "pending" ? [{
+                supplier_id: supplier.id, supplier_name: supplier.company_name,
+                supplier_email: supplier.email, is_manual: supplier.is_manual,
+                draft_message: supplier.initial_rfq_draft,
+                edited_message: supplier.initial_rfq_draft, sent: false,
+              }] : []
+            ));
+            if (sessionData.status === "active" && unsent.length) {
+              setInitialMessages(unsent);
+              setCurrentInitialIndex(0);
+              setShowInitialReview(true);
+            }
 
             // Auto-check for responses for pending suppliers who have messages sent
             setTargetPrice(String(existingSession.target_price ?? ''));
@@ -630,11 +648,19 @@ Procurement Team`
     }
   };
 
-  const sendInitialMessage = async (supplierId: number, content: string) => {
-    if (!negotiationSession) return;
+  useActiveGmailSync(
+    Boolean(negotiationSession?.status === "active" && getStoredUser()?.role === "agent" &&
+      negotiationSession.suppliers.some((supplier) => supplier.email_channel === "gmail" &&
+        supplier.status !== "completed" && supplier.status !== "stopped" && supplier.negotiation_round < 3)),
+    fetchNegotiationStatus,
+  );
+
+  const sendInitialMessage = async (supplierId: number, content: string, advance = true) => {
+    if (!negotiationSession) return false;
 
     try {
       setSendingInitial(true);
+      setSendError(null);
 
       const response = await fetch(
         `/api/sam-gov/negotiate/${negotiationSession.id}/send-initial/${supplierId}`,
@@ -645,16 +671,9 @@ Procurement Team`
         }
       );
 
-      if (!response.ok) {
-        throw new Error('Failed to send initial message');
-      }
-
-      const data = await response.json();
-
-      if (!data.email_sent) {
-        const errorDetail = data.email_error || 'Unknown error';
-        setError(`Email failed to send: ${errorDetail}. Please check your SendGrid configuration and try again.`);
-        return;
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.email_sent) {
+        throw new Error(data.email_error || data.error || 'Failed to send the RFQ. Please try again.');
       }
 
       // Mark message as sent
@@ -666,30 +685,36 @@ Procurement Team`
         )
       );
 
+      if (!advance) return true;
       // Move to next supplier or complete
-      if (currentInitialIndex < initialMessages.length - 1) {
-        setCurrentInitialIndex(prev => prev + 1);
+      const nextIndex = initialMessages.findIndex((msg) => msg.supplier_id !== supplierId && !msg.sent);
+      if (nextIndex !== -1) {
+        setCurrentInitialIndex(nextIndex);
       } else {
         // All initial messages sent, refresh and show negotiation view
         setShowInitialReview(false);
         await fetchNegotiationStatus();
       }
+      return true;
 
     } catch (err) {
       console.error('Failed to send initial message:', err);
-      setError('Failed to send initial message. Please try again.');
+      setSendError(err instanceof Error ? err.message : 'Failed to send the RFQ. Please try again.');
+      return false;
     } finally {
       setSendingInitial(false);
     }
   };
 
   const sendAllInitialMessages = async () => {
-    for (let i = currentInitialIndex; i < initialMessages.length; i++) {
-      const msg = initialMessages[i];
-      if (!msg.sent) {
-        await sendInitialMessage(msg.supplier_id, msg.edited_message || msg.draft_message);
-      }
+    for (let index = 0; index < initialMessages.length; index++) {
+      const msg = initialMessages[index];
+      if (msg.sent) continue;
+      setCurrentInitialIndex(index);
+      if (!await sendInitialMessage(msg.supplier_id, msg.edited_message || msg.draft_message, false)) return;
     }
+    setShowInitialReview(false);
+    await fetchNegotiationStatus();
   };
 
   // Get supplier response only (no draft generation)
@@ -811,6 +836,7 @@ Procurement Team`
 
     try {
       setSendingResponse(true);
+      setSendError(null);
 
       const response = await fetch(
         `/api/sam-gov/negotiate/${negotiationSession.id}/send/${currentSupplierId}`,
@@ -821,8 +847,9 @@ Procurement Team`
         }
       );
 
-      if (!response.ok) {
-        throw new Error('Failed to send response');
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.email_sent) {
+        throw new Error(data.email_error || data.error || 'Failed to send the response. Please try again.');
       }
 
       // Remove the draft and close modal
@@ -838,7 +865,7 @@ Procurement Team`
 
     } catch (err) {
       console.error('Failed to send response:', err);
-      setError('Failed to send response. Please try again.');
+      setSendError(err instanceof Error ? err.message : 'Failed to send the response. Please try again.');
     } finally {
       setSendingResponse(false);
     }
@@ -1199,6 +1226,16 @@ Procurement Team`
   }
 
   const currentDraft = currentSupplierId ? supplierDrafts.get(currentSupplierId) : null;
+  const sendFailure = sendError && (
+    <Alert variant="destructive">
+      <AlertDescription>
+        {sendError}
+        {/connect gmail/i.test(sendError) && (
+          <Link className="ml-2 underline" href="/settings" target="_blank" rel="noopener">Open Gmail settings</Link>
+        )}
+      </AlertDescription>
+    </Alert>
+  );
 
   return (
     <>
@@ -1214,6 +1251,7 @@ Procurement Team`
         }
       />
       <PageMain className="cf-workspace">
+        {!draftModalOpen && sendFailure}
         {replyNotice && <p className="cf-banner" role="status">{replyNotice}</p>}
         <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,2.4fr)]">
           {/* Opportunity Summary */}
@@ -1654,7 +1692,7 @@ Procurement Team`
                       {!initialMessages[currentInitialIndex].sent && (
                         <Alert>
                           <AlertDescription>
-                            This is your initial request for quote. Customize it for each supplier to get the best responses.
+                            This RFQ will be sent from your connected Gmail. Review the draft before sending it to the vendor.
                           </AlertDescription>
                         </Alert>
                       )}
@@ -1841,12 +1879,19 @@ Procurement Team`
                                     {supplier.is_manual && (
                                       <Badge variant="outline" className="text-xs">Manual</Badge>
                                     )}
+                                    {supplier.email_channel === "gmail" && <Badge variant="outline">Gmail</Badge>}
+                                    {supplier.email_channel === "legacy" && <Badge variant="outline">Shared mailbox</Badge>}
                                   </CardTitle>
                                   {supplier.email && (
                                     <p className="text-sm text-muted-foreground flex items-center gap-1 mt-1">
                                       <Mail className="h-3 w-3" />
                                       {supplier.email}
                                     </p>
+                                  )}
+                                  {supplier.email_channel === "gmail" && supplier.bid_id && (
+                                    <Link href={`/bids/${supplier.bid_id}#bid-emails`} className="text-sm text-primary underline">
+                                      Open bid email conversation
+                                    </Link>
                                   )}
                                 </div>
                                 <div className="flex gap-2">
@@ -2411,6 +2456,7 @@ Procurement Team`
               </DialogDescription>
             </DialogHeader>
 
+            {sendFailure}
             {currentDraft && (
               <div className="space-y-4 py-4">
                 <div>

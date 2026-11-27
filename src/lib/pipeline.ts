@@ -121,6 +121,7 @@ export interface BidVendor {
   negotiation_round: number;
   rounds?: NegotiationRound[];
   email_sent: boolean;
+  email_channel?: "gmail" | "legacy" | null;
   /** Gmail messages (KAN-74) exchanged with this vendor on the bid. */
   gmail_message_count?: number;
   latest_price: number | null;

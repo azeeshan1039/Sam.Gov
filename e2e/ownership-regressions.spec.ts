@@ -69,6 +69,51 @@ test("a description-only solicitation remains readable and refreshes on revisit"
   );
 });
 
+test("an RFQ draft survives reconnect and Gmail replies appear without manual polling", async ({ page }) => {
+  test.setTimeout(75_000);
+  const noticeId = "PIPELINE-96";
+  const draft = "Please quote five calibration kits.";
+  const reply = "We can supply them for USD 39,000.";
+  let connected = false;
+  let sent = false;
+  let synced = false;
+  await authenticate(page, { ...manager, id: 2, role: "agent" });
+  await page.route("**/api/sam-gov/sessions?**", (route) => route.fulfill({ json: {
+    sessions: [{ id: 42, opportunity_id: noticeId, opportunity_title: "Calibration kits", target_price: 38000 }],
+  } }));
+  await page.route("**/api/sam-gov/negotiate/42?**", (route) => route.fulfill({ json: {
+    id: 42, opportunity_id: noticeId, status: "active", suppliers: [{
+      id: 12, company_name: "QA Vendor", email: "quotes@example.test", status: synced ? "negotiating" : "pending",
+      email_sent: sent, email_channel: sent ? "gmail" : null, bid_id: 96, initial_rfq_draft: sent ? null : draft,
+      negotiation_round: synced ? 1 : 0,
+      messages: sent ? [{ sender: "buyer", content: draft }, ...(synced ? [{ sender: "supplier", content: reply }] : [])] : [],
+    }],
+  } }));
+  await page.route("**/api/sam-gov/negotiate/42/send-initial/12", (route) => {
+    expect(route.request().postDataJSON().content).toBe(draft);
+    sent = connected;
+    return route.fulfill({ json: connected ? { email_sent: true } : {
+      email_sent: false, email_error: "Connect Gmail in Settings before sending.",
+    } });
+  });
+  await page.route("**/api/backend/gmail/sync", (route) => {
+    expect(route.request().postDataJSON()).toEqual({ automatic: true });
+    synced = true;
+    return route.fulfill({ json: { summary: { stored: 1 } } });
+  });
+
+  await page.goto(`/sam-gov/${noticeId}/quotenegotiation`);
+  const send = page.getByRole("button", { name: "Send & Start Negotiations" });
+  await send.click();
+  await expect(page.getByRole("link", { name: "Open Gmail settings" })).toHaveAttribute("href", "/settings");
+  await page.reload();
+  await expect(page.getByPlaceholder("Edit your message here...")).toHaveValue(draft);
+  connected = true;
+  await send.click();
+  await expect(page.getByText(reply, { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open bid email conversation" })).toHaveAttribute("href", "/bids/96#bid-emails");
+});
+
 function monitorRuntime(page: Page) {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));

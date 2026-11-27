@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { getStoredUser, type AuthUser } from "@/lib/auth";
+import { useActiveGmailSync } from "@/lib/useActiveGmailSync";
 import { BidStepper, PageMain } from "@/components/design/PageFrame";
 import {
   BID_STATUSES,
@@ -140,6 +141,14 @@ export default function BidDetailPage() {
     if (!preserveStatusDraft) setPreferredPending({});
     saved.current = fresh;
   }, [params.id]);
+
+  useActiveGmailSync(
+    Boolean(user?.role === "agent" && bid?.can_edit_workspace &&
+      bid.workspace?.negotiation_status === "active" &&
+      bid.workspace.vendors.some((vendor) => vendor.email_channel === "gmail" &&
+        vendor.status !== "completed" && vendor.status !== "stopped" && vendor.negotiation_round < 3)),
+    () => load(true),
+  );
 
   useEffect(() => {
     if (!user) return;
